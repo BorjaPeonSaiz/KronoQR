@@ -177,7 +177,7 @@ it('registra el escaneo anterior a la entrada del turno abierto y responde 422',
 
     $respuesta = fichar($escenario, $scanId, '2026-03-14T13:50:00Z');
 
-    $respuesta->assertStatus(422)->assertValidRequest()->assertValidResponse();
+    $respuesta->assertStatus(422)->assertValidRequest()->assertValidResponse(422);
 
     $evento = DB::table('scan_events')->where('scan_id', $scanId)->first();
 
@@ -225,8 +225,8 @@ it('no distingue el fichaje irreconciliable de una tarjeta revocada', function (
             'qr_payload' => TARJETA_REVOCADA_FUERA_DE_ORDEN,
         ]);
 
-    $unoDeRN18->assertStatus(422)->assertValidResponse();
-    $otro->assertStatus(422)->assertValidResponse();
+    $unoDeRN18->assertStatus(422)->assertValidResponse(422);
+    $otro->assertStatus(422)->assertValidResponse(422);
 
     /** @var array<string, mixed> $cuerpoRN18 */
     $cuerpoRN18 = $unoDeRN18->json();
@@ -257,10 +257,10 @@ it('rechaza el escaneo del mismo instante que la entrada y acepta el segundo sig
     $escenario = escenarioConTurnoAbierto();
 
     $enElLimite = fichar($escenario, Str::uuid7()->toString(), '2026-03-14T14:00:00Z');
-    $enElLimite->assertStatus(422)->assertValidResponse();
+    $enElLimite->assertStatus(422)->assertValidResponse(422);
 
     $unSegundoDespues = fichar($escenario, Str::uuid7()->toString(), '2026-03-14T14:00:01Z');
-    $unSegundoDespues->assertOk()->assertValidResponse();
+    $unSegundoDespues->assertOk()->assertValidResponse(200);
 
     expect($unSegundoDespues->json('action'))->toBe('clock_out')
         ->and(DB::table('shift_entries')->first()?->clocked_out_at)->not->toBeNull()
@@ -277,7 +277,7 @@ it('deja ganar al anti-rebote dentro de su ventana', function (): void {
 
     $respuesta = fichar($escenario, Str::uuid7()->toString(), '2026-03-14T13:59:30Z');
 
-    $respuesta->assertOk()->assertValidResponse();
+    $respuesta->assertOk()->assertValidResponse(200);
 
     expect($respuesta->json('action'))->toBe('debounced')
         ->and(DB::table('scan_events')->where('result', 'rejected_debounce')->count())->toBe(1)
@@ -297,8 +297,8 @@ it('devuelve el mismo 422 al reenviar el mismo scan_id y no duplica la fila', fu
     $primera = fichar($escenario, $scanId, '2026-03-14T13:50:00Z');
     $segunda = fichar($escenario, $scanId, '2026-03-14T13:50:00Z');
 
-    $primera->assertStatus(422)->assertValidResponse();
-    $segunda->assertStatus(422)->assertValidResponse();
+    $primera->assertStatus(422)->assertValidResponse(422);
+    $segunda->assertStatus(422)->assertValidResponse(422);
 
     expect($segunda->json())->toBe($primera->json())
         ->and(DB::table('scan_events')->where('scan_id', $scanId)->count())->toBe(1)
@@ -319,7 +319,7 @@ it('registra los demas elementos del lote y saca el imposible con un 422', funct
 
     $respuesta = sincronizarFueraDeOrden($escenario, [$entradaSiguiente, $imposible, $salida]);
 
-    $respuesta->assertStatus(207)->assertValidRequest()->assertValidResponse();
+    $respuesta->assertStatus(207)->assertValidRequest()->assertValidResponse(207);
 
     // En orden de `occurred_at`, que es como se procesan.
     expect($respuesta->json('results.0.scan_id'))->toBe($imposible['scan_id'])
@@ -357,7 +357,7 @@ it('responde igual por el camino del PIN', function (): void {
             'pin_sealed' => EmployeePins::seal(PIN_FUERA_DE_ORDEN, $escenario['publicKey']),
         ]);
 
-    $respuesta->assertStatus(422)->assertValidRequest()->assertValidResponse();
+    $respuesta->assertStatus(422)->assertValidRequest()->assertValidResponse(422);
 
     $evento = DB::table('scan_events')->where('scan_id', $scanId)->first();
 
@@ -386,7 +386,7 @@ it('compara contra el turno abierto aunque su jornada no sea el dia civil del es
 
     $respuesta = fichar($escenario, $scanId, '2026-03-14T22:50:00Z');
 
-    $respuesta->assertStatus(422)->assertValidRequest()->assertValidResponse();
+    $respuesta->assertStatus(422)->assertValidRequest()->assertValidResponse(422);
 
     $evento = DB::table('scan_events')->where('scan_id', $scanId)->first();
     $tramo = DB::table('shift_entries')->first();
@@ -427,7 +427,7 @@ it('no convierte en irreconciliable al perdedor de una carrera del cambio de tur
     $scanId = Str::uuid7()->toString();
     $respuesta = fichar($escenario, $scanId, '2026-03-14T14:00:30Z');
 
-    $respuesta->assertOk()->assertValidResponse();
+    $respuesta->assertOk()->assertValidResponse(200);
 
     expect($respuesta->json('action'))->toBe('debounced')
         ->and(DB::table('scan_events')->where('scan_id', $scanId)->value('result'))->toBe('rejected_debounce')
@@ -452,7 +452,7 @@ it('sigue cerrando el tramo tras la carrera cuando el anti-rebote ya no alcanza'
     $scanId = Str::uuid7()->toString();
     $respuesta = fichar($escenario, $scanId, '2026-03-14T17:30:00Z');
 
-    $respuesta->assertOk()->assertValidResponse();
+    $respuesta->assertOk()->assertValidResponse(200);
 
     expect($respuesta->json('action'))->toBe('clock_out')
         ->and($respuesta->json('worked_minutes'))->toBe(210)
@@ -522,7 +522,7 @@ it('rechaza la entrada anterior a un tramo ya cerrado y no toca nada', function 
 
     $respuesta = fichar($escenario, $scanId, '2026-03-14T08:00:00Z');
 
-    $respuesta->assertStatus(422)->assertValidRequest()->assertValidResponse();
+    $respuesta->assertStatus(422)->assertValidRequest()->assertValidResponse(422);
 
     $evento = DB::table('scan_events')->where('scan_id', $scanId)->first();
     $tramo = DB::table('shift_entries')->first();
@@ -545,7 +545,7 @@ it('rechaza la entrada que cae dentro del tramo ya cerrado', function (): void {
     $escenario = escenarioConTramoCerrado();
     $scanId = Str::uuid7()->toString();
 
-    fichar($escenario, $scanId, '2026-03-14T11:00:00Z')->assertStatus(422)->assertValidResponse();
+    fichar($escenario, $scanId, '2026-03-14T11:00:00Z')->assertStatus(422)->assertValidResponse(422);
 
     expect(DB::table('scan_events')->where('scan_id', $scanId)->value('result'))->toBe('rejected_out_of_order')
         ->and(DB::table('shift_entries')->count())->toBe(1);
@@ -567,7 +567,7 @@ it('deja abrir un tramo nuevo justo en la salida del anterior', function (): voi
 
     $respuesta = fichar($escenario, $scanId, '2026-03-14T13:00:00Z');
 
-    $respuesta->assertOk()->assertValidResponse();
+    $respuesta->assertOk()->assertValidResponse(200);
 
     expect($respuesta->json('action'))->toBe('clock_in')
         ->and(DB::table('scan_events')->where('scan_id', $scanId)->value('result'))->toBe('clock_in')
@@ -591,7 +591,7 @@ it('resuelve igual una vuelta de pausa que pisaria el tramo cerrado', function (
             'intent' => 'break_end',
         ]);
 
-    $respuesta->assertStatus(422)->assertValidRequest()->assertValidResponse();
+    $respuesta->assertStatus(422)->assertValidRequest()->assertValidResponse(422);
 
     expect(DB::table('scan_events')->where('scan_id', $scanId)->value('result'))->toBe('rejected_out_of_order')
         ->and(DB::table('scan_events')->where('scan_id', $scanId)->value('intent'))->toBe('break_end')
@@ -611,7 +611,7 @@ it('saca del lote la entrada que pisa un tramo ya fichado en otro quiosco', func
 
     $respuesta = sincronizarFueraDeOrden($escenario, [$salidaDeTarde, $imposible, $entradaDeTarde]);
 
-    $respuesta->assertStatus(207)->assertValidRequest()->assertValidResponse();
+    $respuesta->assertStatus(207)->assertValidRequest()->assertValidResponse(207);
 
     expect($respuesta->json('results.0.scan_id'))->toBe($imposible['scan_id'])
         ->and($respuesta->json('results.0.status'))->toBe(422)
@@ -693,7 +693,7 @@ it('rechaza la entrada que cae dentro de un turno de noche de la jornada anterio
 
     $respuesta = fichar($escenario, $scanId, '2026-03-15T02:00:00Z');
 
-    $respuesta->assertStatus(422)->assertValidRequest()->assertValidResponse();
+    $respuesta->assertStatus(422)->assertValidRequest()->assertValidResponse(422);
 
     $evento = DB::table('scan_events')->where('scan_id', $scanId)->first();
     $tramo = DB::table('shift_entries')->first();
@@ -720,7 +720,7 @@ it('deja fichar la entrada del dia siguiente justo cuando termino el turno de no
 
     $respuesta = fichar($escenario, $scanId, '2026-03-15T06:00:00Z');
 
-    $respuesta->assertOk()->assertValidResponse();
+    $respuesta->assertOk()->assertValidResponse(200);
 
     expect($respuesta->json('action'))->toBe('clock_in')
         ->and($respuesta->json('work_date'))->toBe('2026-03-15')
@@ -742,7 +742,7 @@ it('saca del lote la entrada que cae dentro del turno de noche ya fichado', func
 
     $respuesta = sincronizarFueraDeOrden($escenario, [$salida, $imposible, $entrada]);
 
-    $respuesta->assertStatus(207)->assertValidRequest()->assertValidResponse();
+    $respuesta->assertStatus(207)->assertValidRequest()->assertValidResponse(207);
 
     expect($respuesta->json('results.0.scan_id'))->toBe($imposible['scan_id'])
         ->and($respuesta->json('results.0.status'))->toBe(422)

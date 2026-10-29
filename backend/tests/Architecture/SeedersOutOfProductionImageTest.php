@@ -14,7 +14,7 @@ use Tests\Architecture\Support\Repo;
  *
  * Tres cerraduras, y esta prueba vigila las dos que no son PHP (la tercera, la
  * guarda de entorno de `DevelopmentSeeder`, esta en
- * `tests/Unit/Support/DevelopmentSeederGuardTest.php`):
+ * `tests/Architecture/DevelopmentSeederGuardTest.php`):
  *
  *   1. `.dockerignore` excluye el directorio del contexto de construccion.
  *   2. La etapa `vendor` del Dockerfile de la aplicacion falla si llega igual.

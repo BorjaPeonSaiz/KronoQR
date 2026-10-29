@@ -20,7 +20,8 @@ use App\Support\Version\DeployedVersion;
  * su propio contrato y el fallo aparecería en la instalacion del cliente, no
  * aqui.
  *
- * Suite unitaria: PHP puro, sin framework y sin base de datos. Los ficheros de
+ * Suite Architecture y no Unit porque escribe en disco (el presupuesto de `make
+ * test-unit`): PHP puro, sin framework y sin base de datos. Los ficheros de
  * apoyo son temporales y se borran al terminar cada prueba.
  */
 
@@ -56,45 +57,45 @@ it('usa la version del entorno cuando ya tiene forma de SemVer', function (): vo
     // El caso de produccion: quien despliega ha dicho que version es, y eso manda
     // sobre cualquier fichero que la imagen lleve dentro.
     expect(DeployedVersion::resolve(['1.4.2'], [versionFile('9.9.9')]))->toBe('1.4.2');
-});
+})->group('RF-PD-09', 'RF-PD-13');
 
 it('acepta prelanzamientos y metadatos de construccion', function (string $version): void {
     // El patron del contrato los admite, y son justo las versiones que se
     // instalan en un piloto: rechazarlas obligaria a mentir en `/health`
     // precisamente cuando mas importa saber que hay desplegado.
     expect(DeployedVersion::resolve([$version], []))->toBe($version);
-})->with(['1.4.2-rc.1', '1.4.2-beta', '1.4.2+build.7', '0.0.0-dev']);
+})->with(['1.4.2-rc.1', '1.4.2-beta', '1.4.2+build.7', '0.0.0-dev'])->group('RF-PD-09', 'RF-PD-13');
 
 it('cae al fichero VERSION cuando la etiqueta es latest', function (): void {
     // `IMAGE_TAG=latest` es el valor del .env.example y NO es SemVer: sin este
     // respaldo, cada instalacion recien montada incumpliria el contrato del
     // endpoint.
     expect(DeployedVersion::resolve(['latest'], [versionFile('1.0.0')]))->toBe('1.0.0');
-});
+})->group('RF-PD-09', 'RF-PD-13');
 
 it('cae al fichero cuando la variable no existe o esta vacia', function (mixed $declared): void {
     // `env()` devuelve `null` cuando la variable no esta declarada y una cadena
     // vacia cuando esta declarada sin valor. Los dos son «no se sabe».
     expect(DeployedVersion::resolve([$declared], [versionFile('1.0.0')]))->toBe('1.0.0');
-})->with([[null], [''], ['   '], [false], [1]]);
+})->with([[null], [''], ['   '], [false], [1]])->group('RF-PD-09', 'RF-PD-13');
 
 it('cae al fichero ante cualquier forma que no sea SemVer', function (string $declared): void {
     // Una etiqueta de rama, una fecha, un `v` delante o un cuarto numero: todas
     // son etiquetas de imagen legitimas y ninguna vale como version del contrato.
     expect(DeployedVersion::resolve([$declared], [versionFile('1.0.0')]))->toBe('1.0.0');
-})->with(['v1.2.3', '1.2', '1.2.3.4', 'main', '2026-08-27', 'sha-9f2c1ab', '1.0.0 y algo']);
+})->with(['v1.2.3', '1.2', '1.2.3.4', 'main', '2026-08-27', 'sha-9f2c1ab', '1.0.0 y algo'])->group('RF-PD-09', 'RF-PD-13');
 
 it('respeta el orden en que se declaran las variables', function (): void {
     // Hoy son dos: `APP_VERSION`, que fija el build de la imagen y viaja dentro
     // del artefacto, y `IMAGE_TAG`, que fija el instalador. La primera manda.
     expect(DeployedVersion::resolve(['1.4.2', '9.9.9'], []))->toBe('1.4.2');
-});
+})->group('RF-PD-09', 'RF-PD-13');
 
 it('salta la variable invalida y usa la siguiente que si lo es', function (): void {
     // La imagen de desarrollo no fija `APP_VERSION`; la instalacion si fija
     // `IMAGE_TAG`. Que la primera falte no puede tapar a la segunda.
     expect(DeployedVersion::resolve([null, '1.4.2'], [versionFile('1.0.0')]))->toBe('1.4.2');
-});
+})->group('RF-PD-09', 'RF-PD-13');
 
 it('prueba las rutas del fichero en orden y usa la primera que existe', function (): void {
     // Las tres rutas de `config/app.php` son tres sitios donde puede correr el
@@ -103,17 +104,17 @@ it('prueba las rutas del fichero en orden y usa la primera que existe', function
     $path = versionFile('1.0.0');
 
     expect(DeployedVersion::resolve([], [versionFilesDirectory().'/no-existe', $path]))->toBe('1.0.0');
-});
+})->group('RF-PD-09', 'RF-PD-13');
 
 it('lee solo la primera linea del fichero y sin espacios alrededor', function (string $contents): void {
     // Un salto de linea final, un retorno de carro de Windows o una linea de mas
     // no pueden convertir la version en algo que el contrato rechace.
     expect(DeployedVersion::resolve([], [versionFile($contents)]))->toBe('1.0.0');
-})->with(["1.0.0\n", "1.0.0\r\n", "  1.0.0  \n", "1.0.0\n# la que viene despues", '1.0.0']);
+})->with(["1.0.0\n", "1.0.0\r\n", "  1.0.0  \n", "1.0.0\n# la que viene despues", '1.0.0'])->group('RF-PD-09', 'RF-PD-13');
 
 it('ignora un fichero cuyo contenido no vale y sigue buscando', function (): void {
     expect(DeployedVersion::resolve([], [versionFile('en blanco'), versionFile('1.0.0')]))->toBe('1.0.0');
-});
+})->group('RF-PD-09', 'RF-PD-13');
 
 it('devuelve 0.0.0 cuando ni el entorno ni el repositorio saben decirlo', function (): void {
     // La sonda de vida NO PUEDE FALLAR: un error porque falta un fichero de
@@ -122,7 +123,7 @@ it('devuelve 0.0.0 cuando ni el entorno ni el repositorio saben decirlo', functi
     expect(DeployedVersion::resolve(['latest'], [versionFilesDirectory().'/no-existe']))
         ->toBe(DeployedVersion::UNKNOWN)
         ->toBe('0.0.0');
-});
+})->group('RF-PD-09', 'RF-PD-13');
 
 it('nunca devuelve algo que el contrato rechace', function (): void {
     // La garantia de arriba, dicha de una vez: pase lo que pase, lo que sale de
@@ -137,4 +138,4 @@ it('nunca devuelve algo que el contrato rechace', function (): void {
     foreach ($resolved as $version) {
         expect(preg_match(DeployedVersion::SEMVER, $version))->toBe(1, $version.' no es un SemVer.');
     }
-});
+})->group('RF-PD-09', 'RF-PD-13');

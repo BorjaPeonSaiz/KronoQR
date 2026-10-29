@@ -158,7 +158,7 @@ it('rechaza aplicar un fichero distinto del que se valido', function (): void {
         )),
         'apply',
         str_repeat('0', 64),
-    )->assertStatus(409);
+    )->assertValidResponse(409);
 
     expect(DB::table('absences')->count())->toBe(0);
 })->group('RF-GP-04');

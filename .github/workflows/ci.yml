@@ -121,8 +121,8 @@ on:
         required: false
         default: false
   schedule:
-    # Dispara SOLO los jobs nocturnos: `coverage`, `mutation`, `restore-cycle`
-    # y `secrets-history` (ver sus comentarios). Todos los demas de este fichero
+    # Dispara SOLO los jobs nocturnos: `coverage`, `mutation`, `restore-cycle`,
+    # `secrets-history`, `performance` y `performance-kiosk` (ver sus comentarios). Todos los demas de este fichero
     # llevan `if: github.event_name != 'schedule'` -o la variante que ya tenian
     # `clean-install`/`update`, que sin la exclusion explicita habrian
     # arrastrado el pipeline entero, y `install`/`update` con el, cada noche. Hora fuera del horario de trabajo habitual
@@ -681,10 +681,30 @@ jobs:
             base="${EVENT_BEFORE}"
           fi
           inicio_mutacion=$(date +%s)
-          make mutate-changed MUTATE_BASE="${base}"
+          # El log entero va a un fichero (M8): `gh run view --log` lo corta
+          # antes de la puntuacion. Los dos pasos siguientes lo resumen y lo
+          # suben como artefacto.
+          make mutate-changed MUTATE_BASE="${base}" 2>&1 | tee "${RUNNER_TEMP}/mutacion-acotada.log"
           # Para el presupuesto del run ①-③ (paso final): la mutacion de lo que
           # el cambio toca depende de cuanto dominio toque, no de la CI.
           echo "MUTATION_SECONDS=$(($(date +%s) - inicio_mutacion))" >>"$GITHUB_ENV"
+
+      - name: Resumen de la mutacion acotada
+        if: always()
+        run: |
+          log="${RUNNER_TEMP}/mutacion-acotada.log"
+          if [ -f "${log}" ]; then
+            sh .github/scripts/mutation-log.sh summary "${log}" "Mutacion acotada a lo que el cambio toca (RQ-10)" >>"$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Subir el log completo de la mutacion acotada
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mutacion-acotada-log
+          path: ${{ runner.temp }}/mutacion-acotada.log
+          if-no-files-found: ignore
+          retention-days: 30
 
       # --- etapa ③b · Trazabilidad y coherencia documental --------------------
       #
@@ -1032,6 +1052,7 @@ jobs:
         # justo lo que faltaba: antes, `continue-on-error: true` trataba los
         # dos casos igual (IMPORTANTE 5 de la auditoria).
         run: |
+          set -o pipefail
           make sast-community SEMGREP_FORMAT=json >sast-community.json || status=$?
           status=${status:-0}
           jq -r '(.results // []) | group_by(.extra.severity) | map("\(.[0].extra.severity): \(length)") | .[]' \
@@ -1125,6 +1146,7 @@ jobs:
         # hallazgos, y es lo primero que hay que leer al triar
         # (docs/runbooks/triaje-hallazgos-seguridad.md).
         run: |
+          set -o pipefail
           set +e
           make trivy-fs TRIVY_FS_SCANNERS=vuln TRIVY_FORMAT=json >trivy-fs.json
           estado=$?
@@ -1157,6 +1179,7 @@ jobs:
         # queda sin excepciones vigentes. Mismo tratamiento del codigo de
         # salida que en el paso anterior.
         run: |
+          set -o pipefail
           set +e
           make trivy-image TRIVY_IMAGE_SCANNERS=vuln TRIVY_IMAGES="kronoqr/postgres:ci kronoqr/app:ci kronoqr/nginx:ci" TRIVY_FORMAT=json >trivy-image.json
           estado=$?
@@ -3616,7 +3639,9 @@ jobs:
   # aparte, mas ligero, corre en paralelo al de cobertura sin ese coste.
   #
   # En `push` y en `workflow_dispatch`, el job `unit` muta lo que el cambio
-  # toca y aplica el 80 % a CADA fichero (`make mutate-changed`); este job es
+  # toca y aplica el 80 % al CONJUNTO de esos ficheros (`make mutate-changed`:
+  # Pest da una sola nota por ejecucion, asi que un fichero flojo puede quedar
+  # tapado por los demas del mismo cambio); este job es
   # la pasada GLOBAL (MSI >= 80 % sobre todo el dominio) y es la unica que
   # corre completa, de noche y en el disparo manual. Hasta el 02-10-2026 el
   # job `unit` repetia la completa en el disparo manual; se quito (R6-DV-01/02:
@@ -3631,11 +3656,20 @@ jobs:
   # un runner lento. Deja de formar parte de la CI manual de cierre de bloque;
   # alli manda `make mutate-changed` del job `unit`. Se puede pedir a mano con
   # el input `full_mutation`.
+  #
+  # Desde la 2.3.0 (tarea 22.5) el job hace tres cosas mas: el canario antes de
+  # mutar (R2-QB-06, dentro de `make mutate`), la puerta de la parte del
+  # dominio que la mutacion ve (`make mutate-scope`, M6) y el log entero como
+  # artefacto con la puntuacion y los ficheros con mutantes vivos en el resumen
+  # (M8, R2-QB-01). El MSI se lee del resumen del run, no de `gh run view --log`.
   #-----------------------------------------------------------------------------
   mutation:
     name: "Mutacion completa (RQ-10, nocturna)"
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    # 180 desde el 28-10-2026: la pasada completa tardo 80 min el 26-10 y se
+    # corto a los 120 el 25, el 27 y el 28. Partirla en varios jobs queda
+    # pendiente (HANDOFF).
+    timeout-minutes: 180
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_mutation)
 
     steps:
@@ -3651,20 +3685,53 @@ jobs:
           # con XDEBUG_MODE=coverage.
           coverage: xdebug
 
+      - name: Parte del dominio que la mutacion ve (cobertura Unit de Modules/*/Domain, M6)
+        # `--covered-only` solo muta lo que la suite Unit ejecuta. Esta puerta
+        # impide que esa parte encoja sin que nadie lo vea; el umbral y el
+        # motivo de no quitar la opcion estan junto a MUTATION_SCOPE_MIN en el
+        # Makefile. Va antes y no despues para que su rojo no dependa de que
+        # la mutacion termine en 120 min.
+        run: make mutate-scope
+
       - name: Mutacion COMPLETA sobre Modules/*/Domain (MSI >= 80 %)
-        # Sin base de datos: `make mutate` ejecuta solo la suite `Unit`.
-        run: make mutate
+        # Sin base de datos: `make mutate` ejecuta solo la suite `Unit`, y antes
+        # el canario (`make mutate-canary`, R2-QB-06).
+        # `if: always()`: si la puerta de arriba falla, la mutacion se mide
+        # igual; son dos preguntas distintas.
+        # El log entero va a un fichero (M8): `gh run view --log` lo corta
+        # antes de la puntuacion. Los dos pasos siguientes lo resumen y lo
+        # suben como artefacto.
+        # `set -o pipefail`: sin el, el `run:` de GitHub (bash -e sin pipefail)
+        # toma el codigo de `tee`, siempre 0, y la mutacion no podria fallar.
+        if: always()
+        run: |
+          set -euo pipefail
+          make mutate 2>&1 | tee "${RUNNER_TEMP}/mutacion-completa.log"
 
       - name: Resumen
         if: always()
         run: |
+          log="${RUNNER_TEMP}/mutacion-completa.log"
+          if [ -f "${log}" ]; then
+            sh .github/scripts/mutation-log.sh summary "${log}" "Mutacion completa (RQ-10)" >>"$GITHUB_STEP_SUMMARY"
+          else
+            echo "### Mutacion completa (RQ-10)" >>"$GITHUB_STEP_SUMMARY"
+          fi
           {
-            echo "### Mutacion completa (RQ-10)"
             echo ""
             echo "MSI >= 80 % sobre Modules/*/Domain. En cada *push* solo se muta lo"
             echo "que ese push cambia (\`make mutate-changed\`, job \`unit\`); esta es la"
-            echo "pasada completa, nocturna y del disparo manual."
+            echo "pasada completa, nocturna y del disparo manual con \`full_mutation\`."
           } >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Subir el log completo de la mutacion
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mutacion-completa-log
+          path: ${{ runner.temp }}/mutacion-completa.log
+          if-no-files-found: ignore
+          retention-days: 30
 
   #-----------------------------------------------------------------------------
   # gitleaks sobre TODAS las referencias (nocturno)
@@ -3694,3 +3761,131 @@ jobs:
 
       - name: gitleaks sobre todas las referencias (0 hallazgos)
         run: make secrets-scan SECRETS_SCAN_SCOPE=all
+
+  #-----------------------------------------------------------------------------
+  # Suite nocturna de rendimiento — D4 de la 2.3.0 (Q2, V21-2-QA-2, V2-QB-1, KP3)
+  #
+  # Los presupuestos de reloj salieron de las suites funcionales: fallaban
+  # cuando el runner iba cargado, no cuando el producto empeoraba
+  # (PeriodReportVolumeTest puso `main` en rojo tres veces con 5,000977 s,
+  # 5,61 s y 5,88 s frente a 5 s). Decision del propietario: la afirmacion
+  # funcional se queda en su suite y la de TIEMPO viene aqui, con la mediana de
+  # varias pasadas. Ningun presupuesto ha cambiado; cambia donde se mide.
+  #
+  # Dos jobs y no uno, por el mismo motivo que `mutation` no vive en `coverage`:
+  # la mitad de Pest necesita PostgreSQL, Redis y Chrome, y la del navegador
+  # necesita Node y Playwright. Mismo `if` que `coverage`: de noche y a mano,
+  # nunca en un push.
+  #-----------------------------------------------------------------------------
+  performance:
+    name: "Rendimiento · Pest (D4, nocturna)"
+    runs-on: ubuntu-24.04
+    # Siembra los volumenes de RNF-P-05 (500 empleados x 2 años) varias veces y
+    # repite cada medida seis veces (una de calentamiento y cinco que se juzgan).
+    timeout-minutes: 60
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+
+    env:
+      APP_KEY: "base64:a3Jvbm9xci1jaS1jbGF2ZS1kZS0zMi1ieXRlcyEhISE="
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      DB_DATABASE: fichaje
+      DB_USERNAME: fichaje_app
+      DB_PASSWORD: ci_local_app
+      DB_MIGRATION_USERNAME: fichaje_migrator
+      DB_MIGRATION_PASSWORD: ci_local_migrator
+      REDIS_HOST: 127.0.0.1
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: PostgreSQL 17 del producto y Redis 7
+        run: |
+          make build-ci-images
+          docker run -d --name kronoqr-pg \
+            -e POSTGRES_DB="$DB_DATABASE" \
+            -e POSTGRES_USER="$DB_MIGRATION_USERNAME" \
+            -e POSTGRES_PASSWORD="$DB_MIGRATION_PASSWORD" \
+            -e DB_PASSWORD="$DB_PASSWORD" \
+            -p 5432:5432 \
+            kronoqr/postgres:ci \
+            postgres -c timezone=UTC -c log_timezone=UTC -c jit=off \
+              -c hba_file=/etc/kronoqr/pg_hba.conf
+          docker run -d --name kronoqr-redis -p 6379:6379 redis:7-alpine
+
+      - uses: ./.github/actions/php-toolchain
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          # Sin cobertura: lo que se mide es el producto, no Xdebug (CI-COB-01).
+          coverage: none
+
+      - name: Esperar a PostgreSQL
+        run: |
+          for i in $(seq 1 30); do
+            if docker exec kronoqr-pg pg_isready -h 127.0.0.1 -U "$DB_MIGRATION_USERNAME" -d "$DB_DATABASE" >/dev/null 2>&1; then
+              echo "PostgreSQL listo en $((i * 2)) s"; exit 0
+            fi
+            sleep 2
+          done
+          echo "::error title=PostgreSQL no arranco::pg_isready sigue fallando tras 60 s."
+          docker logs kronoqr-pg | tail -50
+          exit 1
+
+      - name: Chrome para Browsershot (el PDF del registro propio se mide con el motor real)
+        uses: ./.github/actions/chrome-for-pdf
+
+      - name: Presupuestos de reloj en mediana (Pest, grupo performance)
+        # Sin omitidas: aqui Chrome esta instalado y la unica prueba condicionada
+        # (el PDF de un año) tiene que ejecutarse.
+        run: bash .github/scripts/pest-max-skipped.sh run 0 "make test-performance"
+
+  performance-kiosk:
+    name: "Rendimiento · navegador, RNF-P-01 y RNF-P-04 (D4, nocturna)"
+    runs-on: ubuntu-24.04
+    # Sesenta escaneos con la camara simulada, uno cada ~2 s, el LCP de la
+    # presencia en vivo y las tablas grandes del panel con tres muestras en
+    # frio cada uno (las tablas avisan y no bloquean), mas instalar Chromium y
+    # construir el quiosco y el panel. El id del job sigue siendo
+    # `performance-kiosk`: lo citan la cabecera y WallClockAssertionsTest.
+    timeout-minutes: 20
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Cache de los navegadores de Playwright
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Instalar Chromium (con dependencias del sistema)
+        run: npx playwright install --with-deps chromium
+
+      - name: Latencia percibida del fichaje (RNF-P-01, KP3), LCP de la presencia en vivo (RNF-P-04) y aviso de las tablas grandes
+        run: make e2e-performance
+
+      - name: Subir los artefactos de Playwright SOLO si algo ha fallado
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: performance-kiosk
+          path: |
+            frontend-kiosk/test-results/
+            frontend-admin/test-results/
+          retention-days: 14
+          if-no-files-found: warn

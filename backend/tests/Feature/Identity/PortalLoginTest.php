@@ -6,8 +6,10 @@ use App\Modules\Identity\Domain\ValueObject\TokenAbility;
 use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Testing\TestResponse;
 use Laravel\Sanctum\PersonalAccessToken;
 use Spectator\Spectator;
+use Symfony\Component\HttpFoundation\Response;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\PortalLogins;
@@ -196,6 +198,66 @@ it('rechaza a la persona suspendida con el PIN erroneo igual que a cualquiera', 
 
     expect($suspendida->getContent())->toBe($inexistente->getContent());
 })->group('RN-25', 'RS-03');
+
+/**
+ * Lo que un rechazo del portal deja ver desde fuera: estado, cuerpo entero y
+ * cabeceras.
+ *
+ * Se apartan solo las dos cabeceras que cambian de una peticion a la siguiente
+ * por motivos ajenos a la causa: `Date` y el contador `X-RateLimit-Remaining`,
+ * que baja uno con cada intento. Todo lo demas —nombres y valores— tiene que
+ * coincidir.
+ *
+ * @param  TestResponse<Response>  $response
+ * @return array{status: int, body: string, headers: array<string, list<string|null>>}
+ */
+function portalRejectionFingerprint(TestResponse $response): array
+{
+    $headers = $response->headers->all();
+    unset($headers['date'], $headers['x-ratelimit-remaining']);
+    ksort($headers);
+
+    return [
+        'status' => $response->getStatusCode(),
+        'body' => (string) $response->getContent(),
+        'headers' => $headers,
+    ];
+}
+
+it('responde a cada causa de rechazo lo mismo que a un codigo inexistente, byte a byte y cabecera a cabecera', function (Closure $credenciales): void {
+    // A7 de la 2.1.0: las pruebas de arriba comparan `type` y `detail`; esta
+    // compara TODO lo que ve quien intenta entrar. Regla dura 17 y RS-03: si
+    // una sola cabecera o un solo byte distinguieran una causa, bastaria con
+    // mirarlo para saber que codigos existen, quien esta de baja o a quien se
+    // ha bloqueado.
+    config()->set('identity.portal.rate_limit_per_minute', 10_000);
+    config()->set('identity.pin.max_attempts', 3);
+
+    /** @var array{code: string, pin: string} $intento */
+    $intento = $credenciales();
+
+    $causa = Api::guest()->post('/api/v1/me/login', ['employee_code' => $intento['code'], 'pin' => $intento['pin']]);
+    $inexistente = Api::guest()->post('/api/v1/me/login', ['employee_code' => 'ENOEXISTE1', 'pin' => PortalLogins::PIN]);
+
+    expect($causa->getStatusCode())->toBe(401)
+        ->and(portalRejectionFingerprint($causa))->toBe(portalRejectionFingerprint($inexistente));
+})->with([
+    'PIN incorrecto' => [static fn (): array => ['code' => empleadoConPortal()['code'], 'pin' => '999111']],
+    'de baja con su PIN' => [static fn (): array => ['code' => empleadoConPortal('terminated')['code'], 'pin' => PortalLogins::PIN]],
+    'suspendida con un PIN incorrecto' => [static fn (): array => ['code' => empleadoConPortal('suspended')['code'], 'pin' => '999111']],
+    'sin PIN emitido' => [static fn (): array => [
+        'code' => EmployeePins::codeOf(WorkforceFixtures::employee(WorkforceFixtures::site('Hotel sin PIN'))),
+        'pin' => PortalLogins::PIN,
+    ]],
+    'bloqueada, con su PIN' => [static function (): array {
+        $empleado = empleadoConPortal();
+        Api::guest()->post('/api/v1/me/login', ['employee_code' => $empleado['code'], 'pin' => '999111'])->assertStatus(401);
+        Api::guest()->post('/api/v1/me/login', ['employee_code' => $empleado['code'], 'pin' => '999112'])->assertStatus(401);
+        Api::guest()->post('/api/v1/me/login', ['employee_code' => $empleado['code'], 'pin' => '999113'])->assertStatus(401);
+
+        return ['code' => $empleado['code'], 'pin' => PortalLogins::PIN];
+    }],
+])->group('RS-03', 'RS-12', 'RF-ID-06', 'RN-14', 'RN-25');
 
 it('no deja entrar a quien no tiene PIN emitido', function (): void {
     // El alta de un empleado no emite PIN: lo hace RRHH en un acto propio

@@ -15,6 +15,7 @@ use Tests\Support\Http\Api;
 use Tests\Support\Identity\FakeCardRenderer;
 use Tests\Support\Identity\FakeInstructionsSheetRenderer;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Identity\PortalLogins;
 use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -480,7 +481,7 @@ function actoresSinPotestadDeAdministracion(): array
     return [
         'con un token de quiosco' => ['quiosco'],
         'con un auditor' => ['auditor'],
-        'con una cuenta de empleado' => ['empleado'],
+        'con una sesion de portal' => ['empleado'],
         'con una sesion pendiente de segundo factor' => ['2fa pendiente'],
     ];
 }
@@ -495,9 +496,9 @@ function actoresSinPotestadDeAdministracion(): array
 function tokenDeActorSinPotestad(string $actor): string
 {
     return match ($actor) {
-        'quiosco' => ManagementUsers::kioskToken(),
+        'quiosco' => AttendanceFixtures::kioskToken(),
         'auditor' => ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::AUDITOR)),
-        'empleado' => ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::EMPLEADO)),
+        'empleado' => PortalLogins::open(WorkforceFixtures::employee(WorkforceFixtures::site())),
         '2fa pendiente' => ManagementUsers::pendingTokenFor(ManagementUsers::withRole(UserRole::RRHH)),
         // Un actor nuevo en el conjunto sin token que emitirle revienta aqui, en
         // voz alta y con su nombre. Devolver un token cualquiera —el de `rrhh`,
@@ -510,7 +511,7 @@ it('deniega a un token de quiosco cualquier endpoint de gestion', function (stri
     // RS-04 y §7.3: «un token de quiosco comprometido NO da acceso a la
     // plantilla completa». Es el caso que mas importa de todo este fichero: el
     // token vive en una tablet compartida colgada en una pared.
-    Api::as(ManagementUsers::kioskToken())->call($method, $uri, $body)->assertStatus(403);
+    Api::as(AttendanceFixtures::kioskToken())->call($method, $uri, $body)->assertStatus(403);
 })->with(managementEndpoints())->group('RS-04', 'RS-05', 'RQ-07', 'RF-ID-04');
 
 /**
@@ -645,10 +646,12 @@ it('deniega a un responsable de departamento todo lo que no sea leer su plantill
     Api::as($token)->call($method, $uri, $body)->assertStatus(403);
 })->with(endpointsDeniedToDepartmentManager())->group('RS-05', 'RQ-07', 'RF-ID-03');
 
-it('deniega a una cuenta con rol de empleado el acceso al panel', function (string $method, string $uri, array $body): void {
+it('deniega a una sesion de portal el acceso al panel', function (string $method, string $uri, array $body): void {
     // El empleado consulta lo suyo en el portal, con ambito `self:read`
-    // (RF-ID-07). Nunca datos de terceros.
-    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::EMPLEADO));
+    // (RF-ID-07). Nunca datos de terceros. La sesion es la de `POST /me/login`,
+    // no una cuenta de `users` con rol `empleado` que el producto no emite
+    // (R4-QA-07).
+    $token = PortalLogins::open(WorkforceFixtures::employee(WorkforceFixtures::site()));
 
     Api::as($token)->call($method, $uri, $body)->assertStatus(403);
 })->with(managementEndpoints())->group('RS-05', 'RQ-07', 'RF-ID-07');
@@ -838,7 +841,7 @@ it('deniega a un token de quiosco emitir o revocar credenciales', function (stri
     // `roster:read` y `heartbeat:write` (§7.3): ninguno de los tres abre esta
     // puerta. Si la abriera, quien robase la tablet de la puerta de servicio
     // podria fabricarse una tarjeta a nombre de cualquiera.
-    Api::as(ManagementUsers::kioskToken())->post($uri, $body)->assertStatus(403);
+    Api::as(AttendanceFixtures::kioskToken())->post($uri, $body)->assertStatus(403);
 })->with([
     'emitir' => ['/api/v1/credentials', ['employee_uuid' => '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90']],
     'revocar' => ['/api/v1/credentials/0199f0d1-2a5b-7d4f-8c32-5e6f7a8b9c01/revoke', ['reason' => 'Perdida']],

@@ -136,9 +136,10 @@ it('no bloquea por los requisitos que verifica una persona', function (): void {
     expect(Commands::run('qa:traceability --check')[0])->toBe(0);
 })->group('RQ-13');
 
-it('avisa de las etiquetas que citan requisitos inexistentes', function (): void {
+it('bloquea cuando una etiqueta cita un requisito que no esta en el catalogo', function (): void {
     // Una prueba etiquetada con un identificador que no esta en el catalogo
-    // suele ser una errata, y la errata deja al requisito real sin cobertura.
+    // suele ser una errata, y la errata deja al requisito real sin cobertura
+    // aunque cada requisito del catalogo tenga su prueba.
     useCatalog("- { id: RN-05, fase: 0, titulo: El turno no se parte a medianoche }\n");
     useTests(FakeTestSource::file([
         FakeTestSource::pest('uno', ['RN-05']),
@@ -148,8 +149,36 @@ it('avisa de las etiquetas que citan requisitos inexistentes', function (): void
 
     [$exit, $output] = Commands::run('qa:traceability --check');
 
-    expect($exit)->toBe(0);
-    expect($output)->toContain('RN-99');
+    expect($exit)->toBe(1)
+        ->and($output)->toContain('RN-99, que no figura en docs/requisitos.yaml');
+})->group('RQ-13');
+
+it('bloquea cuando una etiqueta tiene forma de requisito sin serlo', function (): void {
+    // `RN-O5` con la letra O: la prueba no cuenta para RN-05 y quien la
+    // escribio cree que si.
+    useCatalog("- { id: RN-05, fase: 0, titulo: El turno no se parte a medianoche }\n");
+    useTests(FakeTestSource::file([
+        FakeTestSource::pest('uno', ['RN-05']),
+        FakeTestSource::pest('dos', ['RN-O5']),
+    ]));
+    config(['quality.current_phase' => 0]);
+
+    [$exit, $output] = Commands::run('qa:traceability --check');
+
+    expect($exit)->toBe(1)
+        ->and($output)->toContain('RN-O5');
+})->group('RQ-13');
+
+it('sigue escribiendo la matriz aunque haya etiquetas que no cuentan', function (): void {
+    // Solo `--check` bloquea: la matriz se genera igual para que se vea que falta.
+    useCatalog("- { id: RN-05, fase: 0, titulo: El turno no se parte a medianoche }\n");
+    useTests(FakeTestSource::file([
+        FakeTestSource::pest('uno', ['RN-05']),
+        FakeTestSource::pest('dos', ['RN-99']),
+    ]));
+    config(['quality.current_phase' => 0]);
+
+    expect(Commands::run('qa:traceability --output=-')[0])->toBe(0);
 })->group('RQ-13');
 
 it('genera la matriz por la salida estandar sin escribir ficheros', function (): void {
@@ -185,7 +214,11 @@ it('da por cubierto un requisito cuya unica prueba es un escenario de k6', funct
     // prueba de carga, que dura minutos y necesita la pila levantada (§10.1).
     // Sin este tercer formato, `--check` bloquearia por dos requisitos que si
     // estan verificados, y la puerta que avisa de verdad se acaba desactivando.
-    useCatalog("- { id: RNF-P-06, fase: 0, titulo: 50 fichajes por segundo en el cambio de turno }\n");
+    // Con los tres requisitos que cita el escenario: uno fuera del catalogo
+    // bloquea por si solo.
+    useCatalog("- { id: RNF-P-06, fase: 0, titulo: 50 fichajes por segundo en el cambio de turno }\n"
+        ."- { id: RNF-P-02, fase: 0, titulo: Latencia del fichaje }\n"
+        ."- { id: RQ-08, fase: 0, titulo: Prueba de carga }\n");
     useLoadTest(FakeTestSource::k6(['scan' => FakeTestSource::k6Requirements('RNF-P-06 RNF-P-02 RQ-08')]));
     config(['quality.current_phase' => 0]);
 

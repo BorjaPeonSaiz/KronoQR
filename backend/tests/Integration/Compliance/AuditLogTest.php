@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Modules\Compliance\Application\Command\RecordAuditEntryCommand;
+use App\Modules\Compliance\Application\Port\AuditChainReader;
 use App\Modules\Compliance\Application\Port\AuditTrail;
 use App\Modules\Compliance\Application\UseCase\RecordAuditEntry;
 use App\Modules\Compliance\Application\UseCase\VerifyAuditChain;
@@ -20,6 +21,7 @@ use App\Modules\Compliance\Infrastructure\Persistence\DatabaseAuditChainReader;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseAuditTrail;
 use Illuminate\Database\Connection;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Assert;
@@ -360,6 +362,46 @@ it('detecta por SQL directo la alteracion de una fila e incrementa la metrica', 
         ->and($after->breaks[0]->kind)->toBe(AuditChainBreakKind::ContentAltered)
         // La metrica que el doc 02 §8.2 exige que este siempre en cero.
         ->and(metricValue($metricsPath))->toBe(1);
+})->group('RS-07');
+
+it('hace salir con 1 a compliance:verify-audit-chain cuando un UPDATE por SQL altera una fila', function (): void {
+    // El escenario ineludible del doc 02 §9.4 al pie de la letra (Q9): la
+    // alteracion la hace un UPDATE real y la detecta el COMANDO que se programa
+    // cada noche, no el caso de uso. Como en `tamperedChainVerification()`, todo
+    // va sobre la conexion de migracion y se deshace al final; el comando lee
+    // esa misma conexion para ver la fila alterada sin confirmar.
+    $migrator = DB::connection('pgsql_migrator');
+    app()->instance(AuditChainReader::class, new DatabaseAuditChainReader($migrator));
+    $trail = new DatabaseAuditTrail($migrator);
+    $entrada = static fn (int $n): AuditEntryDraft => new AuditEntryDraft(
+        occurredAt: Instants::utc(AUDIT_AT),
+        actor: AuditActor::device(1),
+        action: AuditAction::ShiftEntryCreated,
+        subject: AuditSubject::of('shift_entry', $n),
+        payload: AuditPayload::of(['n' => $n]),
+    );
+
+    $migrator->beginTransaction();
+
+    try {
+        $trail->append($entrada(1));
+        $trail->append($entrada(2));
+        $trail->append($entrada(3));
+        $salidaIntegra = Artisan::call('compliance:verify-audit-chain');
+
+        $migrator->statement(
+            "UPDATE audit_log SET payload = '{\"n\": 99}'::jsonb WHERE id = (SELECT id FROM audit_log ORDER BY id OFFSET 1 LIMIT 1)",
+        );
+        $salidaAlterada = Artisan::call('compliance:verify-audit-chain');
+        $texto = Artisan::output();
+    } finally {
+        $migrator->rollBack();
+    }
+
+    expect($salidaIntegra)->toBe(0)
+        ->and($salidaAlterada)->toBe(1)
+        ->and($texto)->toContain('ROTURA DE LA CADENA')
+        ->and($texto)->toContain('audit_chain=broken failures=1 rows=3');
 })->group('RS-07');
 
 it('detecta que se ha borrado una fila por fuera de la aplicacion', function (): void {

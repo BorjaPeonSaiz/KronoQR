@@ -61,6 +61,17 @@ use Throwable;
  * los que lo tienen son el mismo**: el hijo lo reconecta en su sitio y no hay a
  * quien atropellar.
  *
+ * ## La barrera de arranque
+ *
+ * Bifurcar diez procesos lleva milisegundos, y un hijo que empezara su tarea en
+ * cuanto nace habria terminado antes de que naciera el ultimo: diez peticiones
+ * «paralelas» que en realidad van casi en fila, y una prueba de concurrencia que
+ * pasa sin que la carrera llegue a darse (Q8 de la verificacion de la 2.1.0).
+ * Por eso cada hijo espera en una barrera —el extremo de lectura de un par de
+ * sockets— hasta que el padre ha bifurcado a TODOS y cierra el de escritura: el
+ * fin de fichero les llega a la vez y salen juntos. Lo comprueba
+ * `ParallelRequestsBarrierTest`.
+ *
  * ## Como vuelve el resultado
  *
  * Por fichero, uno por hijo, y no por memoria compartida ni por tuberia: un
@@ -115,9 +126,12 @@ final class ParallelRequests
      *
      * @param  int  $count  Cuantos procesos.
      * @param  callable(int): mixed  $task  Lo que hace cada hijo, con su indice.
+     * @param  (callable(): void)|null  $beforeRelease  Lo que hace el padre con
+     *                                                  todos los hijos ya nacidos y
+     *                                                  todavia retenidos en la barrera.
      * @return list<mixed> Resultados en el orden de lanzamiento.
      */
-    public static function runTasks(int $count, callable $task): array
+    public static function runTasks(int $count, callable $task, ?callable $beforeRelease = null): array
     {
         if (! \function_exists('pcntl_fork')) {
             throw new RuntimeException(
@@ -146,7 +160,27 @@ final class ParallelRequests
             DB::disconnect((string) $name);
         }
 
-        $children = self::spawn($count, $task, $directory);
+        $barrier = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP);
+
+        if ($barrier === false) {
+            throw new RuntimeException('No se ha podido crear la barrera de arranque.');
+        }
+
+        [$held, $release] = $barrier;
+
+        try {
+            $children = self::spawn($count, $task, $directory, $held, $release);
+
+            if ($beforeRelease !== null) {
+                $beforeRelease();
+            }
+        } finally {
+            // Con el ultimo extremo de escritura cerrado, todos los hijos leen
+            // fin de fichero a la vez. Tambien si `spawn()` fallo a medias: un
+            // hijo retenido para siempre dejaria la suite colgada.
+            fclose($release);
+            fclose($held);
+        }
 
         foreach ($children as $pid) {
             pcntl_waitpid($pid, $status);
@@ -162,9 +196,11 @@ final class ParallelRequests
 
     /**
      * @param  callable(int): mixed  $task
+     * @param  resource  $held  Extremo de lectura de la barrera.
+     * @param  resource  $release  Extremo de escritura, que solo cierra el padre.
      * @return list<int>
      */
-    private static function spawn(int $count, callable $task, string $directory): array
+    private static function spawn(int $count, callable $task, string $directory, $held, $release): array
     {
         $children = [];
 
@@ -176,6 +212,12 @@ final class ParallelRequests
             }
 
             if ($pid === 0) {
+                // El hijo suelta su copia del extremo de escritura, o el fin de
+                // fichero no llegaria nunca, y espera a que el padre suelte la
+                // suya. `fread` devuelve '' en ese momento, a todos a la vez.
+                fclose($release);
+                fread($held, 1);
+
                 self::child($index, $task, $directory);
             }
 

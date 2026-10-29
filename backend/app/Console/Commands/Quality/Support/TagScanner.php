@@ -93,9 +93,6 @@ final class TagScanner
     /** Cadena entrecomillada suelta dentro de los argumentos de una etiqueta. */
     private const string QUOTED = '/[\'"](?<value>[^\'"\n]*)[\'"]/u';
 
-    /** Lo que alguien ha querido escribir como requisito, bien o mal. */
-    private const string LOOKS_LIKE_REQUIREMENT = '/^@?R[A-Z]{0,3}-/u';
-
     /**
      * Una prueba que no se ejecuta NUNCA no cubre nada.
      *
@@ -354,7 +351,9 @@ final class TagScanner
      * Separa los identificadores de requisito del resto de grupos (`slow`,
      * `smoke`) y aparta los que lo parecen pero no lo son. `RN-O5` con la letra
      * O es la clase de erratas por la que un requisito se queda sin prueba
-     * mientras alguien cree haberla escrito.
+     * mientras alguien cree haberla escrito. El criterio es
+     * {@see RequirementTag}, el mismo que el de la puerta de pruebas sin
+     * etiqueta.
      *
      * @return array{requirements: list<string>, malformed: list<string>}
      */
@@ -374,24 +373,7 @@ final class TagScanner
      */
     private function classifyAll(array $values): array
     {
-        $requirements = [];
-        $malformed = [];
-
-        foreach ($values as $value) {
-            $candidate = ltrim($value, '@');
-
-            if (preg_match(RequirementRange::IDENTIFIER, $candidate) === 1) {
-                $requirements[] = $candidate;
-
-                continue;
-            }
-
-            if (preg_match(self::LOOKS_LIKE_REQUIREMENT, $value) === 1) {
-                $malformed[] = $value;
-            }
-        }
-
-        return ['requirements' => array_values(array_unique($requirements)), 'malformed' => $malformed];
+        return RequirementTag::classify($values);
     }
 
     /**

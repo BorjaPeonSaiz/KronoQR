@@ -31,4 +31,34 @@ final readonly class TaggedTest
     {
         return $this->file.':'.$this->line;
     }
+
+    /**
+     * ¿Es una prueba condicionada al entorno de un fichero que la CI omite
+     * siempre (`quality.skipped_in_ci`)? Solo las condicionadas: las demas
+     * pruebas del mismo fichero se ejecutan en la CI y cubren lo que dicen.
+     *
+     * Aqui y no en el informe para que `qa:traceability` y la puerta de nivel
+     * (`TestLevelGateTest`) decidan lo mismo: si solo la aplicara el informe, la
+     * puerta contaria como nivel cubierto una prueba que la CI no ejecuta nunca.
+     *
+     * Se compara por el FINAL de la ruta porque la prueba llega relativa al
+     * padre de `base_path()` —`html/tests/…` en el contenedor, `backend/tests/…`
+     * en la CI— y la configuracion no puede depender de donde se ejecute.
+     *
+     * @param  list<string>  $skippedInCi  Ficheros de Pest relativos a backend/.
+     */
+    public function isAlwaysSkippedInCi(array $skippedInCi): bool
+    {
+        if (! $this->conditional || $this->tool !== 'pest') {
+            return false;
+        }
+
+        foreach ($skippedInCi as $path) {
+            if (str_ends_with('/'.$this->file, '/'.ltrim($path, '/'))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }

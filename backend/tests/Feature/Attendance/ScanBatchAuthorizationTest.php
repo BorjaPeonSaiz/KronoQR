@@ -11,6 +11,7 @@ use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Identity\PortalLogins;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -122,7 +123,7 @@ it('deniega la sincronizacion del lote a cada rol de gestion', function (UserRol
     'rrhh' => [UserRole::RRHH],
     'responsable de departamento' => [UserRole::RESPONSABLE_DEPARTAMENTO],
     'auditor' => [UserRole::AUDITOR],
-    'empleado' => [UserRole::EMPLEADO],
+    'cuenta con rol empleado' => [UserRole::EMPLEADO],
 ])->group('RS-04', 'RQ-07', 'RF-KI-04');
 
 it('deniega la sincronizacion a una cuenta con rol kiosk que no es un dispositivo', function (): void {
@@ -135,7 +136,7 @@ it('deniega la sincronizacion a una cuenta con rol kiosk que no es un dispositiv
     // usuario por tablet» en lugar de emparejar el dispositivo (RF-ID-04).
     [$batchKey, $cuerpo] = loteValido();
 
-    Api::as(ManagementUsers::kioskToken())
+    Api::as(ManagementUsers::kioskRoleAccountToken())
         ->withHeaders(['Idempotency-Key' => $batchKey])
         ->post('/api/v1/scan/batch', $cuerpo)
         ->assertStatus(403);
@@ -175,8 +176,7 @@ it('deniega la sincronizacion a una sesion de portal', function (): void {
     // movil, ni por si mismo ni con una cola inventada.
     [$batchKey, $cuerpo] = loteValido();
 
-    $empleado = ManagementUsers::withRole(UserRole::EMPLEADO);
-    $tokenDePortal = $empleado->createToken('Portal', [TokenAbility::SELF_READ->value])->plainTextToken;
+    $tokenDePortal = PortalLogins::open(WorkforceFixtures::employee(WorkforceFixtures::site()));
 
     Api::as($tokenDePortal)
         ->withHeaders(['Idempotency-Key' => $batchKey])

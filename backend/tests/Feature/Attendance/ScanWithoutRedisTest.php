@@ -110,7 +110,7 @@ it('registra un fichaje por tarjeta con Redis caido', function (): void {
             'qr_payload' => SCAN_WITHOUT_REDIS_TARJETA,
         ]);
 
-    $respuesta->assertOk()->assertValidResponse();
+    $respuesta->assertOk()->assertValidResponse(200);
 
     expect($respuesta->json('action'))->toBe('clock_in')
         ->and(DB::table('scan_events')->where('scan_id', $scanId)->value('result'))->toBe('clock_in')
@@ -156,7 +156,7 @@ it('registra un lote de la cola offline con Redis caido', function (): void {
             'qr_payload' => SCAN_WITHOUT_REDIS_TARJETA,
         ]]]);
 
-    $respuesta->assertStatus(207)->assertValidResponse();
+    $respuesta->assertStatus(207)->assertValidResponse(207);
 
     expect(DB::table('scan_events')->where('scan_id', $scanId)->value('result'))->toBe('clock_in');
 })->group('RF-KI-04', 'RF-AT-10', 'RS-02');
@@ -176,7 +176,7 @@ it('registra un fichaje por PIN con Redis caido', function (): void {
             'pin_sealed' => EmployeePins::seal(SCAN_WITHOUT_REDIS_PIN, $escenario['publicKey']),
         ]);
 
-    $respuesta->assertOk()->assertValidResponse();
+    $respuesta->assertOk()->assertValidResponse(200);
 
     expect($respuesta->json('action'))->toBe('clock_in')
         ->and(DB::table('scan_events')->where('scan_id', $scanId)->value('origin'))->toBe('pin_kiosk');

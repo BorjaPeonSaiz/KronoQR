@@ -6,6 +6,7 @@ use App\Modules\Identity\Domain\ValueObject\TokenAbility;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
 use Spectator\Spectator;
+use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
@@ -185,7 +186,7 @@ it('no deja al quiosco acercarse a ninguna ruta del asistente', function (): voi
     // Su token lleva tres ambitos y ninguno es `settings:*` ni `employees:*`, asi
     // que se queda en el middleware. Es la segunda mitad de la regla dura 19: el
     // quiosco no se entera de la configuracion por ningun camino.
-    $token = ManagementUsers::kioskToken();
+    $token = AttendanceFixtures::kioskToken();
 
     Api::as($token)->get('/api/v1/setup/steps')->assertValidResponse(403);
     Api::as($token)->call('PUT', '/api/v1/setup/steps/license', ['state' => 'skipped'])->assertValidResponse(403);

@@ -85,7 +85,11 @@ info:
     **Cuerpo de la peticion (D6).** En cualquier ruta, un cuerpo con
     `Content-Type: application/json` (o `+json`) que no es JSON valido responde
     `400` `urn:kronoqr:problem:bad-request`, nunca `200` ni `422`: el cliente no
-    puede creer que se ha guardado algo que el servidor no ha leido. Un cuerpo
+    puede creer que se ha guardado algo que el servidor no ha leido. Su forma
+    es `BadRequestProblem`: sin `errors`, porque no se ha leido ningun campo.
+    Las operaciones que declaran un `400` lo describen con esa forma
+    (`UnreadableBody`) o, si ademas validan el cuerpo con `400`, con las dos
+    (`InvalidRequest`). Un cuerpo
     con otro `Content-Type` responde `415`
     `urn:kronoqr:problem:unsupported-media-type`; las unicas excepciones son
     las rutas de subida de ficheros, que admiten ademas `multipart/form-data`.
@@ -1310,7 +1314,7 @@ paths:
                         display_name: Maria G.
                     pin_sealing_public_key: null
         '400':
-          $ref: '#/components/responses/InvalidRequest'
+          $ref: '#/components/responses/InvalidQuery'
         '401':
           $ref: '#/components/responses/Unauthenticated'
         '403':
@@ -1872,7 +1876,7 @@ paths:
                       app_version: 1.4.2
                       requested_at: '2026-09-07T10:02:00Z'
         '400':
-          $ref: '#/components/responses/InvalidRequest'
+          $ref: '#/components/responses/UnreadableBody'
         '401':
           $ref: '#/components/responses/Unauthenticated'
         '403':
@@ -2460,6 +2464,17 @@ paths:
         —quien agotara el cupo solo se cerraria la sesion a si mismo— y si
         dejaria a una persona sin poder cerrar sesion justo cuando sospecha que
         su token esta comprometido. Por eso **no declara `429`**.
+
+        **Solo la admiten la gestion y el soporte** (ADR-039, regla dura 18).
+        Un token de quiosco o de portal recibe `403`, sin asiento y con el token
+        intacto: ningun cliente oficial la usa con ellos —el quiosco no cierra
+        sesion y el portal tiene `POST /api/v1/me/logout`— y con el token robado
+        de una tablet bastaria una llamada para dejarla sin servicio sin dejar
+        rastro. La credencial de un quiosco se retira desvinculandolo desde el
+        panel, que deja `device.revoked`. La cuenta de gestion deja asiento
+        `auth.logout` en `audit_log` (RS-13). Un acceso de soporte recibe `204`
+        y no se le revoca nada ni deja rastro de cierre: su credencial la retira
+        el cliente (RF-PD-11, ADR-020).
       tags: [Identity]
       security:
         - managementToken: []
@@ -2471,6 +2486,8 @@ paths:
               $ref: '#/components/headers/NoStoreCacheControl'
         '401':
           $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '503':
           $ref: '#/components/responses/DependencyUnavailable'
 
@@ -9995,7 +10012,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ClientErrorsAccepted'
         '400':
-          $ref: '#/components/responses/InvalidRequest'
+          $ref: '#/components/responses/UnreadableBody'
         '401':
           $ref: '#/components/responses/Unauthenticated'
         '403':
@@ -12907,10 +12924,20 @@ components:
         cabecera `Idempotency-Key` no coincide con `scan_id`. Es un fallo del
         cliente, y ninguna de sus causas dice nada sobre credenciales: el rechazo de
         un escaneo NUNCA llega por aqui, sino como `422`.
+
+        **Dos formas, distintas por `type`.** Si el cuerpo se ha leido y algun
+        campo no cumple, `urn:kronoqr:problem:invalid-request` con `errors` por
+        campo (`ValidationProblem`). Si el cuerpo ni siquiera se ha podido leer
+        —`Content-Type` JSON con un cuerpo que no es JSON valido (D6)—,
+        `urn:kronoqr:problem:bad-request` **sin** `errors` (`BadRequestProblem`):
+        no hay campo que senalar porque no se ha leido ninguno. Las dos son
+        terminales: reenviar lo mismo dara lo mismo.
       content:
         application/problem+json:
           schema:
-            $ref: '#/components/schemas/ValidationProblem'
+            oneOf:
+              - $ref: '#/components/schemas/ValidationProblem'
+              - $ref: '#/components/schemas/BadRequestProblem'
           examples:
             falta-un-campo:
               value:
@@ -12921,6 +12948,49 @@ components:
                 errors:
                   occurred_at:
                     - El instante debe ir en UTC con sufijo Z.
+            json-mal-formado:
+              value:
+                type: 'urn:kronoqr:problem:bad-request'
+                title: Peticion mal formada
+                status: 400
+                detail: La peticion no se ha podido interpretar.
+    InvalidQuery:
+      description: |
+        La consulta lleva un parametro que la operacion no admite. Se rechaza en
+        vez de ignorarse (`RejectsUnknownInput`), con `errors` por parametro. Es
+        un `GET`: no lleva cuerpo, asi que el `400` de un JSON mal formado (D6)
+        no puede darse aqui.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ValidationProblem'
+          examples:
+            parametro-desconocido:
+              value:
+                type: 'urn:kronoqr:problem:invalid-request'
+                title: Peticion invalida
+                status: 400
+                detail: La peticion no cumple el contrato.
+                errors:
+                  site_id:
+                    - El campo site_id no forma parte de esta peticion.
+    UnreadableBody:
+      description: |
+        El cuerpo lleva `Content-Type` JSON (`application/json` o `+json`) pero
+        no es JSON valido (D6). No se ha leido ni guardado nada, y no hay
+        `errors`: no hay campo que senalar porque no se ha leido ninguno. Los
+        campos que no cumplen se rechazan con `422`, no por aqui. En las rutas
+        con sesion se responde despues de autenticar. `title` y `detail`, en el
+        idioma negociado.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/BadRequestProblem'
+          example:
+            type: 'urn:kronoqr:problem:bad-request'
+            title: Peticion mal formada
+            status: 400
+            detail: La peticion no se ha podido interpretar.
     UnsupportedMediaType:
       description: |
         El cuerpo no es de un tipo que esta ruta acepte: lleva `Content-Type`
@@ -18309,6 +18379,21 @@ components:
                 escrito no continua la jornada; `next_entry_not_continued`, el
                 tramo siguiente dejaria de continuarla. El panel elige con esto
                 que pista enseñar; el texto de cada caso va en `errors`.
+
+    BadRequestProblem:
+      title: BadRequestProblem
+      description: |
+        La peticion no se ha podido leer (D6): `Content-Type` JSON con un cuerpo
+        que no es JSON valido. **Sin `errors`**, porque no se ha leido ningun
+        campo; el cliente la distingue de `ValidationProblem` por el `type`.
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          required: [type]
+          properties:
+            type:
+              type: string
+              enum: ['urn:kronoqr:problem:bad-request']
 
     ScanRejected:
       type: object

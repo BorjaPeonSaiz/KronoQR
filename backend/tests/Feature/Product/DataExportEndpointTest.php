@@ -124,7 +124,7 @@ it('responde 409 con la exportacion en curso dentro del cuerpo', function (): vo
 
     $enCurso = DataExports::inProgress('running');
 
-    $response = Api::as(exportAdminToken())->post('/api/v1/data-export')->assertStatus(409);
+    $response = Api::as(exportAdminToken())->post('/api/v1/data-export')->assertValidResponse(409);
 
     expect($response->json('type'))->toBe('urn:kronoqr:problem:data-export-in-progress')
         ->and($response->json('export.uuid'))->toBe($enCurso->uuid)

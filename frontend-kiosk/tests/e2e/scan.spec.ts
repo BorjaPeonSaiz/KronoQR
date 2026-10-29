@@ -122,24 +122,36 @@ test(
 )
 
 test(
-  'confirma en menos de 300 ms, antes de saber nada del servidor',
-  { tag: ['@RF-AT-05', '@RF-KI-02', '@RNF-P-01'] },
+  'confirma antes de saber nada del servidor',
+  { tag: ['@RF-AT-05', '@RF-KI-02'] },
   async ({ page }) => {
-    // La sonda `scan-latency-ms` mide la parte del quiosco de RNF-P-01 (de la
-    // lectura a la confirmacion en pantalla, < 300 ms en el doc 02 §6), no la
-    // decodificacion de RNF-P-03, que mide `qr-decode-budget.spec.ts` (KP2).
-    // El servidor tarda tres segundos: el empleado no puede esperarlo.
+    // La confirmacion no espera a la red (regla dura 19): el servidor no contesta
+    // hasta que la prueba lo suelta, despues de ver la confirmacion en pantalla.
+    // CUANTO tarda en salir —RNF-P-01, y los 300 ms de la parte del quiosco del
+    // doc 02 §6— lo mide `perf-scan-latency.spec.ts` con p95 y p99 sobre sesenta
+    // fichajes, en la suite nocturna de rendimiento (D4, V2-QB-1): con una sola
+    // muestra contra el reloj, esta prueba fallaba 2 de cada 70 veces con la
+    // maquina cargada.
+    let releaseServer: () => void = () => undefined
+    const serverHeld = new Promise<void>((resolve) => {
+      releaseServer = resolve
+    })
+    let requestsSeen = 0
     await page.route('**/api/v1/scan', async (route) => {
-      // eslint-disable-next-line no-restricted-syntax -- el retraso es del servidor simulado, no una espera de la prueba
-      await new Promise((resolve) => setTimeout(resolve, 3_000))
+      requestsSeen += 1
+      await serverHeld
       await route.abort('failed')
     })
 
     await page.goto('/')
 
     await expect(page.getByTestId('scan-confirmation')).toHaveAttribute('data-kind', 'pending')
-    const latency = Number(await page.getByTestId('scan-latency-ms').textContent())
-    expect(latency).toBeLessThan(300)
+    // La peticion ya ha salido y sigue sin respuesta: lo que hay en pantalla no
+    // viene del servidor.
+    await expect.poll(() => requestsSeen).toBeGreaterThan(0)
+    await expect(page.getByTestId('scan-latency-ms')).toHaveText(/^\d+$/)
+
+    releaseServer()
   },
 )
 

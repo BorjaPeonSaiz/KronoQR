@@ -35,7 +35,7 @@ it('anuncia sin afirmar cuando hay un driver de cobertura activo', function (str
 
     expect($anuncio)->toBe(
         '[presupuesto-de-reloj] RNF-P-05 sin afirmar bajo cobertura ('.$driver.'): 5.880 s medidos, '
-        .'presupuesto 5.0 s. Se afirma en las pasadas sin cobertura ni mutacion (jobs ③ y ④ de la CI y local).'
+        .'presupuesto 5.0 s. Se afirma en la suite nocturna de rendimiento, sin cobertura (make test-performance).'
     );
 })->with(['xdebug', 'pcov'])->group('RNF-M-01');
 
@@ -52,7 +52,7 @@ it('falla en milisegundos y lo dice en milisegundos cuando no hay cobertura', fu
 it('anuncia en milisegundos bajo cobertura', function (): void {
     expect(WallClockBudget::check(0.62, 0.5, 'RF-PD-15', 'xdebug', 'ms'))->toBe(
         '[presupuesto-de-reloj] RF-PD-15 sin afirmar bajo cobertura (xdebug): 0.620 ms medidos, '
-        .'presupuesto 0.5 ms. Se afirma en las pasadas sin cobertura ni mutacion (jobs ③ y ④ de la CI y local).'
+        .'presupuesto 0.5 ms. Se afirma en la suite nocturna de rendimiento, sin cobertura (make test-performance).'
     );
 })->group('RNF-M-01');
 
@@ -62,3 +62,49 @@ it('afirma la razon entre dos medidas sin cobertura y la anuncia con ella', func
         ->and(WallClockBudget::check(42.0, 1.5, 'RS-03', 'xdebug', 'x'))
         ->toStartWith(WallClockBudget::NOTICE_PREFIX.' RS-03 sin afirmar bajo cobertura (xdebug): 42.000 x');
 })->group('RNF-M-01', 'RS-03');
+
+it('juzga la mediana y no la peor muestra', function (): void {
+    // Un pico aislado de un runner compartido no decide el resultado (D4).
+    expect(WallClockBudget::median([0.4, 9.1, 0.5, 0.6, 0.45]))->toBe(0.5);
+})->group('RNF-M-01');
+
+it('toma la media de las dos centrales con un numero par de muestras', function (): void {
+    expect(WallClockBudget::median([4.0, 1.0, 3.0, 2.0]))->toBe(2.5);
+})->group('RNF-M-01');
+
+it('no inventa una mediana sin muestras', function (): void {
+    expect(fn (): float => WallClockBudget::median([]))->toThrow(LogicException::class);
+})->group('RNF-M-01');
+
+it('descarta la pasada de calentamiento y devuelve las que se juzgan', function (): void {
+    $pasada = 0;
+
+    $muestras = WallClockBudget::samples(function () use (&$pasada): float {
+        $pasada++;
+
+        return (float) $pasada;
+    });
+
+    expect($muestras)->toBe([2.0, 3.0, 4.0, 5.0, 6.0]);
+})->group('RNF-M-01');
+
+it('cuenta la mediana y sus muestras en el mensaje del fallo', function (): void {
+    expect(fn (): ?string => WallClockBudget::check(5.2, 5.0, 'RNF-P-05', null, 's', [5.1, 5.2, 5.3]))
+        ->toThrow(ExpectationFailedException::class, 'RNF-P-05: 5.200 s medidos (mediana de 5.100, 5.200, 5.300), presupuesto 5.0 s.');
+})->group('RNF-M-01');
+
+it('no deja afirmar un presupuesto de reloj fuera de la suite de rendimiento', function (): void {
+    expect(fn () => WallClockBudget::guardPerformanceGroup('RNF-P-05', ['RNF-P-05', 'RF-IN-01']))
+        ->toThrow(LogicException::class, "->group('performance')");
+})->group('RNF-M-01');
+
+it('deja afirmarlo dentro de la suite de rendimiento', function (): void {
+    WallClockBudget::guardPerformanceGroup('RNF-P-05', ['RNF-P-05', 'performance']);
+
+    expect(WallClockBudget::GROUP)->toBe('performance');
+})->group('RNF-M-01');
+
+it('para la afirmacion de la prueba en curso si no esta en el grupo de rendimiento', function (): void {
+    expect(fn () => WallClockBudget::expectMedianBelow([0.1], 5.0, 'RNF-P-05'))
+        ->toThrow(LogicException::class, 'fuera de la suite de rendimiento');
+})->group('RNF-M-01');

@@ -10,15 +10,16 @@ chromium --use-fake-device-for-media-stream \
 
 ## Los videos
 
-| Fichero                 | Contenido                                                                                                                          | Lo usa              |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
-| `qr-video.y4m`          | QR limpio con payload `FH1`, correccion de errores **Q**                                                                           | proyecto `kiosk-qr` |
-| `qr-video-degraded.y4m` | El mismo QR con un **28 % del lado (con zona tranquila) tapado** (caso peor: un parche opaco y contiguo)                           | `kiosk-qr-degraded` |
-| `qr-video-worn.y4m`     | El mismo QR con un **10 % de sus palabras de codigo** invertidas al azar, repartidas por todo el simbolo (roces, grasa, un doblez) | `kiosk-qr-worn`     |
-| `qr-video-blank.y4m`    | Blanco liso, sin codigo (pantalla de espera estable)                                                                               | `kiosk-layout`      |
+| Fichero                    | Contenido                                                                                                                                                         | Lo usa               |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
+| `qr-video.y4m`             | QR limpio con payload `FH1`, correccion de errores **Q**                                                                                                          | proyecto `kiosk-qr`  |
+| `qr-video-degraded.y4m`    | El mismo QR con un **28 % del lado (con zona tranquila) tapado** (caso peor: un parche opaco y contiguo)                                                          | `kiosk-qr-degraded`  |
+| `qr-video-worn.y4m`        | El mismo QR con un **10 % de sus palabras de codigo** invertidas al azar, repartidas por todo el simbolo (roces, grasa, un doblez)                                | `kiosk-qr-worn`      |
+| `qr-video-blank.y4m`       | Blanco liso, sin codigo (pantalla de espera estable)                                                                                                              | `kiosk-layout`       |
+| `qr-video-alternating.y4m` | Dos tarjetas distintas que se turnan, 1 s cada una con 1 s sin nada entre ellas, a 2 fps: un fichaje nuevo en cada aparicion (suite nocturna de rendimiento, KP3) | `kiosk-perf-latency` |
 
 Formato YUV4MPEG2 `C420mpeg2`, 1280x720 a 30 fps, dos fotogramas (Chromium lo reproduce en
-bucle). Es el unico formato que acepta `--use-file-for-fake-video-capture`.
+bucle); el alterno, ocho fotogramas a 2 fps. Es el unico formato que acepta `--use-file-for-fake-video-capture`.
 
 `@RQ-04` (camara simulada con QR real que se decodifica de verdad, tarea 3.7) va SOLO en
 las pruebas que corren de verdad contra uno de estos videos con

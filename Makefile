@@ -247,10 +247,10 @@ $(file >.env,$(file <.env.example))
 endif
 
 .DEFAULT_GOAL := help
-.PHONY: help up down restart build ps logs shell seed test test-unit test-integration \
+.PHONY: help up down restart build ps logs shell seed test test-unit test-integration test-performance e2e-performance \
         test-arch test-contract quality tools-ready php-lint deptrac rector sh-lint api-lint sast \
         sast-community trivy-fs trivy-image secrets-scan sbom build-ci-images release-gate nginx-smoke \
-        traceability traceability-check docs-consistency deps-audit-php deps-audit-js coverage coverage-now mutate mutate-changed e2e load-test dast clean changelog changelog-check tool-versions \
+        traceability traceability-check docs-consistency deps-audit-php deps-audit-js coverage coverage-now mutate mutate-canary mutate-scope mutate-changed e2e load-test dast clean changelog changelog-check tool-versions \
         backup backup-verify restore-drill restore-drill-pitr observability-check
 
 help: ## Muestra esta ayuda
@@ -268,6 +268,7 @@ help: ## Muestra esta ayuda
 	@echo "  make test             Toda la suite"
 	@echo "  make test-unit        Dominio, sin base de datos"
 	@echo "  make test-arch        Solo las pruebas de arquitectura (Pest Arch)"
+	@echo "  make test-performance Suite nocturna de rendimiento: presupuestos de reloj en mediana (D4)"
 	@echo "  make quality          Pint + PHPStan 9 + Deptrac + Rector + ShellCheck + shfmt"
 	@echo "  make php-lint         Solo Pint y PHPStan       (etapa 1 de la CI)"
 	@echo "  make deptrac          Solo Deptrac              (etapa 2 de la CI)"
@@ -292,7 +293,10 @@ help: ## Muestra esta ayuda
 	@echo "  make coverage-now     Cobertura actual, sin umbral"
 	@echo "  make mutate           Mutacion COMPLETA sobre el dominio, MSI 80 por ciento (nocturna y a mano)"
 	@echo "  make mutate-changed   Mutacion acotada a los ficheros de dominio de este push (etapa 3 de la CI)"
+	@echo "  make mutate-canary    Canario: la mutacion distingue un mutante vivo de uno muerto (antes de las dos)"
+	@echo "  make mutate-scope     Parte del dominio que la mutacion ve: cobertura de la suite Unit (nocturna)"
 	@echo "  make e2e              Playwright: quiosco, panel y portal"
+	@echo "  make e2e-performance  RNF-P-01 del quiosco y RNF-P-04 del panel (bloquean); volumenes grandes del panel (avisan)"
 	@echo "  make load-test        Carga k6 (RNF-P-06): 50 fichajes/s, p95 menor que 150 ms. INSTANCES=8 DURATION=120s"
 	@echo "  make changelog        Genera el CHANGELOG desde los commits convencionales"
 	@echo "  make changelog-check  Comprueba que una version tiene entrada (VERSION=1.2.3)"
@@ -412,7 +416,18 @@ endif
 # sobre el arranque). Si una tarea futura vuelve a rozarlo, la pregunta correcta
 # es si esas pruebas deberian ser unitarias, no si el techo puede subir otra
 # vez.
-UNIT_SUITE_MAX_SECONDS ?= 5
+#
+# 29-10-2026 (bloque 22 de la 2.3.0, decision del propietario): de 5 a 6 s. Con
+# 5 236 pruebas y el mismo codigo, la CI midio 4,38 y 4,54 s en unos runs y 5,05,
+# 5,14 y 5,22 s en otros: ruido del runner, no una prueba lenta. Las pruebas
+# suman 3,6 s (JUnit) y la mas lenta tarda 0,13 s, en el primer uso del
+# vocabulario de ErrorTextAllowlist. Se hizo primero la pregunta de arriba: seis
+# ficheros que leen o escriben en disco (TagScanner, RequirementCatalog,
+# DiagnosticsConfigurationAllowlist, DevelopmentSeederGuard, DeployedVersion y
+# JsonDiagnosticsBundleWriter) pasaron a Architecture, y eso solo gano unos
+# 0,15 s. En paralelo, con 4 procesos, tarda 3,45 s: se descarto porque el
+# arranque de los procesos pesa mas que las pruebas.
+UNIT_SUITE_MAX_SECONDS ?= 6
 
 # Maximo de pruebas omitidas (`skipped`) que tolera `test-unit`; vacio, sin
 # comprobar (local). La CI lo fija a 0: la suite unitaria no tiene ninguna
@@ -421,9 +436,10 @@ UNIT_SUITE_MAX_SECONDS ?= 5
 UNIT_MAX_SKIPPED ?=
 
 # La duracion se lee de la linea "Duration:" de Pest —el tiempo de la suite, no
-# el del arranque de artisan ni el de docker exec— y se compara con awk porque
-# sh no sabe de decimales. Si el formato de salida de Pest cambiara y la linea
-# no apareciera, el gate avisa en vez de aprobar en silencio.
+# el del arranque de artisan ni el de docker exec—. Lo hace
+# .github/scripts/pest-duration-budget.sh, que FALLA si no encuentra la linea:
+# hasta R2-QA-04 este objetivo avisaba y aprobaba, y un cambio de formato de
+# Pest habria apagado el presupuesto con la CI en verde.
 test-unit: ## Dominio puro, sin base de datos, con presupuesto de duracion
 ifeq ($(wildcard backend/artisan),)
 	@echo [make] La aplicacion Laravel llega en la tarea 0.2: todavia no hay suite que ejecutar.
@@ -431,24 +447,19 @@ else
 	@$(RUN_APP) php artisan test --testsuite=Unit > .unit-suite.log 2>&1; \
 	status=$$?; \
 	cat .unit-suite.log; \
-	dur=$$(grep 'Duration:' .unit-suite.log | grep -oE '[0-9]+\.[0-9]+' | tail -1); \
 	skip_rc=0; \
 	if [ -n "$(UNIT_MAX_SKIPPED)" ] && [ $$status -eq 0 ]; then \
 		: "Ruta absoluta: en la CI RUN_APP es «cd backend &&» y esta linea ya corre dentro de backend/."; \
 		bash "$(CURDIR)/.github/scripts/pest-max-skipped.sh" check "$(UNIT_MAX_SKIPPED)" .unit-suite.log || skip_rc=$$?; \
 	fi; \
+	budget_rc=0; \
+	if [ $$status -eq 0 ]; then \
+		sh "$(CURDIR)/.github/scripts/pest-duration-budget.sh" "$(UNIT_SUITE_MAX_SECONDS)" .unit-suite.log || budget_rc=$$?; \
+	fi; \
 	rm -f .unit-suite.log; \
 	if [ $$status -ne 0 ]; then exit $$status; fi; \
 	if [ $$skip_rc -ne 0 ]; then exit $$skip_rc; fi; \
-	if [ -z "$$dur" ]; then \
-		echo "[make] AVISO: no se pudo leer la duracion de la suite; el presupuesto de $(UNIT_SUITE_MAX_SECONDS) s no se ha comprobado."; \
-	elif awk "BEGIN { exit !($$dur > $(UNIT_SUITE_MAX_SECONDS)) }"; then \
-		echo "[make] La suite unitaria ha tardado $$dur s y el presupuesto es $(UNIT_SUITE_MAX_SECONDS) s (doc 02 §9.2)."; \
-		echo "[make] Una suite unitaria lenta deja de ejecutarse en cada cambio, que es su unica razon de ser."; \
-		exit 1; \
-	else \
-		echo "[make] Suite unitaria en $$dur s, dentro del presupuesto de $(UNIT_SUITE_MAX_SECONDS) s."; \
-	fi
+	exit $$budget_rc
 endif
 
 # Puerta contra las omisiones silenciosas (R6-DV-07, R2-QA-01). Una prueba
@@ -463,13 +474,18 @@ endif
 # .github/scripts/pest-max-skipped.sh, la misma para las tres suites de la CI.
 INTEGRATION_MAX_SKIPPED ?=
 
+# La misma memoria que `make test` y que la CI (V21-2-QA-4): `php -d` sobre
+# vendor/bin/pest y no `php artisan test`, que lanza Pest en un proceso hijo que
+# no hereda el `-d` y se quedaba con los 256 MB del contenedor —y la suite de
+# integracion moria a mitad con «Allowed memory size ... exhausted»—. Ver el
+# comentario de TEST_MEMORY_LIMIT. `QualityGatesTest` lo exige.
 test-integration: ## Repositorios contra PostgreSQL real (INTEGRATION_MAX_SKIPPED=n falla si se omiten mas de n pruebas)
 ifeq ($(wildcard backend/artisan),)
 	@echo [make] La aplicacion Laravel llega en la tarea 0.2: todavia no hay suite que ejecutar.
 else ifeq ($(INTEGRATION_MAX_SKIPPED),)
-	$(RUN_APP) php artisan test --testsuite=Integration
+	$(RUN_APP) php -d memory_limit=$(TEST_MEMORY_LIMIT) $(PEST) --testsuite=Integration
 else
-	@bash .github/scripts/pest-max-skipped.sh run "$(INTEGRATION_MAX_SKIPPED)" "$(RUN_APP) php artisan test --testsuite=Integration"
+	@bash .github/scripts/pest-max-skipped.sh run "$(INTEGRATION_MAX_SKIPPED)" "$(RUN_APP) php -d memory_limit=$(TEST_MEMORY_LIMIT) $(PEST) --testsuite=Integration"
 endif
 
 # Contract y Feature juntas y en cada push desde el cierre de la Fase 0.
@@ -498,10 +514,47 @@ test-contract: ## Contrato OpenAPI y feature, las dos suites que la CI ejecuta e
 ifeq ($(wildcard backend/artisan),)
 	@echo [make] La aplicacion Laravel llega en la tarea 0.2: todavia no hay suite que ejecutar.
 else ifeq ($(CONTRACT_MAX_SKIPPED),)
-	$(RUN_APP) php artisan test --testsuite=Contract,Feature
+	$(RUN_APP) php -d memory_limit=$(TEST_MEMORY_LIMIT) $(PEST) --testsuite=Contract,Feature
 else
-	@bash .github/scripts/pest-max-skipped.sh run "$(CONTRACT_MAX_SKIPPED)" "$(RUN_APP) php artisan test --testsuite=Contract,Feature"
+	@bash .github/scripts/pest-max-skipped.sh run "$(CONTRACT_MAX_SKIPPED)" "$(RUN_APP) php -d memory_limit=$(TEST_MEMORY_LIMIT) $(PEST) --testsuite=Contract,Feature"
 endif
+
+# LA SUITE NOCTURNA DE RENDIMIENTO (D4 de la 2.3.0; Q2, V21-2-QA-2, KP3).
+#
+# Un presupuesto de reloj dentro de una suite funcional falla cuando la maquina
+# va cargada, no cuando el producto empeora: PeriodReportVolumeTest puso `main`
+# en rojo tres veces (5,000977 s, 5,61 s y 5,88 s frente a 5 s). Decision del
+# propietario: la afirmacion funcional se queda en su suite y la de tiempo pasa
+# aqui, con la mediana de varias pasadas.
+#
+# `test-performance` ejecuta SOLO las pruebas de Pest con ->group('performance')
+# —todas las suites a la vez: Unit, Integration y Feature—, que phpunit.xml
+# excluye de cualquier otra pasada. Necesita PostgreSQL, Redis y Chrome, como
+# `make test`. `e2e-performance` es la mitad del navegador: RNF-P-01 con p95 y
+# p99 sobre 60 escaneos con la camara simulada (KP3) y RNF-P-04, el LCP de la
+# presencia en vivo con 500 personas (mediana de tres cargas en frio), que
+# bloquean; y el objetivo interno de las tablas de volumen grande del panel,
+# que avisa sin bloquear. Todo en proyectos de Playwright que solo existen con
+# KRONOQR_E2E_PERFORMANCE=1.
+#
+# Las ejecutan los jobs nocturnos `performance` y `performance-kiosk` de ci.yml;
+# en local, a mano. Tests\Support\Time\WallClockBudget explica la mediana y la
+# pasada de calentamiento, y `WallClockAssertionsTest` (Architecture) impide que
+# un presupuesto de reloj vuelva a una suite funcional, de Pest o de Playwright.
+test-performance: ## Suite nocturna de rendimiento: presupuestos de reloj con la mediana de varias pasadas
+ifeq ($(wildcard backend/artisan),)
+	@echo [make] La aplicacion Laravel llega en la tarea 0.2: todavia no hay suite que ejecutar.
+else
+	$(RUN_APP) php -d memory_limit=$(TEST_MEMORY_LIMIT) $(PEST) --group=performance
+endif
+
+# Las dos mitades se ejecutan siempre, aunque falle la primera: son dos
+# requisitos distintos y un rojo del quiosco no debe ocultar el del panel.
+e2e-performance: ## Rendimiento en el navegador: RNF-P-01 del quiosco, RNF-P-04 de la presencia en vivo y aviso de los volumenes grandes del panel
+	@rc=0; \
+	KRONOQR_E2E_PERFORMANCE=1 npm --prefix frontend-kiosk run test:e2e -- --project=kiosk-perf-latency || rc=1; \
+	KRONOQR_E2E_PERFORMANCE=1 npm --prefix frontend-admin run test:e2e -- --project=admin-perf || rc=1; \
+	exit "$$rc"
 
 # Etapa 2 de la CI junto a Deptrac. Son las dos mitades de la misma frontera:
 # Deptrac razona sobre imports y Pest Arch ve lo que no aparece en ningun `use`
@@ -1138,7 +1191,77 @@ endif
 coverage-now: ## Cobertura actual sin umbral, util antes de que exista el dominio
 	$(RUN_APP_XDEBUG) php -d memory_limit=$(COVERAGE_MEMORY_LIMIT) $(PEST) --coverage
 
-mutate: ## Mutacion sobre el dominio, MSI mayor o igual a 80 por ciento
+# Las opciones de Pest que comparten `mutate`, `mutate-changed` y
+# `mutate-canary`. Una sola definicion porque el canario solo vale si muta con
+# las MISMAS opciones que el dominio: una opcion que rompa el proceso hijo
+# (R2-QB-06 lo reprodujo con `--processes=8`) tiene que romper tambien el
+# canario. Cada opcion se explica en el comentario de `mutate`, abajo; lo que
+# cambia entre los tres es `--path`, `--testsuite` y `--min`.
+MUTATE_OPTIONS := --mutate --parallel --covered-only --no-cache --except=StringConcatRemoveLeft,StringConcatRemoveRight,StringConcatSwitchSides
+
+# El CANARIO (R2-QB-06 de la 2.2.0, tarea 22.5 de la 2.3.0). Pest Mutate da
+# por muerto un mutante cuando el proceso hijo sale con un codigo distinto de
+# cero, y eso incluye los fallos del propio entorno: memoria, una extension,
+# una opcion que el hijo no entiende. Medido (28-10-2026): el canario con
+# `--processes=8` da «7 tested», 100 %, y sin ella «4 untested, 3 tested».
+# Un dominio entero mutado asi saldria al 100 % sin que nada lo distinguiera
+# de un dominio bien probado.
+#
+# `tests/MutationCanary/MutationCanary.php` tiene dos metodos: uno con una
+# prueba que mata sus 3 mutantes y otro con una prueba que no mata ninguno de
+# sus 4. Se muta con MUTATE_OPTIONS y su propia suite (segundos, no la suite
+# Unit entera) y .github/scripts/mutation-log.sh exige EXACTAMENTE el reparto
+# de abajo. Mas «tested»: el hijo falla por su cuenta. Mas «untested»: el
+# mutante no llega al hijo (OPcache, ver tools/mutation/zzz-no-opcache.ini).
+# Corre antes de `mutate` y de `mutate-changed`, y si no da lo esperado
+# ninguna de las dos se ejecuta. Si se cambian a proposito el canario o los
+# mutadores de Pest (una version nueva), se ajusta esta cifra en la misma PR.
+MUTATION_CANARY_EXPECTED := 4 untested, 3 tested
+
+mutate-canary: ## Canario de la mutacion: la pasada distingue un mutante vivo de uno muerto (R2-QB-06)
+	@log="$$(mktemp)"; st="$$(mktemp)"; \
+	( $(RUN_APP_XDEBUG) sh -c 'PHP_INI_SCAN_DIR=":$$(pwd)/tools/mutation" $(PEST) $(MUTATE_OPTIONS) --path=tests/MutationCanary/MutationCanary.php --testsuite=MutationCanary'; echo $$? >"$$st" ) >"$$log" 2>&1; \
+	rc="$$(cat "$$st" 2>/dev/null)"; rc="$${rc:-1}"; \
+	if [ "$$rc" -ne 0 ]; then \
+		cat "$$log"; \
+		echo "[make] ERROR: la pasada del canario de la mutacion ha fallado (codigo $$rc)."; \
+	else \
+		sh "$(CURDIR)/.github/scripts/mutation-log.sh" canary "$(MUTATION_CANARY_EXPECTED)" "$$log" || { rc=$$?; cat "$$log"; }; \
+	fi; \
+	rm -f "$$log" "$$st"; \
+	exit "$$rc"
+
+# LO QUE LA MUTACION NO VE (M6 de la 2.1.0, tarea 22.5 de la 2.3.0).
+#
+# `--covered-only` muta solo las lineas que la suite Unit ejecuta: un fichero
+# de dominio sin prueba unitaria no genera ningun mutante, y una linea sin
+# cubrir de un fichero cubierto tampoco. No se quita, y el motivo esta medido
+# (28-10-2026, copia en /tmp del contenedor): la suite Unit cubre el 88,33 %
+# de las sentencias de Modules/*/Domain (6620 de 7495). De las 875 que quedan
+# fuera, 536 estan en 117 ficheros sin ninguna prueba unitaria —excepciones
+# que solo construyen su mensaje, y valores de informes e importaciones que
+# prueban Feature e Integration— y 339 en lineas sueltas de ficheros cubiertos.
+# Sin `--covered-only` esas sentencias cuentan como mutantes vivos («uncovered»)
+# y el MSI bajaria al ~75 % (medido en la 2.2.0) sin que ninguna prueba sea
+# mas debil: mediria cuanto dominio prueba Feature en vez de la Unit.
+#
+# Lo que si se impide es que esa parte CREZCA en silencio: `mutate-scope` mide
+# la cobertura de la suite Unit sobre el dominio y falla por debajo de
+# MUTATION_SCOPE_MIN. Es la fraccion del dominio que la mutacion puede ver.
+# Un modulo nuevo sin pruebas unitarias la baja y la noche lo dice. El umbral
+# es la cifra medida, redondeada hacia abajo: se sube cuando se mida mas, no
+# se baja para dejar pasar un fichero. Corre de noche, en el job `mutation`,
+# y no en cada push: es la suite Unit con Xdebug (48 s en el contenedor).
+# Con el bind mount de Docker Desktop la cifra local sale mas baja (faltan
+# ficheros en el recorrido de app/): se mide en una copia o en la CI.
+MUTATION_SCOPE_MIN    := 88
+MUTATION_SCOPE_CLOVER := storage/framework/cache/clover-unit.xml
+
+mutate-scope: ## Fraccion del dominio que la mutacion ve: cobertura Unit de Modules/*/Domain >= MUTATION_SCOPE_MIN (M6)
+	$(RUN_APP_XDEBUG) $(PEST) --testsuite=Unit --coverage-clover=$(MUTATION_SCOPE_CLOVER)
+	$(RUN_APP) php tools/coverage-gate.php $(MUTATION_SCOPE_CLOVER) $(MUTATION_SCOPE_MIN) 'app/Modules/*/Domain/*'
+
+mutate: mutate-canary ## Mutacion sobre el dominio, MSI mayor o igual a 80 por ciento
 ifeq ($(DOMAIN_MODELS),)
 	$(call notice,Mutacion NO ejecutada: Modules/*/Domain no existe todavia.)
 	@echo "[make] La mutacion se ejecuta sobre Modules/*/Domain, que se escribe en la"
@@ -1184,7 +1307,7 @@ else
 # --parallel de la suite COMPLETA vive en pruebas Feature, que aqui no corren.
 # Un `use` sin efecto (clase global en un fichero sin namespace) rompe el
 # arranque de los procesos hijos como ErrorException: no dejar ninguno.
-	$(RUN_APP_XDEBUG) sh -c 'PHP_INI_SCAN_DIR=":$$(pwd)/tools/mutation" $(PEST) --mutate --parallel --path=$(MUTATE_PATHS) --testsuite=Unit --covered-only --no-cache --except=StringConcatRemoveLeft,StringConcatRemoveRight,StringConcatSwitchSides --min=80'
+	$(RUN_APP_XDEBUG) sh -c 'PHP_INI_SCAN_DIR=":$$(pwd)/tools/mutation" $(PEST) $(MUTATE_OPTIONS) --path=$(MUTATE_PATHS) --testsuite=Unit --min=80'
 endif
 
 # `mutate` completo tarda 37-57 min medidos en la CI (comentario de arriba) y
@@ -1210,17 +1333,29 @@ endif
 # pero sin paralelismo entre ficheros) y NO esta decidida: la politica vigente
 # es la del 24-09-2026, el umbral sobre el subconjunto que cambia.
 #
+# EL `\$$(pwd)` ESCAPADO de la receta (28-10-2026). La orden va entre comillas
+# dobles, y sin escapar `$(pwd)` lo expandia el shell del anfitrion: en la CI
+# da igual (es el mismo `backend/`), pero en local, con `docker compose exec`,
+# PHP_INI_SCAN_DIR apuntaba a una ruta de Windows que el contenedor no tiene y
+# la mutacion acotada corria con OPcache encendido (medido: `opcache.enable_cli`
+# 1 con la receta antigua, 0 con esta), que es justo lo que
+# tools/mutation/zzz-no-opcache.ini apaga. Ahora lo expande el `sh` de dentro,
+# y por eso el valor va entre comillas dobles escapadas y no simples.
+#
 # SIN MUTANTES. Con cero mutantes Pest da nota 0 y falla («No mutations
-# created»; `ignoreMinScoreOnZeroMutations` es false). Lo que se distingue:
-#   - todos los ficheros cambiados son interfaces (no hay clase, trait ni enum:
-#     no hay cuerpo que mutar): se da por bueno, con un mensaje;
-#   - hay clases, traits o enums: SIGUE fallando. Con `--covered-only` una clase
-#     de dominio nueva SIN pruebas tambien sale con cero mutantes, y esa es
-#     justo la que la puerta tiene que parar. Por eso NO se usa
-#     `--ignore-min-score-on-zero-mutations`, que dejaria pasarla.
-#   Limite conocido: un enum que solo tiene casos (sin metodos) tambien da cero
-#   mutantes y sale rojo; se arregla con una prueba que lo recorra o, si no hay
-#   nada que probar, hablandolo en la revision.
+# created»; `ignoreMinScoreOnZeroMutations` es false). Con `--covered-only`
+# eso quiere decir una de dos cosas, y la puerta tiene que separarlas:
+#   - no hay codigo que mutar: todo son interfaces, o una excepcion que solo
+#     nombra su caso, o un enum sin metodos (`InvalidIncident`, `AuditAction`).
+#     Se da por bueno, con un mensaje;
+#   - hay codigo, pero ninguna prueba unitaria lo ejecuta: una clase de dominio
+#     nueva SIN pruebas sale igual, y esa es justo la que hay que parar. Falla.
+#   Si todo son interfaces se sabe sin ejecutar nada. Si no, se repite la
+#   pasada SIN `--covered-only` (MUTATE_PROBE_OPTIONS, solo crea los mutantes:
+#   los no cubiertos no se ejecutan): si tampoco crea ninguno, no hay codigo
+#   que mutar; si crea alguno, es codigo sin cubrir. Por eso NO se usa
+#   `--ignore-min-score-on-zero-mutations`, que dejaria pasar el segundo caso.
+#   La sonda solo corre cuando la pasada normal no crea mutantes.
 #
 # Por que esto no relaja RQ-10. El umbral --min=80 se sigue aplicando, entero,
 # sobre el subconjunto que cambia: un push que introduce una regla de negocio
@@ -1240,6 +1375,47 @@ endif
 # tocar el fichero de dominio que cubre no muta nada por push -y eso es
 # exactamente lo que la ejecucion nocturna, con el dominio entero, sigue
 # cazando antes de la manana siguiente-.
+#
+# Y ademas, POR FICHERO (R2-QB-01, decision del propietario del 28-10-2026):
+# Pest da una sola nota por ejecucion, y un fichero flojo quedaba tapado por
+# los buenos del mismo cambio -`PinVerification` vivio al 47,6 %-. Si cambian
+# varios, cada clase, trait o enum se muta tambien sola con MUTATE_FILE_MIN.
+# Es 70 y no 80 porque en un fichero pequeño un mutante equivalente pesa
+# mucho, y el 80 sigue exigiendose sobre el conjunto. Con un solo fichero no
+# hace falta: su nota es la del conjunto. Solo aqui y no de noche: con
+# --parallel Pest no da notas por fichero, y la deuda ya existente pondria la
+# nocturna en rojo sin que nadie hubiera tocado nada.
+#
+# Cada pasada por fichero va entre dos lineas `[mutate-file] >>> <fichero>` y
+# `[mutate-file] <<< <fichero>: <estado>`. El log de la CI es uno solo y
+# .github/scripts/mutation-log.sh summary las aparta: la nota, el reparto y los
+# vivos del resumen son los del conjunto, y cada fichero sale en su propia
+# tabla con su nota y su estado. Sin esa separacion el resumen tomaba la nota
+# de la ultima pasada, contaba cada vivo dos veces y se callaba la nota si un
+# fichero no tenia mutantes.
+#
+# EL COSTE Y SU TOPE (MUTATE_FILE_MAX). Cada pasada vuelve a ejecutar la suite
+# Unit con Xdebug para saber que cubre cada prueba, antes de mutar nada.
+# Medido en la CI (run 40599610469, 27-10-2026, 13 ficheros y 532 mutantes):
+# 1 min 42 s de cobertura y 8 min 50 s de mutantes en la pasada del conjunto.
+# Las pasadas por fichero repiten la cobertura una vez cada una y se reparten
+# los mismos mutantes con menos paralelismo: unos 2 min por fichero mas su
+# parte de los mutantes, ~35 min para esos 13. En local, con 5 ficheros y la
+# maquina cargada, fueron unos 4 min por pasada. A eso se suma la SONDA: un
+# fichero (o el conjunto) que sale sin mutantes se repite sin `--covered-only`,
+# otra cobertura de unos 2 min. Un fichero sin mutantes cuesta asi ~4 min y no
+# ~2. Con el tope de 12, el caso habitual (pasadas con mutantes) deja el job
+# `unit` en unos 50 min (8 de Feature y contrato, 10 del conjunto y ~30 de
+# pasadas); el peor, once ficheros sin mutantes y uno con ellos, en unos 75
+# (8 + 10 + 11 x 4 + ~11), todavia por debajo de sus 90. Por encima del tope
+# no se muta fichero a fichero: se avisa en el log y en el resumen, y el 80 %
+# del conjunto se sigue exigiendo. Quien quiera la medida entera la repite con
+# MUTATE_FILE_MAX mas alto (en local, o en un disparo manual).
+MUTATE_FILE_MIN := 70
+MUTATE_FILE_MAX ?= 12
+# Las mismas opciones sin `--covered-only`: solo para saber si un fichero sin
+# mutantes cubiertos tiene codigo que mutar (ver «SIN MUTANTES», arriba).
+MUTATE_PROBE_OPTIONS := $(filter-out --covered-only,$(MUTATE_OPTIONS))
 mutate-changed: ## Mutacion acotada a Domain/*.php que cambian frente a MUTATE_BASE (por defecto origin/main)
 ifeq ($(DOMAIN_MODELS),)
 	$(call notice,Mutacion NO ejecutada: Modules/*/Domain no existe todavia.)
@@ -1260,21 +1436,53 @@ else
 		exit 0; \
 	fi; \
 	paths="$$(printf '%s\n' "$$files" | tr '\n' ',' | sed 's/,$$//')"; \
+	sin_codigo() { \
+		plog="$$(mktemp)"; \
+		( $(RUN_APP_XDEBUG) sh -c "PHP_INI_SCAN_DIR=\":\$$(pwd)/tools/mutation\" $(PEST) $(MUTATE_PROBE_OPTIONS) --path=$$1 --testsuite=Unit" ) >"$$plog" 2>&1; \
+		r=1; grep -q 'No mutations created' "$$plog" && r=0; \
+		rm -f "$$plog"; \
+		return "$$r"; \
+	}; \
+	$(MAKE) --no-print-directory mutate-canary || exit $$?; \
 	echo "[make] Mutando lo cambiado frente a $$base: $$paths"; \
 	log="$$(mktemp)"; st="$$(mktemp)"; \
-	( $(RUN_APP_XDEBUG) sh -c "PHP_INI_SCAN_DIR=':$$(pwd)/tools/mutation' $(PEST) --mutate --parallel --path=$$paths --testsuite=Unit --covered-only --no-cache --except=StringConcatRemoveLeft,StringConcatRemoveRight,StringConcatSwitchSides --min=80"; echo $$? >"$$st" ) 2>&1 | tee "$$log"; \
+	( $(RUN_APP_XDEBUG) sh -c "PHP_INI_SCAN_DIR=\":\$$(pwd)/tools/mutation\" $(PEST) $(MUTATE_OPTIONS) --path=$$paths --testsuite=Unit --min=80"; echo $$? >"$$st" ) 2>&1 | tee "$$log"; \
 	rc="$$(cat "$$st" 2>/dev/null)"; rc="$${rc:-1}"; \
+	clases=""; n=0; \
+	for f in $$files; do \
+		if grep -qE '^[[:space:]]*((final|abstract|readonly)[[:space:]]+)*(class|trait|enum)[[:space:]]' "backend/$$f"; then clases="$$clases $$f"; n=$$((n + 1)); fi; \
+	done; \
 	if [ "$$rc" -ne 0 ] && grep -q 'No mutations created' "$$log"; then \
-		solo_interfaces=1; \
-		for f in $$files; do \
-			if grep -qE '^[[:space:]]*((final|abstract|readonly)[[:space:]]+)*(class|trait|enum)[[:space:]]' "backend/$$f"; then solo_interfaces=0; fi; \
-		done; \
-		if [ "$$solo_interfaces" -eq 1 ]; then \
+		if [ "$$n" -eq 0 ]; then \
 			echo "[make] Sin mutantes: todos los ficheros de dominio cambiados son interfaces (sin cuerpo que mutar). Se da por bueno."; \
 			rc=0; \
+		elif sin_codigo "$$paths"; then \
+			echo "[make] Sin mutantes tampoco sin --covered-only: lo cambiado no tiene codigo que mutar (una excepcion que solo nombra su caso, un enum sin metodos). Se da por bueno."; \
+			rc=0; \
 		else \
-			echo "[make] ERROR: sin mutantes, pero entre lo cambiado hay clases, traits o enums. Una clase de dominio sin pruebas que la cubran (--covered-only) sale asi: escribe las pruebas unitarias."; \
+			echo "[make] ERROR: sin mutantes con --covered-only, pero sin esa opcion si los hay: es codigo de dominio sin pruebas unitarias que lo cubran. Escribe las pruebas."; \
 		fi; \
+	fi; \
+	por_fichero=0; \
+	if [ "$$rc" -eq 0 ] && [ "$$n" -gt 1 ] && ! grep -q 'No mutations created' "$$log"; then por_fichero=1; fi; \
+	if [ "$$por_fichero" -eq 1 ] && [ "$$n" -gt $(MUTATE_FILE_MAX) ]; then \
+		echo "[mutate-file] AVISO: cambian $$n clases, traits o enums de dominio y el tope de pasadas por fichero es $(MUTATE_FILE_MAX) (MUTATE_FILE_MAX): no se muta cada uno por separado. El 80 por ciento sobre el conjunto si se ha exigido. Para medirlos, repite con MUTATE_FILE_MAX=$$n."; \
+	elif [ "$$por_fichero" -eq 1 ]; then \
+		for f in $$clases; do \
+			echo "[mutate-file] >>> $$f (minimo $(MUTATE_FILE_MIN) por ciento)"; \
+			( $(RUN_APP_XDEBUG) sh -c "PHP_INI_SCAN_DIR=\":\$$(pwd)/tools/mutation\" $(PEST) $(MUTATE_OPTIONS) --path=$$f --testsuite=Unit --min=$(MUTATE_FILE_MIN)"; echo $$? >"$$st" ) 2>&1 | tee "$$log"; \
+			frc="$$(cat "$$st" 2>/dev/null)"; frc="$${frc:-1}"; \
+			if [ "$$frc" -eq 0 ]; then \
+				estado="llega al minimo"; \
+			elif ! grep -q 'No mutations created' "$$log"; then \
+				estado="ERROR: no llega al $(MUTATE_FILE_MIN) por ciento por si solo; el conjunto lo tapaba"; rc="$$frc"; \
+			elif sin_codigo "$$f"; then \
+				estado="sin codigo que mutar"; \
+			else \
+				estado="ERROR: sin pruebas unitarias que lo cubran (sin --covered-only si tiene mutantes)"; rc=1; \
+			fi; \
+			echo "[mutate-file] <<< $$f: $$estado"; \
+		done; \
 	fi; \
 	rm -f "$$log" "$$st"; \
 	exit "$$rc"

@@ -65,7 +65,7 @@ Obligatorias, las cuatro:
 
 1. **Camino feliz** — respuesta y código de estado correctos
 2. **Contrato** — Spectator valida la respuesta contra `openapi.yaml`
-3. **Autorización negativa** — una prueba **por cada rol que no debe acceder**, verificando 403 y su registro en auditoría
+3. **Autorización negativa** — una prueba **por cada rol que no debe acceder**, verificando 403 (o el 401 que fije el contrato); asiento `access.denied` solo cuando la denegación es por alcance (`ScopeGuard`), no en los 403 por rol o por ámbito de token (doc 02 §9.4, doc 07 A-16)
 4. **Validación** — entradas malformadas devuelven 422 con detalle útil
 
 Si es escritura del quiosco, añade además la de idempotencia con peticiones concurrentes.

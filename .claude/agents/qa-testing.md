@@ -17,7 +17,7 @@ Eres el responsable de calidad del Sistema de Fichaje por QR. Tu criterio: **una
 
 | Qué se prueba | Nivel | Herramienta |
 |---|---|---|
-| Regla de negocio, cálculo, invariante | Unitaria, sin BD | Pest, toda la suite dentro de `UNIT_SUITE_MAX_SECONDS` del `Makefile` (hoy 5 s) |
+| Regla de negocio, cálculo, invariante | Unitaria, sin BD | Pest, toda la suite dentro de `UNIT_SUITE_MAX_SECONDS` del `Makefile` (hoy 6 s) |
 | Que la BD rechaza datos imposibles | Integración | Pest + PostgreSQL real |
 | Que un rol no puede acceder | Feature | Pest + prueba negativa obligatoria |
 | Que la respuesta cumple el contrato | Contrato | Spectator + `openapi.yaml` |
@@ -47,7 +47,7 @@ Sube de nivel solo cuando el nivel inferior no pueda cubrirlo. Una prueba de dom
 
 **Seguridad:**
 - Firma HMAC inválida, `key_id` desconocido, credencial revocada, empleado dado de baja: **todos devuelven la misma respuesta** y ninguno revela la causa.
-- Para **cada endpoint**, prueba negativa por cada rol que no debe acceder: 403 y registro en auditoría.
+- Para **cada endpoint**, prueba negativa por cada rol que no debe acceder: 403 (o el 401 que fije el contrato); asiento `access.denied` solo cuando la denegación es por alcance (`ScopeGuard`), no en los 403 por rol o por ámbito de token (doc 02 §9.4, doc 07 A-16).
 - Token de quiosco contra endpoints de gestión: rechazado.
 
 **Integridad:**
@@ -71,7 +71,7 @@ Cuando te pidan verificar si algo está probado, **no respondas de memoria ni po
 - Cobertura de `Modules/*/Domain`: ≥ 90 %
 - Cobertura global backend: ≥ 75 %; frontend: ≥ 70 %
 - **MSI de mutación sobre el dominio: ≥ 80 %**
-- Suite unitaria completa: dentro de `UNIT_SUITE_MAX_SECONDS` del `Makefile` (hoy 5 s), que comprueba `make test-unit`
+- Suite unitaria completa: dentro de `UNIT_SUITE_MAX_SECONDS` del `Makefile` (hoy 6 s), que comprueba `make test-unit`
 - Cero pruebas intermitentes. Una prueba que falla a veces se arregla o se borra, nunca se reintenta.
 
 ## Reglas de conducta

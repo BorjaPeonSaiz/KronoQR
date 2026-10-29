@@ -114,7 +114,7 @@ it('abre un tramo en el primer fichaje de la jornada', function (): void {
 
     $respuesta = escanear($escenario, $scanId);
 
-    $respuesta->assertOk()->assertValidRequest()->assertValidResponse();
+    $respuesta->assertOk()->assertValidRequest()->assertValidResponse(200);
 
     expect($respuesta->json('action'))->toBe('clock_in')
         ->and($respuesta->json('scan_id'))->toBe($scanId)
@@ -156,7 +156,7 @@ it('cierra el turno y devuelve el acumulado recalculado del dia', function (): v
     FrozenTime::at('2026-03-14 10:02:00');
     $salida = escanear($escenario, Str::uuid7()->toString(), '2026-03-14T10:02:00Z');
 
-    $salida->assertOk()->assertValidResponse();
+    $salida->assertOk()->assertValidResponse(200);
 
     expect($salida->json('action'))->toBe('clock_out')
         ->and($salida->json('worked_minutes'))->toBe(360);
@@ -182,7 +182,7 @@ it('descarta el segundo escaneo dentro del periodo de gracia', function (): void
     FrozenTime::at('2026-03-14 07:02:51');
     $rebote = escanear($escenario, Str::uuid7()->toString(), '2026-03-14T07:02:51Z');
 
-    $rebote->assertOk()->assertValidResponse();
+    $rebote->assertOk()->assertValidResponse(200);
 
     expect($rebote->json('action'))->toBe('debounced')
         // Sin `work_date`: no se creo ningun tramo que atribuir a una jornada.
@@ -227,7 +227,7 @@ it('devuelve la respuesta original ante un reenvio con el mismo scan_id', functi
     FrozenTime::at('2026-03-14 09:30:00');
     $reenvio = escanear($escenario, $scanId);
 
-    $reenvio->assertOk()->assertValidResponse();
+    $reenvio->assertOk()->assertValidResponse(200);
 
     expect($reenvio->json())->toBe($primera->json())
         ->and($reenvio->json('action'))->toBe('clock_in')
@@ -258,7 +258,7 @@ it('rechaza un QR falsificado con una respuesta generica', function (): void {
 
     $respuesta = escanear($escenario, $scanId, overrides: ['qr_payload' => TARJETA_FALSA]);
 
-    $respuesta->assertStatus(422)->assertValidResponse();
+    $respuesta->assertStatus(422)->assertValidResponse(422);
 
     expect($respuesta->json('type'))->toBe('urn:kronoqr:problem:scan-rejected')
         ->and($respuesta->json('detail'))->toBe('El escaneo no se ha podido registrar.')
@@ -327,7 +327,7 @@ it('respeta el occurred_at de un escaneo sincronizado once horas despues', funct
 
     $respuesta = escanear($escenario, $scanId, '2026-03-14T08:00:00Z');
 
-    $respuesta->assertOk()->assertValidResponse();
+    $respuesta->assertOk()->assertValidResponse(200);
 
     expect($respuesta->json('occurred_at'))->toBe('2026-03-14T08:00:00.000Z')
         ->and($respuesta->json('recorded_at'))->toBe('2026-03-14T19:00:00.000Z');
@@ -388,7 +388,7 @@ it('cierra a las 06:00 el turno que entro a las 22:00 sin partirlo', function ()
     FrozenTime::at('2026-03-14 05:00:00');
     $salida = escanear($escenario, Str::uuid7()->toString(), '2026-03-14T05:00:00Z');
 
-    $salida->assertOk()->assertValidResponse();
+    $salida->assertOk()->assertValidResponse(200);
 
     expect($salida->json('action'))->toBe('clock_out')
         ->and($salida->json('work_date'))->toBe('2026-03-13')
@@ -451,7 +451,7 @@ it('responde 400 y no 422 cuando la peticion no cumple el contrato', function ()
             'qr_payload' => TARJETA,
         ]);
 
-    $respuesta->assertStatus(400)->assertValidResponse();
+    $respuesta->assertStatus(400)->assertValidResponse(400);
 
     expect($respuesta->json('type'))->toBe('urn:kronoqr:problem:invalid-request')
         ->and($respuesta->json('errors.occurred_at.0'))->toBe('El instante debe ir en UTC con sufijo Z.')
@@ -532,7 +532,7 @@ it('registra la intencion tal cual aunque contradiga el estado de la jornada', f
 
     $respuesta = escanear($escenario, $scanId, overrides: ['intent' => 'break_start']);
 
-    $respuesta->assertOk()->assertValidRequest()->assertValidResponse();
+    $respuesta->assertOk()->assertValidRequest()->assertValidResponse(200);
 
     $escaneo = DB::table('scan_events')->where('scan_id', $scanId)->first();
 
@@ -556,7 +556,7 @@ it('cierra el tramo como pausa y devuelve el acumulado del dia', function (): vo
     FrozenTime::at('2026-03-14 10:00:00');
     $pausa = escanear($escenario, Str::uuid7()->toString(), '2026-03-14T10:00:00Z', ['intent' => 'break_start']);
 
-    $pausa->assertOk()->assertValidRequest()->assertValidResponse();
+    $pausa->assertOk()->assertValidRequest()->assertValidResponse(200);
 
     expect($pausa->json('action'))->toBe('break_start')
         ->and($pausa->json('work_date'))->toBe('2026-03-14')
@@ -585,7 +585,7 @@ it('vuelve de la pausa sin pulsar nada y no parte el turno de madrugada', functi
     FrozenTime::at('2026-03-14 01:30:00');
     $vuelta = escanear($escenario, Str::uuid7()->toString(), '2026-03-14T01:30:00Z');
 
-    $vuelta->assertOk()->assertValidRequest()->assertValidResponse();
+    $vuelta->assertOk()->assertValidRequest()->assertValidResponse(200);
 
     expect($vuelta->json('action'))->toBe('break_end')
         ->and($vuelta->json('work_date'))->toBe('2026-03-13')
@@ -621,7 +621,7 @@ it('trata como entrada la vuelta de una pausa que nadie empezo', function (): vo
 
     $respuesta = escanear($escenario, $scanId, overrides: ['intent' => 'break_end']);
 
-    $respuesta->assertOk()->assertValidRequest()->assertValidResponse();
+    $respuesta->assertOk()->assertValidRequest()->assertValidResponse(200);
 
     expect($respuesta->json('action'))->toBe('clock_in')
         ->and(DB::table('scan_events')->where('scan_id', $scanId)->value('intent'))->toBe('break_end');
@@ -639,7 +639,7 @@ it('cierra la jornada cuando se declara vuelta de pausa con el tramo abierto', f
     FrozenTime::at('2026-03-14 14:00:00');
     $respuesta = escanear($escenario, Str::uuid7()->toString(), '2026-03-14T14:00:00Z', ['intent' => 'break_end']);
 
-    $respuesta->assertOk()->assertValidResponse();
+    $respuesta->assertOk()->assertValidResponse(200);
 
     expect($respuesta->json('action'))->toBe('clock_out')
         ->and($respuesta->json('worked_minutes'))->toBe(480)
@@ -659,7 +659,7 @@ it('devuelve la misma accion de pausa ante un reenvio del mismo scan_id', functi
     $primera = escanear($escenario, $scanId, '2026-03-14T10:00:00Z', ['intent' => 'break_start']);
     $segunda = escanear($escenario, $scanId, '2026-03-14T10:00:00Z', ['intent' => 'break_start']);
 
-    $segunda->assertOk()->assertValidResponse();
+    $segunda->assertOk()->assertValidResponse(200);
 
     expect($segunda->json('action'))->toBe('break_start')
         ->and($segunda->json())->toBe($primera->json())
@@ -702,7 +702,7 @@ it('suprime el doble escaneo accidental pero no la correccion de una pausa', fun
 
     $vuelta = escanear($escenario, Str::uuid7()->toString(), '2026-03-14T10:00:20Z', ['intent' => 'break_end']);
 
-    $vuelta->assertOk()->assertValidResponse();
+    $vuelta->assertOk()->assertValidResponse(200);
 
     expect($vuelta->json('action'))->toBe('break_end')
         ->and($vuelta->json('work_date'))->toBe('2026-03-14')
@@ -794,7 +794,7 @@ it('no convierte la entrada de manana en la vuelta de la pausa de hoy', function
     FrozenTime::at('2026-03-16 06:00:00');
     $entrada = escanear($escenario, Str::uuid7()->toString(), '2026-03-16T06:00:00Z');
 
-    $entrada->assertOk()->assertValidResponse();
+    $entrada->assertOk()->assertValidResponse(200);
 
     expect($entrada->json('action'))->toBe('clock_in')
         ->and($entrada->json('work_date'))->toBe('2026-03-16')
@@ -832,7 +832,7 @@ it('continua la pausa justo por debajo del descanso minimo y no en el umbral', f
     FrozenTime::at(str_replace(['T', 'Z'], [' ', ''], $vuelta));
     $respuesta = escanear($escenario, Str::uuid7()->toString(), $vuelta);
 
-    $respuesta->assertOk()->assertValidResponse();
+    $respuesta->assertOk()->assertValidResponse(200);
 
     expect($respuesta->json('action'))->toBe($accion)
         ->and($respuesta->json('work_date'))->toBe($jornada);
@@ -876,7 +876,7 @@ it('vuelve de la pausa a la misma jornada aunque RRHH haya corregido el tramo en
     FrozenTime::at('2026-03-14 01:30:00');
     $vuelta = escanear($escenario, Str::uuid7()->toString(), '2026-03-14T01:30:00Z');
 
-    $vuelta->assertOk()->assertValidResponse();
+    $vuelta->assertOk()->assertValidResponse(200);
 
     expect($vuelta->json('action'))->toBe('break_end')
         // La jornada del 13, no la del 14: el turno sigue entero.
@@ -909,7 +909,7 @@ it('no continua una pausa mas alla del dia siguiente a su jornada: abre jornada 
     FrozenTime::at('2026-03-14 23:30:00');
     $vuelta = escanear($escenario, Str::uuid7()->toString(), '2026-03-14T23:30:00Z');
 
-    $vuelta->assertOk()->assertValidResponse();
+    $vuelta->assertOk()->assertValidResponse(200);
 
     expect($vuelta->json('action'))->toBe('clock_in')
         ->and($vuelta->json('work_date'))->toBe('2026-03-15')
@@ -940,7 +940,7 @@ it('no vuelve de una pausa que una correccion dejo como salida: abre jornada nue
     FrozenTime::at('2026-03-14 10:30:00');
     $vuelta = escanear($escenario, Str::uuid7()->toString(), '2026-03-14T10:30:00Z');
 
-    $vuelta->assertOk()->assertValidResponse();
+    $vuelta->assertOk()->assertValidResponse(200);
 
     expect($vuelta->json('action'))->toBe('clock_in');
 })->group('RF-AT-12', 'RN-05', 'RN-13');
@@ -970,7 +970,7 @@ it('no vuelve de una pausa si otra jornada de la persona se interpuso: abre jorn
     FrozenTime::at('2026-03-15 00:00:00');
     $vuelta = escanear($escenario, Str::uuid7()->toString(), '2026-03-15T00:00:00Z');
 
-    $vuelta->assertOk()->assertValidResponse();
+    $vuelta->assertOk()->assertValidResponse(200);
 
     expect($vuelta->json('action'))->toBe('clock_in')
         ->and($vuelta->json('work_date'))->toBe('2026-03-15');

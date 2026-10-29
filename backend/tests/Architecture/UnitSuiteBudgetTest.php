@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Symfony\Component\Process\Process;
 use Tests\Architecture\Support\Repo;
 
 /*
@@ -91,4 +92,60 @@ it('reconoce la cifra que acompaña a la variable y no la de otra frase', functi
     $texto = 'El presupuesto es `UNIT_SUITE_MAX_SECONDS` del `Makefile`, 5 s. La CI tarda 2 s.';
 
     expect(unitSuiteBudgetFiguresIn($texto))->toBe(['5']);
+})->group('RQ-14');
+
+/**
+ * Ejecuta la puerta de `make test-unit` sobre una salida de Pest fabricada.
+ *
+ * @return array{0: int|null, 1: string}
+ */
+function unitSuiteBudgetGate(string $salidaDePest, string $maximo): array
+{
+    $log = (string) tempnam(sys_get_temp_dir(), 'unit-suite-');
+    file_put_contents($log, $salidaDePest);
+
+    $gate = new Process(['sh', Repo::file('.github/scripts/pest-duration-budget.sh'), $maximo, $log]);
+    $gate->run();
+    unlink($log);
+
+    return [$gate->getExitCode(), $gate->getOutput()];
+}
+
+it('aprueba la suite que acaba dentro del presupuesto o justo en el', function (string $salida): void {
+    [$codigo, $texto] = unitSuiteBudgetGate($salida, '5');
+
+    expect($codigo)->toBe(0)
+        ->and($texto)->toContain('dentro del presupuesto de 5 s');
+})->with([
+    'muy por debajo' => ["  Tests:    5223 passed (12111 assertions)\n  Duration: 3.85s\n"],
+    'justo en el limite' => ["  Duration: 5.00s\n"],
+    'cifra sin decimales' => ["  Duration: 4s\n"],
+    'con los colores de Pest' => ["  \e[90mDuration:\e[39m \e[39m4.20s\e[39m\n"],
+])->group('RQ-14');
+
+it('falla la suite que pasa del presupuesto', function (string $salida): void {
+    [$codigo, $texto] = unitSuiteBudgetGate($salida, '5');
+
+    expect($codigo)->toBe(1)
+        ->and($texto)->toContain('el presupuesto es 5 s');
+})->with([
+    'una centesima por encima' => ["  Duration: 5.01s\n"],
+    'con los colores de Pest' => ["  \e[90mDuration:\e[39m \e[39m16.28s\e[39m\n"],
+])->group('RQ-14');
+
+it('falla, y no aprueba, cuando no puede leer la duracion', function (string $salida): void {
+    // R2-QA-04: la version en linea del Makefile avisaba y salia con 0.
+    [$codigo, $texto] = unitSuiteBudgetGate($salida, '5');
+
+    expect($codigo)->toBe(1)
+        ->and($texto)->toContain('No se ha podido leer la duracion de la suite');
+})->with([
+    'sin linea Duration' => ["  Tests:    5223 passed (12111 assertions)\n"],
+    'salida vacia' => [''],
+    'formato de minutos' => ["  Duration: 1m 3s\n"],
+])->group('RQ-14');
+
+it('es la puerta que aplica make test-unit', function (): void {
+    expect(Repo::contents('Makefile'))
+        ->toContain('sh "$(CURDIR)/.github/scripts/pest-duration-budget.sh" "$(UNIT_SUITE_MAX_SECONDS)" .unit-suite.log');
 })->group('RQ-14');

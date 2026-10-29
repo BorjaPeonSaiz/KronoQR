@@ -19,7 +19,8 @@ use Illuminate\Database\Seeder;
  * --class=...` y `$this->call(...)`— y se repite al principio de
  * `DatabaseSeeder::run()`.
  *
- * Suite unitaria: sin framework ni base de datos. El entorno se le da a la
+ * Suite Architecture y no Unit porque recorre `database/seeders/` del disco (el
+ * presupuesto de `make test-unit`); sin framework ni base de datos. El entorno se le da a la
  * semilla por el contenedor, que es de donde lo lee en un `db:seed` real
  * (`$app['env']`). Que NO ESCRIBE NADA se demuestra por construccion: el
  * contenedor de estas pruebas sustituye cada semilla hija por una que solo
@@ -119,7 +120,7 @@ it('cada semilla suelta se niega tambien (db:seed --class=...)', function (strin
     $seeder->setContainer($contenedor('production', new ArrayObject));
 
     expect(fn () => $seeder->__invoke())->toThrow(RuntimeException::class, 'refuse to run in production');
-})->with(fn (): array => glob(dirname(__DIR__, 3).'/database/seeders/*.php') ?: [])->group('RS-08');
+})->with(fn (): array => glob(dirname(__DIR__, 2).'/database/seeders/*.php') ?: [])->group('RS-08');
 
 it('fuera de produccion siembra todo, en el orden de DatabaseSeeder', function (string $entorno) use ($contenedor): void {
     /** @var ArrayObject<int, string> $llamadas */

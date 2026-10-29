@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Spatie\Permission\Models\Permission;
 use Spectator\Spectator;
+use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
@@ -316,7 +317,7 @@ it('responde 403 a un token de quiosco y a uno de portal', function (): void {
     $cuenta = responsableCuenta();
     $empleado = WorkforceFixtures::employee($escenario['site'], $escenario['department']);
 
-    foreach ([ManagementUsers::kioskToken(), PortalLogins::open($empleado)] as $token) {
+    foreach ([AttendanceFixtures::kioskToken(), PortalLogins::open($empleado)] as $token) {
         Api::as($token)
             ->patch('/api/v1/departments/'.$escenario['department'], ['manager_user_uuid' => $cuenta->uuid])
             ->assertStatus(403);

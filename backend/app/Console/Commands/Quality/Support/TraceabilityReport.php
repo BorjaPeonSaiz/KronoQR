@@ -95,27 +95,13 @@ final readonly class TraceabilityReport
     }
 
     /**
-     * ¿Es una prueba condicionada al entorno de un fichero que la CI omite
-     * siempre? Solo las condicionadas: las demas pruebas del mismo fichero se
-     * ejecutan en la CI y cubren lo que dicen.
-     *
-     * Se compara por el FINAL de la ruta porque la prueba llega relativa al
-     * padre de `base_path()` —`html/tests/…` en el contenedor, `backend/tests/…`
-     * en la CI— y la configuracion no puede depender de donde se ejecute.
+     * ¿Es una prueba condicionada de un fichero que la CI omite siempre? La
+     * decision es de {@see TaggedTest::isAlwaysSkippedInCi()}, la misma que usa
+     * la puerta de nivel.
      */
     public function isSkippedInCi(TaggedTest $test): bool
     {
-        if (! $test->conditional || $test->tool !== 'pest') {
-            return false;
-        }
-
-        foreach ($this->skippedInCi as $path) {
-            if (str_ends_with('/'.$test->file, '/'.ltrim($path, '/'))) {
-                return true;
-            }
-        }
-
-        return false;
+        return $test->isAlwaysSkippedInCi($this->skippedInCi);
     }
 
     /*

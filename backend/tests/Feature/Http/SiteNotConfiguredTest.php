@@ -7,6 +7,7 @@ use Spectator\Spectator;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Time\FrozenTime;
 
 /*
@@ -75,3 +76,46 @@ it('no vincula un quiosco sin centro, con el 409 del contrato y no con el rechaz
         ->assertValidResponse(409)
         ->assertJsonPath('type', 'urn:kronoqr:problem:conflict');
 })->group('RF-PD-03', 'RF-PD-06');
+
+// Los informes, con la licencia concedida: sin ella responderian su `402`
+// antes de llegar a buscar el centro.
+
+it('responde con el 409 del contrato en el informe por periodo', function (): void {
+    LicenseKeys::grantAll();
+
+    Api::as(sinCentroToken())->get('/api/v1/reports/period?from=2026-03-01&to=2026-03-07&granularity=range&group_by=employee')
+        ->assertValidResponse(409)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:conflict');
+})->group('RF-PD-03', 'RF-IN-01');
+
+it('responde con el 409 del contrato en la descarga del informe por periodo', function (): void {
+    LicenseKeys::grantAll();
+
+    Api::as(sinCentroToken())->get('/api/v1/reports/period/export?from=2026-03-01&to=2026-03-07&granularity=range&group_by=employee&format=csv')
+        ->assertValidResponse(409)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:conflict');
+})->group('RF-PD-03', 'RF-IN-04');
+
+it('responde con el 409 del contrato en la salida a nomina', function (): void {
+    LicenseKeys::grantAll();
+
+    Api::as(sinCentroToken())->get('/api/v1/reports/payroll-export?from=2026-03-01&to=2026-03-07&format=csv')
+        ->assertValidResponse(409)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:conflict');
+})->group('RF-PD-03', 'RF-IN-07');
+
+it('responde con el 409 del contrato en el cuadro de impacto', function (): void {
+    LicenseKeys::grantAll();
+
+    Api::as(sinCentroToken())->get('/api/v1/reports/adoption?from=2026-02-01&to=2026-02-28')
+        ->assertValidResponse(409)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:conflict');
+})->group('RF-PD-03', 'RF-IN-08');
+
+it('responde con el 409 del contrato en la descarga del cuadro de impacto', function (): void {
+    LicenseKeys::grantAll();
+
+    Api::as(sinCentroToken())->get('/api/v1/reports/adoption/export?format=csv&from=2026-02-01&to=2026-02-28')
+        ->assertValidResponse(409)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:conflict');
+})->group('RF-PD-03', 'RF-IN-08');

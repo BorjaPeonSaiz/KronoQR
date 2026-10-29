@@ -168,7 +168,7 @@ it('no acorta ni recorta al umbral el tramo que declara anomalo', function (): v
     expect($totals->total->minutes)->toBe(780);
 })->group('RN-08', 'RN-06');
 
-it('marca a la vez el tramo corto y el largo cuando la politica los solapa en un mismo umbral', function (): void {
+it('no marca el tramo ni de corto ni de largo cuando dura justo el umbral comun de los dos', function (): void {
     // Con minimo y umbral anomalo en el mismo valor, la duracion exacta no es ni
     // corta ni larga: son dos comparaciones estrictas y ninguna se dispara.
     $workDay = WorkDayFactory::new()->withOpenShiftSince('2026-03-14 06:00')->build();

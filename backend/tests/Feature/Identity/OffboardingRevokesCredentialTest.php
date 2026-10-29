@@ -90,7 +90,7 @@ it('tras la baja el QR deja de valer con el mismo rechazo que un codigo inexiste
     $trasLaBaja = escanearTrasLaBaja($escenario['token'], $tarjeta);
     $inexistente = escanearTrasLaBaja($escenario['token'], Credentials::signedWithUnknownKey()->toString());
 
-    $trasLaBaja->assertStatus(422)->assertValidResponse();
+    $trasLaBaja->assertStatus(422)->assertValidResponse(422);
     $inexistente->assertStatus(422);
 
     // Regla dura 17: ni una pista de la causa. El detalle queda en el servidor.

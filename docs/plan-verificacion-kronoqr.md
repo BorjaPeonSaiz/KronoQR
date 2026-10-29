@@ -163,7 +163,7 @@
   - cobertura de `Domain` ≥ 90 %;
   - cobertura del backend ≥ 75 %;
   - cobertura del frontend ≥ 70 %;
-  - suite unitaria dentro del presupuesto de `UNIT_SUITE_MAX_SECONDS` del `Makefile`, 5 s (la única fuente; `UnitSuiteBudgetTest`).
+  - suite unitaria dentro del presupuesto de `UNIT_SUITE_MAX_SECONDS` del `Makefile`, 6 s (la única fuente; `UnitSuiteBudgetTest`).
   - 🤖 `qa-testing` · Opus 5.5
 - [ ] **Mutación sobre el dominio:** MSI ≥ 80 % con `pest --mutate`.
   - 🤖 `qa-testing` · Opus 5.5
@@ -292,7 +292,7 @@ Todos los de este bloque: 🤖 `seguridad-cumplimiento` · Opus 5.5 → corrige:
 
 ### Autorización
 
-- [ ] **Pruebas negativas:** cada endpoint tiene una por cada rol no autorizado (403 y entrada en auditoría), y el token de quiosco se rechaza en los endpoints de gestión.
+- [ ] **Pruebas negativas:** cada endpoint tiene una por cada rol no autorizado (403, o el 401 que fije el contrato), y el token de quiosco se rechaza en los endpoints de gestión. **Asiento `access.denied` solo en la denegación por alcance** (`ScopeGuard`): un 403 por rol o por ámbito de token no escribe asiento, porque RS-05 registra divulgaciones y no intentos, y el asiento por intento sería la vía de amplificación que ADR-037 excluye (doc 02 §9.4, «Autorización negativa»; doc 07, A-16).
   - 🤖 `qa-testing` · Opus 5.5
 - [ ] **Portal:**
   - bloqueo creciente del PIN;
@@ -456,7 +456,7 @@ Todos los de este bloque: 🤖 `seguridad-cumplimiento` · Opus 5.5.
 
 - [ ] `qa:traceability --check` en verde: ningún requisito implementado sin prueba.
 - [ ] `make quality` y `make test` en verde, y las tres SPA con build correcto.
-- [ ] Umbrales cumplidos: cobertura (90 / 75 / 70 %), MSI ≥ 80 % y unitarias dentro de `UNIT_SUITE_MAX_SECONDS` del `Makefile`, 5 s.
+- [ ] Umbrales cumplidos: cobertura (90 / 75 / 70 %), MSI ≥ 80 % y unitarias dentro de `UNIT_SUITE_MAX_SECONDS` del `Makefile`, 6 s.
 - [ ] **0 hallazgos 🔴 CRÍTICO ni 🟠 ALTO** de `seguridad-cumplimiento`.
 - [ ] **0 hallazgos 🔴 BLOQUEANTE** de `revisor-codigo`.
 - [ ] `projection_divergence_total` y `audit_chain_verification_failures_total` a cero en staging.

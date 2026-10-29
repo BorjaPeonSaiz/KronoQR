@@ -78,7 +78,7 @@ it('no ejecuta ninguna consulta a la base de datos', function (): void {
     Api::guest()->get('/api/v1/health')->assertOk();
 
     expect($queries)->toBe(0);
-});
+})->group('RF-PD-13', 'RNF-D-03');
 
 it('sigue respondiendo 200 con PostgreSQL y Redis caidos', function (): void {
     // La prueba que da sentido a todas las demas de este fichero, y la unica que
@@ -127,4 +127,4 @@ it('deja las dos sondas sin autenticacion y sin limitador de peticiones', functi
             ->and($entry)->not->toContain('CheckForAnyAbility')
             ->and($entry)->not->toContain('CheckAbilities');
     }
-})->with(['health.live', 'health.ready']);
+})->with(['health.live', 'health.ready'])->group('RF-PD-13', 'RNF-D-03');

@@ -53,20 +53,35 @@ final class AttendanceFixtures
     /**
      * Token de dispositivo con el ambito **exacto** del quiosco (§7.3).
      *
-     * `scan:write`, `roster:read` y `heartbeat:write`, ni uno mas. Que sea la
-     * lista real y no `['*']` es lo que hace que la prueba de autorizacion
-     * negativa signifique algo: un token con comodin pasaria cualquier
-     * comprobacion de ambito y ocultaria justo el fallo que se busca.
+     * Los de {@see TokenAbility::kioskAbilities()}, la misma lista que usa el
+     * emisor de verdad, ni uno mas. Que sea la lista real y no `['*']` es lo
+     * que hace que la prueba de autorizacion negativa signifique algo: un token
+     * con comodin pasaria cualquier comprobacion de ambito y ocultaria justo el
+     * fallo que se busca. Y que no sea una copia escrita aqui: si el emisor
+     * ganara un ambito, una copia seguiria probando el token de antes.
      */
     public static function tokenFor(int $deviceId): string
     {
         $device = DeviceModel::query()->findOrFail($deviceId);
 
-        return $device->createToken('Quiosco de pruebas', [
-            TokenAbility::SCAN_WRITE->value,
-            TokenAbility::ROSTER_READ->value,
-            TokenAbility::HEARTBEAT_WRITE->value,
-        ])->plainTextToken;
+        return $device->createToken('Quiosco de pruebas', array_map(
+            static fn (TokenAbility $ability): string => $ability->value,
+            TokenAbility::kioskAbilities(),
+        ))->plainTextToken;
+    }
+
+    /**
+     * El token de un quiosco de verdad: un dispositivo emparejado en el centro
+     * de la instalacion, con el ambito exacto de {@see self::tokenFor()}.
+     *
+     * Es el portador de toda prueba que diga «el quiosco no entra aqui» (RS-04,
+     * A3 de la verificacion de la 2.1.0). Una cuenta de `users` con rol `kiosk`
+     * no es un quiosco: el producto no la emite, y una policy que mire el
+     * `tokenable` la trata distinto. Crea el centro si aun no hay ninguno.
+     */
+    public static function kioskToken(): string
+    {
+        return self::tokenFor(self::device(WorkforceFixtures::site())['id']);
     }
 
     /**

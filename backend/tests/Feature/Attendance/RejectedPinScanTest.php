@@ -26,6 +26,7 @@ use Tests\Support\Compliance\RecordingIncidentResolutionMetrics;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Identity\PortalLogins;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\EmployeePins;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -135,8 +136,8 @@ it('responde igual a un PIN erroneo que a un codigo inexistente y solo la fila a
     $first = rejectedPinPost($scenario, $withOwner, REJECTED_PIN_BAD, '2026-03-14T09:04:00Z');
     $second = rejectedPinPost($scenario, $withoutOwner, REJECTED_PIN_BAD, '2026-03-14T09:04:00Z', code: 'ENOEXISTE');
 
-    $first->assertStatus(422)->assertValidRequest()->assertValidResponse();
-    $second->assertStatus(422)->assertValidRequest()->assertValidResponse();
+    $first->assertStatus(422)->assertValidRequest()->assertValidResponse(422);
+    $second->assertStatus(422)->assertValidRequest()->assertValidResponse(422);
 
     $bodyOf = static fn (TestResponse $response): array => array_diff_key((array) $response->json(), ['scan_id' => true]);
 
@@ -195,7 +196,7 @@ it('devuelve lo mismo al reenviar el scan_id y no suma fallos ni filas', functio
     ];
 
     foreach ($replays as $replay) {
-        $replay->assertStatus(422)->assertValidResponse();
+        $replay->assertStatus(422)->assertValidResponse(422);
         expect($replay->json())->toBe($original->json());
     }
 
@@ -449,7 +450,7 @@ it('no anota ni abre nada con el codigo de alguien de baja', function (): void {
 
     rejectedPinPost($scenario, Str::uuid7()->toString(), REJECTED_PIN_BAD, '2026-03-14T09:04:00Z')
         ->assertStatus(422)
-        ->assertValidResponse();
+        ->assertValidResponse(422);
 
     expect(DB::table('scan_events')->whereNotNull('claimed_employee_id')->count())->toBe(0);
 
@@ -513,7 +514,7 @@ it('no deja ver ni resolver la incidencia a quien hoy recibe 403', function (str
     $token = match ($actor) {
         'quiosco' => $scenario['token'],
         'auditor' => ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::AUDITOR)),
-        'empleado' => ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::EMPLEADO)),
+        'empleado' => PortalLogins::open($scenario['employee']),
         default => throw new LogicException($actor),
     };
 

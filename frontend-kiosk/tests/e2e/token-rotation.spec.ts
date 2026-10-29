@@ -13,12 +13,19 @@ import { stubKioskApi } from './support/kiosk'
 import { announceOnline, queueStoreReady, readQueue, seedQueue } from './support/offlineQueue'
 
 const DAY_MS = 86_400_000
-const MINUTE_MS = 60_000
 const TOKEN_DAYS = 90
 const ROTATION_THRESHOLD = 0.8
 const OVERLAP_MS = DAY_MS
 /** El que escribe `pairDevice` de `support/kiosk.ts`. */
 const PAIRED_TOKEN = 'device-token-e2e'
+/**
+ * Cada latido responde con una tolerancia de desfase distinta (900 + su numero
+ * de orden) y el quiosco la guarda al final de procesar la respuesta: es la
+ * senal de que ese latido ha terminado. La clave es la de
+ * `src/shared/device/deviceSettings.ts`.
+ */
+const SKEW_TOLERANCE_BASE_SECONDS = 900
+const SKEW_TOLERANCE_KEY = 'kronoqr.kiosk.clock_skew_tolerance_seconds'
 
 interface IssuedToken {
   readonly value: string
@@ -135,7 +142,7 @@ test(
           client_errors_accepted: 0,
           service_code_hash: null,
           break_clocking_enabled: false,
-          clock_skew_tolerance_seconds: 900,
+          clock_skew_tolerance_seconds: SKEW_TOLERANCE_BASE_SECONDS + heartbeats,
           ...(rotated === undefined ? {} : { rotated_token: rotated }),
         }),
       })
@@ -175,23 +182,26 @@ test(
 
     await page.goto('/')
     await expect(page.getByTestId('scan-confirmation')).toBeVisible()
-    await expect.poll(() => heartbeats).toBeGreaterThan(0)
-
-    // Los latidos van en serie: si el salto cae mientras el anterior aun esta
-    // procesando su respuesta, ese tic se absorbe (como en la tablet, donde el
-    // siguiente llega un minuto despues). Se reproduce dando ese minuto.
-    async function nextHeartbeat(before: number): Promise<void> {
-      for (let attempt = 0; attempt < 8; attempt += 1) {
-        try {
-          await expect.poll(() => heartbeats, { timeout: 2_500 }).toBeGreaterThan(before)
-          return
-        } catch {
-          server.setNow(server.now() + MINUTE_MS)
-          await page.clock.fastForward(MINUTE_MS)
-        }
-      }
-      throw new Error('el quiosco dejo de latir')
+    // Los latidos van en serie (`heartbeat.ts`): si el reloj salta mientras el
+    // anterior aun procesa su respuesta, ese tic se absorbe y no sale ninguna
+    // peticion. Por eso no se salta hasta que el quiosco ha terminado con el
+    // ultimo latido que el servidor contesto: ha guardado la tolerancia que
+    // traia. Se compara con el recuento en cada sondeo, por si un tic del reloj
+    // instalado colara un latido mas entre medias.
+    async function heartbeatSettled(): Promise<void> {
+      await expect
+        .poll(async () => {
+          const stored = await page.evaluate(
+            (key) => window.localStorage.getItem(key),
+            SKEW_TOLERANCE_KEY,
+          )
+          return stored === String(SKEW_TOLERANCE_BASE_SECONDS + heartbeats)
+        })
+        .toBe(true)
     }
+
+    await expect.poll(() => heartbeats).toBeGreaterThan(0)
+    await heartbeatSettled()
 
     // El `200` del latido llega al servidor simulado ANTES de que el cliente
     // termine de guardar el relevo (re-cifra el padron y escribe el token). Si el
@@ -214,7 +224,8 @@ test(
       const before = heartbeats
       server.setNow(start + day * DAY_MS)
       await page.clock.fastForward(STEP_DAYS * DAY_MS)
-      await nextHeartbeat(before)
+      await expect.poll(() => heartbeats).toBeGreaterThan(before)
+      await heartbeatSettled()
       await adopted()
     }
 

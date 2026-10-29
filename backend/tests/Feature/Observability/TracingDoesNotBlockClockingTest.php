@@ -13,6 +13,7 @@ use Tests\Support\Attendance\FakeCredentialResolver;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Time\FrozenTime;
+use Tests\Support\Time\WallClockBudget;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -132,7 +133,7 @@ function conColectorInalcanzable(callable $body): void
     }
 }
 
-it('responde exactamente igual y en tiempo razonable con el colector de trazas caido', function (): void {
+it('responde exactamente igual con el colector de trazas caido', function (): void {
     // La referencia: el mismo fichaje sin SDK, que es la instalacion de la
     // mayoria. Se comparan las dos respuestas entre si y no contra un literal,
     // que es lo que hace que la afirmacion siga valiendo si la respuesta cambia.
@@ -143,32 +144,38 @@ it('responde exactamente igual y en tiempo razonable con el colector de trazas c
     $sinTrazas = ficharMidiendo(escenarioDeFichajeConTrazas()['token'], '2026-03-14T07:02:31Z');
 
     conColectorInalcanzable(function (TracerProvider $provider) use ($sinTrazas): void {
-        $escenario = escenarioDeFichajeConTrazas();
-
-        $startedAt = microtime(true);
-
-        $conColectorCaido = ficharMidiendo($escenario['token'], '2026-03-14T07:02:31Z');
-
-        // El envio de verdad: sin esto los spans se quedarian en la cola y el
-        // exportador no habria tocado la red. Cuenta dentro del tiempo medido.
+        $conColectorCaido = ficharMidiendo(escenarioDeFichajeConTrazas()['token'], '2026-03-14T07:02:31Z');
         $provider->shutdown();
-
-        $totalConColectorCaido = microtime(true) - $startedAt;
 
         expect($conColectorCaido['status'])->toBe($sinTrazas['status'])
             ->and($conColectorCaido['body'])->toBe($sinTrazas['body']);
-
-        // Un segundo de techo con el colector caido, vaciado incluido. El
-        // exportador no reintenta (`maxRetries = 0`): un destino que rechaza la
-        // conexion cuesta un intento fallido y nada mas.
-        expect($totalConColectorCaido)->toBeLessThan(
-            1.0,
-            'Un colector de trazas caido ha anadido '.round($totalConColectorCaido, 3).' s al fichaje. '
-            .'La regla dura 15 y la 19 no lo admiten: la instrumentacion no puede abrir un camino en el que '
-            .'el fichaje falle o se retrase porque el exportador no responda.'
-        );
     });
 })->group('RF-AT-10', 'RN-15');
+
+it('responde en tiempo razonable con el colector de trazas caido, vaciado incluido, en mediana', function (): void {
+    // Un segundo de techo con el colector caido, vaciado incluido: sin el
+    // `shutdown()` los spans se quedarian en la cola y el exportador no habria
+    // tocado la red. El exportador no reintenta (`maxRetries = 0`): un destino
+    // que rechaza la conexion cuesta un intento fallido y nada mas. La regla
+    // dura 15 y la 19 no admiten que la instrumentacion retrase el fichaje. En
+    // la suite nocturna de rendimiento (D4), con un proveedor nuevo por pasada.
+    $muestras = WallClockBudget::samples(static function (): float {
+        $segundos = 0.0;
+
+        conColectorInalcanzable(static function (TracerProvider $provider) use (&$segundos): void {
+            $token = escenarioDeFichajeConTrazas()['token'];
+
+            $segundos = WallClockBudget::seconds(static function () use ($provider, $token): void {
+                ficharMidiendo($token, '2026-03-14T07:02:31Z');
+                $provider->shutdown();
+            });
+        });
+
+        return $segundos;
+    });
+
+    WallClockBudget::expectMedianBelow($muestras, 1.0, 'RN-15');
+})->group('RF-AT-10', 'RN-15', 'performance');
 
 it('el fichaje sigue funcionando cuando el endpoint declarado no es una URL', function (): void {
     // El otro fallo real de configuracion: `OTEL_EXPORTER_OTLP_ENDPOINT=tempo:4318`

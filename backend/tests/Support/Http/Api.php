@@ -159,11 +159,27 @@ final readonly class Api
     }
 
     /**
-     * @param  array<string, mixed>  $body
-     * @param  array<string, UploadedFile>  $files
+     * Un cuerpo crudo con el tipo de contenido que se diga, tal cual.
+     *
+     * **Existe por la puerta de tipos de contenido** (`RejectUnreadableBody`,
+     * D6): un JSON mal formado tiene que dar `400` y un cuerpo de otro tipo
+     * `415`, y ninguna de las dos cosas se puede enviar con {@see self::call()},
+     * que serializa siempre un JSON valido con `application/json`.
+     *
      * @return TestResponse<Response>
      */
-    private function send(string $method, string $uri, array $body, array $files, bool $multipart): TestResponse
+    public function raw(string $method, string $uri, string $contentType, string $content): TestResponse
+    {
+        return $this->send($method, $uri, [], [], multipart: false, raw: [$contentType, $content]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $body
+     * @param  array<string, UploadedFile>  $files
+     * @param  array{0: string, 1: string}|null  $raw  tipo de contenido y cuerpo, si va crudo
+     * @return TestResponse<Response>
+     */
+    private function send(string $method, string $uri, array $body, array $files, bool $multipart, ?array $raw = null): TestResponse
     {
         $server = [
             'HTTP_ACCEPT' => 'application/json',
@@ -191,6 +207,10 @@ final readonly class Api
             $server['REMOTE_ADDR'] = $this->ip;
         }
 
+        if ($raw !== null) {
+            $server['CONTENT_TYPE'] = $raw[0];
+        }
+
         if ($multipart) {
             // El tipo de contenido lo compone Symfony a partir de `$files`, asi
             // que aqui se retira el `application/json` por defecto: dejarlo haria
@@ -207,7 +227,7 @@ final readonly class Api
             parameters: $multipart ? $body : [],
             files: $files,
             server: $server,
-            content: $multipart || $body === [] ? null : json_encode($body, JSON_THROW_ON_ERROR),
+            content: $raw[1] ?? ($multipart || $body === [] ? null : json_encode($body, JSON_THROW_ON_ERROR)),
         );
 
         // Cada llamada de este cliente simula una peticion HTTP NUEVA, y en una

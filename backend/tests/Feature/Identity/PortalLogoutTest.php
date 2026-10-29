@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Laravel\Sanctum\PersonalAccessToken;
 use Spectator\Spectator;
+use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
@@ -129,12 +130,12 @@ it('deniega el cierre de sesion del portal a cada rol de gestion', function (str
     'rrhh' => UserRole::RRHH->value,
     'auditor' => UserRole::AUDITOR->value,
     'responsable de departamento' => UserRole::RESPONSABLE_DEPARTAMENTO->value,
-    'empleado' => UserRole::EMPLEADO->value,
+    'cuenta con rol empleado' => UserRole::EMPLEADO->value,
 ])->group('RF-ID-07', 'RQ-07');
 
 it('deniega el cierre de sesion del portal a un quiosco', function (): void {
     // RS-04: el token de una tablet no tiene nada que hacer en `/me/*`.
-    $token = ManagementUsers::kioskToken();
+    $token = AttendanceFixtures::kioskToken();
 
     Api::as($token)->post('/api/v1/me/logout')->assertStatus(403);
 

@@ -22,7 +22,7 @@ use Laravel\Sanctum\PersonalAccessToken;
  *
  * ## Por que una ruta propia y no `POST /auth/logout`
  *
- * Aquella acepta cualquier token y decide el canal por descarte. Esta es
+ * Aquella es de la gestion y del soporte: un token de portal recibe `403`. Esta es
  * **exclusiva del portal**: ambito `self:read` en la ruta y
  * {@see PortalSessionPolicy} en la peticion,
  * con su prueba negativa por cada rol (regla dura 18). El canal no se deduce:

@@ -95,7 +95,7 @@ it('sirve cada quiosco con su telemetria y su veredicto', function (): void {
 
     $respuesta = Api::as(tokenDeFlota())->get('/api/v1/devices')
         ->assertOk()
-        ->assertValidResponse();
+        ->assertValidResponse(200);
 
     $respuesta->assertJsonPath('devices.0.uuid', $uuid)
         ->assertJsonPath('devices.0.name', 'Recepcion')
@@ -127,7 +127,7 @@ it('devuelve el reloj del servidor, la zona del centro y los umbrales reales', f
 
     Api::as(tokenDeFlota())->get('/api/v1/devices')
         ->assertOk()
-        ->assertValidResponse()
+        ->assertValidResponse(200)
         ->assertJsonPath('meta.generated_at', '2026-09-16T12:00:00.000Z')
         // La del centro, no `APP_TIMEZONE`: es la zona en la que el panel
         // escribe los instantes que viajan en UTC (regla dura 3).
@@ -151,7 +151,7 @@ it('juzga cada quiosco con la misma regla que la consola y la alerta', function 
 
     Api::as(tokenDeFlota())->get('/api/v1/devices')
         ->assertOk()
-        ->assertValidResponse()
+        ->assertValidResponse(200)
         ->assertJsonPath('devices.0.health.verdict', $verdict)
         ->assertJsonPath('devices.0.health.reason', $reason);
 })->with([
@@ -185,7 +185,7 @@ it('da por revocado un quiosco desvinculado, sin contarlo como averia', function
 
     Api::as(tokenDeFlota())->get('/api/v1/devices')
         ->assertOk()
-        ->assertValidResponse()
+        ->assertValidResponse(200)
         ->assertJsonPath('devices.0.status', 'revoked')
         ->assertJsonPath('devices.0.health.verdict', 'revoked')
         ->assertJsonPath('devices.0.health.reason', 'revoked');
@@ -201,7 +201,7 @@ it('no devuelve una antiguedad negativa con un latido del futuro', function (): 
 
     Api::as(tokenDeFlota())->get('/api/v1/devices')
         ->assertOk()
-        ->assertValidResponse()
+        ->assertValidResponse(200)
         ->assertJsonPath('devices.0.health.seconds_since_last_seen', 0)
         ->assertJsonPath('devices.0.health.verdict', 'ok');
 })->group('RF-PA-07');
@@ -218,7 +218,7 @@ it('pone los activos delante y ordena por nombre', function (): void {
     quioscoEnEstado('Almacen', ['last_seen_at' => '2026-09-16 11:59:30+00']);
     quioscoEnEstado('Cocina vieja', ['last_seen_at' => '2026-08-01 10:00:00+00'], status: 'revoked');
 
-    $respuesta = Api::as(tokenDeFlota())->get('/api/v1/devices')->assertOk()->assertValidResponse();
+    $respuesta = Api::as(tokenDeFlota())->get('/api/v1/devices')->assertOk()->assertValidResponse(200);
 
     /** @var list<array{name: string}> $devices */
     $devices = $respuesta->json('devices');
@@ -234,7 +234,7 @@ it('devuelve la lista vacia y su meta en una instalacion sin quioscos', function
 
     Api::as(tokenDeFlota())->get('/api/v1/devices')
         ->assertOk()
-        ->assertValidResponse()
+        ->assertValidResponse(200)
         ->assertJsonPath('devices', [])
         ->assertJsonPath('meta.timezone', 'Atlantic/Canary');
 })->group('RF-PA-07');
@@ -250,7 +250,7 @@ it('devuelve el quiosco ya revocado, con su veredicto, al desvincularlo', functi
 
     Api::as(tokenDeFlota())->post('/api/v1/devices/'.$uuid.'/unpair')
         ->assertOk()
-        ->assertValidResponse()
+        ->assertValidResponse(200)
         ->assertJsonPath('uuid', $uuid)
         ->assertJsonPath('status', 'revoked')
         ->assertJsonPath('health.verdict', 'revoked')
@@ -273,7 +273,7 @@ it('avisa del quiosco cuya aplicacion es anterior a la del servidor, y no con un
 
     Api::as(tokenDeFlota())->get('/api/v1/devices')
         ->assertOk()
-        ->assertValidResponse()
+        ->assertValidResponse(200)
         ->assertJsonPath('devices.0.app_version', '2.2.0')
         ->assertJsonPath('devices.0.health.verdict', $verdict)
         ->assertJsonPath('devices.0.health.reason', $reason);

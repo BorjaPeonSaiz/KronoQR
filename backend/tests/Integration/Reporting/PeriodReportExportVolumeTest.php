@@ -156,23 +156,48 @@ function informeDeVolumen(): PeriodReport
 /**
  * Cuanta memoria adicional consume escribir el fichero, y cuanto ocupa.
  *
+ * TRES COSAS PARA QUE LA CIFRA SEA LA DEL ESCRITOR Y NADA MAS (tarea 22.1 de
+ * la 2.3.0: `:207` fallaba en el job de cobertura).
+ *
+ * - Una escritura previa que no se mide. La primera carga las clases del
+ *   escritor y llena sus caches; con Xdebug en modo cobertura, ademas, cada
+ *   linea nueva cuesta memoria. Nada de eso crece con las filas.
+ * - `memory_reset_peak_usage()` antes de medir. El pico es el del PROCESO: en
+ *   una pasada larga —la de cobertura corre la suite entera en un proceso— el
+ *   de antes podia ser de otra prueba, y entonces la diferencia no decia nada.
+ * - La salida se cuenta y se tira por trozos de 8 KiB en vez de acumularse en
+ *   el buffer: un `ob_start()` sin limite crece doblando su capacidad, y esa
+ *   holgura —hasta el tamaño del fichero— se medía como si fuera del escritor.
+ *
+ * El pico es el de `memory_get_peak_usage()` sin `true`: lo que pide PHP, no
+ * los bloques de 2 MiB que reserva al sistema, que hacian la medida a saltos.
+ *
  * @param  callable(): void  $write
  * @return array{bytes: int, peakGrowth: int}
  */
 function medirEscritura(callable $write): array
 {
-    // El buffer de salida crece con el fichero y forma parte de lo que se mide:
-    // se descuenta al final para que la cifra sea la del ESCRITOR y no la del
-    // apaño de la prueba.
-    $antes = memory_get_peak_usage(true);
+    $bytes = 0;
+    $contar = static function (string $trozo) use (&$bytes): string {
+        $bytes += \strlen($trozo);
 
-    ob_start();
+        return '';
+    };
+
+    ob_start($contar, 8192);
     $write();
-    $contenido = (string) ob_get_clean();
+    ob_end_clean();
 
-    $despues = memory_get_peak_usage(true);
+    $bytes = 0;
+    gc_collect_cycles();
+    memory_reset_peak_usage();
+    $antes = memory_get_usage();
 
-    return ['bytes' => \strlen($contenido), 'peakGrowth' => max(0, $despues - $antes - \strlen($contenido))];
+    ob_start($contar, 8192);
+    $write();
+    ob_end_clean();
+
+    return ['bytes' => $bytes, 'peakGrowth' => max(0, memory_get_peak_usage() - $antes)];
 }
 
 it('exporta a CSV un mes de 500 empleados en streaming, sin agotar la memoria', function (): void {
@@ -199,11 +224,14 @@ it('exporta a CSV un mes de 500 empleados en streaming, sin agotar la memoria', 
     // afirmacion siga siendo cierta si la semilla de la suite añade a alguien.
     expect($informe->rowCount())->toBe(DB::table('employees')->count() * 31)
         ->and($informe->rowCount())->toBeGreaterThanOrEqual(EMPLEADOS_EXPORTADOS * 31)
-        // El fichero es de varios MiB y el pico del escritor no crece con el:
-        // ocho megas de holgura sobre un fichero que ocupa mas que eso solo se
-        // cumple si las filas salen segun se escriben.
-        ->and($medida['bytes'])->toBeGreaterThan(1_000_000)
-        ->and($medida['peakGrowth'])->toBeLessThan(8 * 1_048_576);
+        // El fichero pasa de 2 MB y el pico del escritor se queda por debajo de
+        // 1 MiB: un escritor que juntara el fichero antes de emitirlo creceria
+        // al menos lo que ocupa. Medido el 28-10-2026: 2,31 MiB de fichero y
+        // +0,03 MiB de pico, igual con Xdebug en modo cobertura que sin el.
+        // (Hasta la 2.3.0 el techo era 8 MiB, por encima del fichero entero: no
+        // habria visto un escritor que acumula.)
+        ->and($medida['bytes'])->toBeGreaterThan(2_000_000)
+        ->and($medida['peakGrowth'])->toBeLessThan(1_048_576);
 })->group('RF-IN-04', 'RNF-P-05');
 
 it('exporta a XLSX el mismo mes sin acumular el libro en memoria', function (): void {

@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\Support\Database\CommittedDatabase;
 use Tests\Support\Database\QueryPlans;
+use Tests\Support\Time\WallClockBudget;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -34,6 +35,10 @@ use Tests\Support\Workforce\WorkforceFixtures;
  * Medido el 22-10-2026 en el entorno de desarrollo: 73.000 filas en 2,8 s
  * (unas 26.000 filas/s), es decir, unos 56 s proyectados para el peor caso
  * frente a los 1.800 del techo. No hace falta un techo propio para `legal`.
+ *
+ * La proyeccion se juzga en la suite nocturna de rendimiento, con la mediana
+ * de varias pasadas (D4 de la 2.3.0, {@see WallClockBudget}); la suite de
+ * integracion comprueba la escritura, sin reloj.
  *
  * Con `KRONOQR_PRINT_THROUGHPUT=1` imprime la medicion.
  */
@@ -84,71 +89,101 @@ function muestraParaElRitmoDeLaExportacionLegal(): void
     QueryPlans::analyze('shift_entries', 'employees');
 }
 
-it('proyecta el peor requerimiento por debajo de la mitad del techo del trabajo de cola', function (): void {
-    /*
-     * LA BASE SE DEVUELVE COMO ESTABA, ESTADISTICAS INCLUIDAS.
-     *
-     * `CommittedDatabase` vacia las tablas con `DELETE`, que deja los 73.000
-     * tramos como filas muertas: unos 12 MB de `shift_entries` hinchada hasta
-     * que pase el autovacuum. La prueba siguiente en el orden de la CI,
-     * `LegalExportIndexUsageTest`, siembra 40.000 tramos encima y juzga el plan
-     * de la consulta, y con la tabla hinchada el planificador puede elegir otro
-     * camino (CI 39848984113). Este callback se registra despues del de
-     * `CommittedDatabase`, asi que corre cuando la tabla ya esta vacia: la
-     * compacta y deja sus estadisticas al dia, con el rol propietario.
-     */
-    // @phpstan-ignore method.notFound (en el cierre de `it()` Pest enlaza `$this` al TestCase de la prueba, que si tiene beforeApplicationDestroyed; la extension de PHPStan lo tipa como TestCall)
-    $this->beforeApplicationDestroyed(static function (): void {
+/**
+ * LA BASE SE DEVUELVE COMO ESTABA, ESTADISTICAS INCLUIDAS.
+ *
+ * `CommittedDatabase` vacia las tablas con `DELETE`, que deja los 73.000 tramos
+ * como filas muertas: unos 12 MB de `shift_entries` hinchada hasta que pase el
+ * autovacuum. La prueba siguiente en el orden de la CI,
+ * `LegalExportIndexUsageTest`, siembra 40.000 tramos encima y juzga el plan de
+ * la consulta, y con la tabla hinchada el planificador puede elegir otro camino
+ * (CI 39848984113). Este callback se registra despues del de
+ * `CommittedDatabase`, asi que corre cuando la tabla ya esta vacia: la compacta
+ * y deja sus estadisticas al dia, con el rol propietario.
+ */
+function compactarTrasElRitmoDeLaExportacionLegal(): Closure
+{
+    return static function (): void {
         $owner = DB::connection(config()->string('database.migrations.connection'));
 
         foreach (['shift_entries', 'employees'] as $table) {
             $owner->statement('VACUUM (FULL, ANALYZE) '.$table);
         }
-    });
+    };
+}
 
-    muestraParaElRitmoDeLaExportacionLegal();
+/**
+ * Escribe el año de la muestra entera, como el trabajo de cola, y devuelve las
+ * filas, los avisos de avance y los segundos que tardo.
+ *
+ * @return array{rows: int, notices: int, seconds: float}
+ */
+function escribirLaExportacionLegalDeLaMuestra(): array
+{
     $path = sys_get_temp_dir().'/kronoqr-legal-throughput-'.Str::random(8).'.csv';
     $avisos = 0;
+    $tally = null;
 
     try {
-        $start = hrtime(true);
-
-        $tally = app(WriteLegalExportFile::class)->handle(
-            LegalExportPeriod::between('2025-01-01', '2025-12-31'),
-            LegalExportScope::everyone(),
-            $path,
-            static function () use (&$avisos): void {
-                $avisos++;
-            },
-        );
-
-        $seconds = (hrtime(true) - $start) / 1e9;
+        $seconds = WallClockBudget::seconds(static function () use ($path, &$avisos, &$tally): void {
+            $tally = app(WriteLegalExportFile::class)->handle(
+                LegalExportPeriod::between('2025-01-01', '2025-12-31'),
+                LegalExportScope::everyone(),
+                $path,
+                static function () use (&$avisos): void {
+                    $avisos++;
+                },
+            );
+        });
     } finally {
         @unlink($path);
     }
 
-    $rows = $tally->rows();
-    $rowsPerSecond = $rows / max($seconds, 0.001);
-    $projected = LEGAL_EXPORT_THROUGHPUT_PEOR_CASO / $rowsPerSecond;
+    \assert($tally !== null);
+
+    return ['rows' => $tally->rows(), 'notices' => $avisos, 'seconds' => $seconds];
+}
+
+it('exporta la muestra entera con su avance y no da por muerto un trabajo vivo', function (): void {
+    // @phpstan-ignore method.notFound (en el cierre de `it()` Pest enlaza `$this` al TestCase de la prueba, que si tiene beforeApplicationDestroyed; la extension de PHPStan lo tipa como TestCall)
+    $this->beforeApplicationDestroyed(compactarTrasElRitmoDeLaExportacionLegal());
+
+    muestraParaElRitmoDeLaExportacionLegal();
+
+    $escritura = escribirLaExportacionLegalDeLaMuestra();
+
+    expect($escritura['rows'])->toBe(LEGAL_EXPORT_THROUGHPUT_EMPLEADOS * LEGAL_EXPORT_THROUGHPUT_DIAS)
+        // El avance se anuncia cada 500 filas, mas el inicial y el final.
+        ->and($escritura['notices'])->toBe(intdiv($escritura['rows'], WriteLegalExportFile::PROGRESS_EVERY_ROWS) + 2)
+        // Un trabajo vivo nunca se da por muerto antes de su propio techo.
+        ->and(Config::integer('reporting.export.stale_after_seconds'))->toBeGreaterThan(GenerateReportExportJob::TIMEOUT_SECONDS);
+})->group('RF-IN-05');
+
+it('proyecta el peor requerimiento por debajo de la mitad del techo del trabajo de cola, en mediana', function (): void {
+    // @phpstan-ignore method.notFound (ver la prueba anterior)
+    $this->beforeApplicationDestroyed(compactarTrasElRitmoDeLaExportacionLegal());
+
+    muestraParaElRitmoDeLaExportacionLegal();
+
+    // Segundos proyectados para el peor caso en cada pasada: el ritmo medido
+    // en la muestra, llevado a 1.461.000 filas.
+    $proyecciones = WallClockBudget::samples(static function (): float {
+        $escritura = escribirLaExportacionLegalDeLaMuestra();
+
+        return LEGAL_EXPORT_THROUGHPUT_PEOR_CASO / ($escritura['rows'] / max($escritura['seconds'], 0.001));
+    });
+
     $ceiling = GenerateReportExportJob::TIMEOUT_SECONDS;
 
     if (getenv('KRONOQR_PRINT_THROUGHPUT') !== false) {
         fwrite(STDERR, sprintf(
-            "\nExportacion legal: %d filas en %.2f s (%.0f filas/s). Peor caso %d filas: %.0f s proyectados; techo %d s, obsolescencia %d s.\n",
-            $rows,
-            $seconds,
-            $rowsPerSecond,
+            "\nExportacion legal: peor caso de %d filas en %.0f s proyectados de mediana; techo %d s, obsolescencia %d s.\n",
             LEGAL_EXPORT_THROUGHPUT_PEOR_CASO,
-            $projected,
+            WallClockBudget::median($proyecciones),
             $ceiling,
             Config::integer('reporting.export.stale_after_seconds'),
         ));
     }
 
-    expect($rows)->toBe(LEGAL_EXPORT_THROUGHPUT_EMPLEADOS * LEGAL_EXPORT_THROUGHPUT_DIAS)
-        // El avance se anuncia cada 500 filas, mas el inicial y el final.
-        ->and($avisos)->toBe(intdiv($rows, WriteLegalExportFile::PROGRESS_EVERY_ROWS) + 2)
-        ->and($projected)->toBeLessThan($ceiling / 2)
-        // Un trabajo vivo nunca se da por muerto antes de su propio techo.
-        ->and(Config::integer('reporting.export.stale_after_seconds'))->toBeGreaterThan($ceiling);
-})->group('RF-IN-05', 'RNF-P-02');
+    WallClockBudget::expectMedianBelow($proyecciones, $ceiling / 2, 'RNF-P-02');
+})->group('RF-IN-05', 'RNF-P-02', 'performance');

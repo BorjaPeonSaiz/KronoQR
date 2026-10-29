@@ -85,6 +85,157 @@ final class ContractCoverage
      */
     public static function validatedIn(string $source, array $operations): array
     {
+        return array_values(array_unique(array_map(
+            static fn (array $validation): string => $validation[0],
+            self::validationsIn($source, $operations),
+        )));
+    }
+
+    /**
+     * Los codigos de respuesta que declara cada operacion del contrato, como
+     * `METODO /ruta` => lista de codigos.
+     *
+     * @return array<string, list<int>>
+     */
+    public static function responses(string $openapiFile): array
+    {
+        $document = Yaml::parseFile($openapiFile);
+        $paths = \is_array($document) && \is_array($document['paths'] ?? null) ? $document['paths'] : [];
+        $responses = [];
+
+        foreach ($paths as $path => $item) {
+            foreach (\is_array($item) ? $item : [] as $verb => $operation) {
+                if (\in_array($verb, self::VERBS, true)) {
+                    $responses[strtoupper((string) $verb).' '.$path] = self::codesOf($operation);
+                }
+            }
+        }
+
+        ksort($responses);
+
+        return $responses;
+    }
+
+    /**
+     * Los codigos de respuesta de una operacion del YAML, ordenados.
+     *
+     * @return list<int>
+     */
+    private static function codesOf(mixed $operation): array
+    {
+        $responses = \is_array($operation) && \is_array($operation['responses'] ?? null) ? $operation['responses'] : [];
+        $codes = array_map(intval(...), array_keys($responses));
+        sort($codes);
+
+        return $codes;
+    }
+
+    /**
+     * Par `METODO /ruta CODIGO` => ficheros donde se valida esa respuesta con su
+     * codigo escrito: `assertValidResponse(404)`.
+     *
+     * Una validacion **sin codigo literal** (`assertValidResponse()`, o con una
+     * variable de un dataset) cuenta para la operacion en {@see validated()},
+     * pero no para ningun par: no se puede saber, leyendo la prueba, que
+     * respuesta valido. Adivinarlo por un `assertStatus` cercano daria por
+     * cubierto un par con una asercion sobre otra respuesta; escribir el codigo
+     * cuesta tres caracteres y ademas lo comprueba (`assertStatus` incluido).
+     *
+     * @param  list<string>  $operations
+     * @param  list<string>  $files
+     * @return array<string, list<string>>
+     */
+    public static function validatedPairs(array $operations, array $files): array
+    {
+        $validated = [];
+
+        foreach ($files as $file) {
+            foreach (self::validatedPairsIn((string) file_get_contents($file), $operations) as $pair) {
+                $validated[$pair][] = $file;
+            }
+        }
+
+        return $validated;
+    }
+
+    /**
+     * Los pares `METODO /ruta CODIGO` que valida un fichero de pruebas.
+     *
+     * @param  list<string>  $operations
+     * @return list<string>
+     */
+    public static function validatedPairsIn(string $source, array $operations): array
+    {
+        $pairs = [];
+
+        foreach (self::validationsIn($source, $operations) as [$operation, $code]) {
+            if ($code !== null) {
+                $pairs[] = $operation.' '.$code;
+            }
+        }
+
+        return array_values(array_unique($pairs));
+    }
+
+    /**
+     * Los codigos que barre un fichero de pruebas: una llamada a
+     * `ContractSweep::discrepancies(N, ...)`, con `N` literal, en una sentencia
+     * de un fichero que carga el contrato.
+     *
+     * La operacion de cada peticion del barrido no se puede leer del texto —sale
+     * del contrato en ejecucion—, asi que el barrido se reconoce por su forma y
+     * lo que cubre lo dice el propio `ContractSweep`: todas las operaciones que
+     * declaran `N`, menos las que aparta con su motivo. `discrepancies()` se
+     * niega a correr sin el contrato cargado, asi que reconocerla no es fiarse
+     * de un nombre.
+     *
+     * @return list<int>
+     */
+    public static function sweptCodesIn(string $source): array
+    {
+        $statements = self::topLevelStatements(self::significantTokens($source));
+        $loaders = self::contractLoaders($statements);
+        $everywhere = self::loadsEverywhere($statements, $loaders);
+        $codes = [];
+
+        foreach ($statements as $tokens) {
+            foreach (array_keys($tokens) as $i) {
+                $isSweep = $tokens[$i][1] === 'ContractSweep'
+                    && ($tokens[$i + 1][1] ?? '') === '::'
+                    && ($tokens[$i + 2][1] ?? '') === 'discrepancies'
+                    && ($everywhere || self::loadsContract($tokens, $loaders));
+                $codes[] = $isSweep ? self::firstIntegerArgument($tokens, $i + 3) : null;
+            }
+        }
+
+        $codes = array_values(array_unique(array_filter($codes, static fn (?int $code): bool => $code !== null)));
+        sort($codes);
+
+        return $codes;
+    }
+
+    /**
+     * El primer argumento de la llamada cuyo `(` esta en la posicion dada, si
+     * es un entero literal.
+     *
+     * @param  list<array{0: int, 1: string}>  $tokens
+     */
+    private static function firstIntegerArgument(array $tokens, int $open): ?int
+    {
+        $first = self::arguments($tokens, $open)[0];
+
+        return \count($first) === 1 && $first[0][0] === T_LNUMBER ? (int) $first[0][1] : null;
+    }
+
+    /**
+     * Cada validacion del fichero: la operacion a la que se atribuye y su codigo
+     * literal, o null si no lo lleva.
+     *
+     * @param  list<string>  $operations
+     * @return list<array{0: string, 1: int|null}>
+     */
+    private static function validationsIn(string $source, array $operations): array
+    {
         $statements = self::topLevelStatements(self::significantTokens($source));
         $helpers = self::helperRequests($statements, $operations);
         $loaders = self::contractLoaders($statements);
@@ -97,7 +248,22 @@ final class ContractCoverage
             }
         }
 
-        return array_values(array_unique($validated));
+        return $validated;
+    }
+
+    /**
+     * El argumento de la llamada cuyo `(` esta en la posicion dada, si es un
+     * unico entero literal: `(404)`. Null en cualquier otro caso.
+     *
+     * @param  list<array{0: int, 1: string}>  $tokens
+     */
+    private static function integerArgument(array $tokens, int $open): ?int
+    {
+        $arguments = self::arguments($tokens, $open);
+
+        return \count($arguments) === 1 && \count($arguments[0]) === 1 && $arguments[0][0][0] === T_LNUMBER
+            ? (int) $arguments[0][0][1]
+            : null;
     }
 
     /**
@@ -293,7 +459,7 @@ final class ContractCoverage
      * @param  list<array{0: int, 1: string}>  $tokens
      * @param  list<string>  $operations
      * @param  array<string, string|false|null>  $helpers
-     * @return array{validated: list<string>, last: string|false|null}
+     * @return array{validated: list<array{0: string, 1: int|null}>, last: string|false|null}
      */
     private static function walk(array $tokens, array $operations, array $helpers): array
     {
@@ -302,7 +468,7 @@ final class ContractCoverage
 
         foreach (array_keys($tokens) as $i) {
             if (self::isMethodCall($tokens, $i, 'assertValidResponse') && \is_string($last)) {
-                $validated[] = $last;
+                $validated[] = [$last, self::integerArgument($tokens, $i + 1)];
             }
 
             $request = self::requestOf($tokens, $i, $operations, $helpers);
@@ -364,7 +530,7 @@ final class ContractCoverage
         $method = strtolower(str_replace('Json', '', $tokens[$i][1]));
         $arguments = self::arguments($tokens, $i + 1);
 
-        if (\in_array($method, ['json', 'call'], true)) {
+        if (\in_array($method, ['json', 'call', 'raw'], true)) {
             $verb = strtoupper(trim(self::literal($arguments[0] ?? []), self::WILDCARD));
             $uri = self::literal($arguments[1] ?? []);
         } elseif (\in_array($method, [...self::VERBS, 'upload'], true)) {

@@ -11,6 +11,7 @@ use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Identity\PortalLogins;
 use Tests\Support\Workforce\EmployeePins;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -94,7 +95,7 @@ it('deniega el fichaje por PIN a cada rol de gestion', function (UserRole $rol):
     'rrhh' => [UserRole::RRHH],
     'responsable de departamento' => [UserRole::RESPONSABLE_DEPARTAMENTO],
     'auditor' => [UserRole::AUDITOR],
-    'empleado' => [UserRole::EMPLEADO],
+    'cuenta con rol empleado' => [UserRole::EMPLEADO],
 ])->group('RS-04', 'RQ-07', 'RF-AT-11');
 
 it('deniega el fichaje por PIN a una cuenta con rol kiosk que no es un dispositivo', function (): void {
@@ -104,7 +105,7 @@ it('deniega el fichaje por PIN a una cuenta con rol kiosk que no es un dispositi
     // y no de `devices`.
     [$scanId, $cuerpo] = fichajePorPinValido();
 
-    Api::as(ManagementUsers::kioskToken())
+    Api::as(ManagementUsers::kioskRoleAccountToken())
         ->withHeaders(['Idempotency-Key' => $scanId])
         ->post('/api/v1/scan/pin', $cuerpo)
         ->assertStatus(403);
@@ -137,10 +138,11 @@ it('deniega el fichaje por PIN a un token de portal', function (): void {
     // MISMO PIN el que abre las dos puertas (regla dura 12), asi que hay que
     // comprobar explicitamente que una sesion de portal no puede fichar por
     // nadie — ni siquiera por si misma: el portal es de lectura.
-    [$scanId, $cuerpo] = fichajePorPinValido();
+    // La sesion es la de `POST /me/login` de verdad, y de la misma persona y
+    // con el mismo PIN del fichaje (R4-QA-07).
+    [$scanId, $cuerpo, $escenario] = fichajePorPinValido();
 
-    $usuario = ManagementUsers::withRole(UserRole::EMPLEADO);
-    $tokenDePortal = $usuario->createToken('Portal', [TokenAbility::SELF_READ->value])->plainTextToken;
+    $tokenDePortal = PortalLogins::open($escenario['employee'], PIN_AUTORIZACION);
 
     Api::as($tokenDePortal)
         ->withHeaders(['Idempotency-Key' => $scanId])
@@ -162,7 +164,7 @@ it('no revela nada sobre el empleado ni sobre el PIN en una respuesta denegada',
     foreach ([$cuerpo['employee_code'], 'ENOEXISTE'] as $codigo) {
         $scanId = Str::uuid7()->toString();
 
-        $respuesta = Api::as(ManagementUsers::kioskToken())
+        $respuesta = Api::as(ManagementUsers::kioskRoleAccountToken())
             ->withHeaders(['Idempotency-Key' => $scanId])
             ->post('/api/v1/scan/pin', [...$cuerpo, 'scan_id' => $scanId, 'employee_code' => $codigo]);
 

@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Event;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Clock\MockClock;
 use Tests\Support\Health\CountingPostgresConnector;
+use Tests\Support\Time\WallClockBudget;
 
 /*
  * **El paquete de diagnostico se genera con PostgreSQL caido** (V4-PL-1;
@@ -368,10 +369,24 @@ it('con PostgreSQL caido genera el paquete anonimizado, completo, con su asiento
         ->and($result['output'])->toContain('PENDIENTE')
         ->and($result['output'])->toContain('se escribira solo');
 
-    // 11. En tiempo acotado: el cortacircuitos abre al primer intento.
-    expect($result['seconds'])->toBeLessThan(15.0)
-        ->and(CountingPostgresConnector::$attempts)->toBe(1);
+    // 11. El cortacircuitos abre al primer intento. El tiempo que eso acota
+    // se mide en la suite nocturna de rendimiento (D4), abajo.
+    expect(CountingPostgresConnector::$attempts)->toBe(1);
 })->group('RF-PD-09', 'RL-19', 'RS-08', 'RL-04', 'RNF-D-02');
+
+it('con PostgreSQL caido genera el paquete en tiempo acotado, en mediana (V4-PL-1)', function (): void {
+    // El cortacircuitos abre al primer intento: el paquete sale en segundos, no
+    // tras agotar los reintentos de conexion. En la suite nocturna de
+    // rendimiento (D4), con el circuito cerrado al empezar cada pasada.
+    $muestras = WallClockBudget::samples(static function (): float {
+        diagnosticsDbDownRemove(diagnosticsDbDownCircuitFile());
+        diagnosticsDbDownBreakDatabase();
+
+        return diagnosticsDbDownRun()['seconds'];
+    });
+
+    WallClockBudget::expectMedianBelow($muestras, 15.0, 'RF-PD-09');
+})->group('RF-PD-09', 'performance');
 
 it('con PostgreSQL caido, --with-personal-data no genera nada porque no se puede auditar (RL-19, V4-PL-1)', function (): void {
     diagnosticsDbDownBreakDatabase();

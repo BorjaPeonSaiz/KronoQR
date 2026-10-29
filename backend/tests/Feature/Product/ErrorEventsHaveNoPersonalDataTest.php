@@ -21,6 +21,7 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Identity\PortalLogins;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -69,6 +70,19 @@ use Tests\Support\Workforce\WorkforceFixtures;
  * que sin ese enganche estarian contando tambien las de la anterior.
  */
 uses(RefreshDatabase::class);
+
+/*
+ * EL RELOJ PARADO, Y A UNA HORA QUE NO ES LA PLANTADA (V21-2-QA-3).
+ *
+ * La busqueda mira TODAS las columnas, tambien `first_seen_at` y
+ * `last_seen_at`, que salen del reloj. Con el reloj real la prueba fallaba si
+ * se ejecutaba entre las 06:00 y las 06:00:59 UTC: la marca de tiempo contenia
+ * la hora de fichaje plantada y parecia un dato personal escapado. Las 10:15
+ * no contienen ninguno de los seis datos, y no dependen del dia.
+ */
+beforeEach(function (): void {
+    FrozenTime::at('2026-09-09 10:15:00');
+});
 
 /** Nombre completo, como lo interpolaria una excepcion de dominio. */
 const NOMBRE = 'Maria Gonzalez Perez';

@@ -64,7 +64,7 @@ function teletrabajoInformativoFichar(string $token, string $payload, string $oc
         ])
         ->assertOk()
         ->assertValidRequest()
-        ->assertValidResponse();
+        ->assertValidResponse(200);
 
     /** @var array<string, mixed> $json */
     $json = $respuesta->json();

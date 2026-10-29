@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Modules\Identity\Infrastructure\Persistence\User;
 use App\Modules\Product\Domain\ValueObject\SupportScope;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use App\Modules\Workforce\Infrastructure\Persistence\Department;
@@ -16,6 +17,7 @@ use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Identity\PortalLogins;
 use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Product\SupportGrants;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -155,47 +157,38 @@ it('niega al responsable el canal global de la instalacion', function (): void {
     autorizarCanal($escenario['jefeDeCocina'], 'presence.all')->assertStatus(403);
 })->group('RF-ID-03', 'RS-04');
 
-it('niega el canal a un auditor, tambien con un token que aun tenga el ambito', function (): void {
+it('niega los dos canales a un auditor, tambien con un token que aun tenga el ambito', function (Closure $token, Closure $canal): void {
     // Desde la 2.2.1 el `auditor` solo lleva `reports:legal` (RF-ID-02) y no
     // pasa el middleware. Un token emitido antes conserva `attendance:read`
     // hasta que caduca, pasa el middleware, y lo que le para es la policy. Es
-    // exactamente para lo que sirven los dos controles.
-    escenarioDeCanales();
+    // exactamente para lo que sirven los dos controles. Y en los dos canales:
+    // el de un departamento tiene su propio criterio en `routes/channels.php`,
+    // y el token antiguo no se habia pedido contra el (V21-4-QA-1).
+    $escenario = escenarioDeCanales();
 
-    $auditor = ManagementUsers::withRole(UserRole::AUDITOR);
-    $actual = ManagementUsers::tokenFor($auditor);
-    $anterior = ManagementUsers::legacyAuditorTokenFor($auditor);
+    autorizarCanal($token(ManagementUsers::withRole(UserRole::AUDITOR)), $canal($escenario))->assertStatus(403);
+})->with([
+    'token actual' => [static fn (User $auditor): string => ManagementUsers::tokenFor($auditor)],
+    'token anterior a la 2.2.1' => [static fn (User $auditor): string => ManagementUsers::legacyAuditorTokenFor($auditor)],
+])->with([
+    'canal global' => [static fn (array $escenario): string => 'presence.all'],
+    'canal de un departamento' => [static fn (array $escenario): string => 'presence.department.'.$escenario['cocina']],
+])->group('RF-ID-03', 'RF-ID-02', 'RS-04');
 
-    autorizarCanal($actual, 'presence.all')->assertStatus(403);
-
-    // Cada token resuelve su propio portador: el guard de Sanctum cachea el
-    // usuario, y con el su token, dentro de la misma aplicacion de prueba.
-    Auth::forgetGuards();
-
-    autorizarCanal($anterior, 'presence.all')->assertStatus(403);
-})->group('RF-ID-03', 'RF-ID-02', 'RS-04');
-
-it('niega el canal a un empleado y a un token de quiosco', function (string $rol): void {
+it('niega los dos canales a una sesion de portal y a un quiosco', function (Closure $portador): void {
     // Al quiosco y al portal les falta el ambito `attendance:read`, asi que ni
-    // llegan al callback del canal. El resultado desde fuera es el mismo `403`.
-    escenarioDeCanales();
-
-    $token = $rol === 'kiosk'
-        ? ManagementUsers::kioskToken()
-        : ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::EMPLEADO));
+    // llegan al callback del canal. Los dos con el token que emite el producto:
+    // la sesion de `POST /me/login` y el de un dispositivo emparejado, cuyos tres
+    // ambitos son `scan:write`, `roster:read` y `heartbeat:write` (A3, R4-QA-07).
+    $escenario = escenarioDeCanales();
+    $token = $portador($escenario['site']);
 
     autorizarCanal($token, 'presence.all')->assertStatus(403);
-    autorizarCanal($token, 'presence.department.1')->assertStatus(403);
-})->with(['kiosk', 'empleado'])->group('RF-ID-03', 'RS-04', 'RF-ID-04');
-
-it('niega el canal a un token de dispositivo real, que es el caso que importa', function (): void {
-    // El token de una tablet colgada en una pared: sus tres ambitos son
-    // `scan:write`, `roster:read` y `heartbeat:write`, y ninguno abre esto.
-    $escenario = escenarioDeCanales();
-    $device = AttendanceFixtures::device($escenario['site']);
-
-    autorizarCanal(AttendanceFixtures::tokenFor($device['id']), 'presence.all')->assertStatus(403);
-})->group('RS-04', 'RF-ID-04');
+    autorizarCanal($token, 'presence.department.'.$escenario['cocina'])->assertStatus(403);
+})->with([
+    'sesion de portal' => [static fn (int $site): string => PortalLogins::open(WorkforceFixtures::employee($site))],
+    'quiosco' => [static fn (int $site): string => AttendanceFixtures::tokenFor(AttendanceFixtures::device($site)['id'])],
+])->group('RF-ID-03', 'RS-04', 'RF-ID-04');
 
 it('deniega sin token', function (): void {
     escenarioDeCanales();

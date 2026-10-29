@@ -6,6 +6,7 @@ use Illuminate\Contracts\Redis\Factory as Redis;
 use Spectator\Spectator;
 use Tests\Support\Health\UnavailableRedis;
 use Tests\Support\Http\Api;
+use Tests\Support\Time\WallClockBudget;
 
 /*
  * `GET /api/v1/ready` — la sonda de disponibilidad (doc 01 Anexo B).
@@ -76,31 +77,55 @@ it('responde 503 cuando Redis no responde', function (): void {
  */
 const READINESS_DIRECCION_QUE_NO_RESPONDE = '10.255.255.1';
 
-it('da el 503 en pocos segundos con Redis inalcanzable por la red', function (): void {
+/** Redis apunta a una direccion que no enruta, con el cliente sin conexion previa. */
+function readinessRedisInalcanzable(): void
+{
     config()->set('database.redis.default.host', READINESS_DIRECCION_QUE_NO_RESPONDE);
     app()->forgetInstance('redis');
     app()->forgetInstance(Redis::class);
+}
 
-    $inicio = microtime(true);
-
-    Api::guest()->get('/api/v1/ready')->assertStatus(503);
-
-    expect(microtime(true) - $inicio)->toBeLessThan(5.0);
-})->group('RQ-06', 'RF-PD-13');
-
-it('da el 503 en pocos segundos con PostgreSQL inalcanzable por la red', function (): void {
+/** La conexion por defecto apunta a un PostgreSQL en una direccion que no enruta. */
+function readinessPostgresInalcanzable(): void
+{
     config()->set('database.connections.pgsql_inalcanzable', [
         ...config()->array('database.connections.pgsql'),
         'host' => READINESS_DIRECCION_QUE_NO_RESPONDE,
     ]);
     config()->set('database.default', 'pgsql_inalcanzable');
+}
 
-    $inicio = microtime(true);
+it('da el 503 con Redis inalcanzable por la red', function (): void {
+    readinessRedisInalcanzable();
 
     Api::guest()->get('/api/v1/ready')->assertStatus(503);
-
-    expect(microtime(true) - $inicio)->toBeLessThan(5.0);
 })->group('RQ-06', 'RF-PD-13');
+
+it('da el 503 en pocos segundos con Redis inalcanzable por la red, en mediana', function (): void {
+    $muestras = WallClockBudget::samples(static function (): float {
+        readinessRedisInalcanzable();
+
+        return WallClockBudget::seconds(static fn () => Api::guest()->get('/api/v1/ready')->assertStatus(503));
+    });
+
+    WallClockBudget::expectMedianBelow($muestras, 5.0, 'RF-PD-13');
+})->group('RF-PD-13', 'performance');
+
+it('da el 503 con PostgreSQL inalcanzable por la red', function (): void {
+    readinessPostgresInalcanzable();
+
+    Api::guest()->get('/api/v1/ready')->assertStatus(503);
+})->group('RQ-06', 'RF-PD-13');
+
+it('da el 503 en pocos segundos con PostgreSQL inalcanzable por la red, en mediana', function (): void {
+    readinessPostgresInalcanzable();
+
+    $muestras = WallClockBudget::samples(static fn (): float => WallClockBudget::seconds(
+        static fn () => Api::guest()->get('/api/v1/ready')->assertStatus(503),
+    ));
+
+    WallClockBudget::expectMedianBelow($muestras, 5.0, 'RF-PD-13');
+})->group('RF-PD-13', 'performance');
 
 it('no dice que dependencia ha fallado', function (): void {
     /*
@@ -130,4 +155,4 @@ it('no dice que dependencia ha fallado', function (): void {
     foreach (['database', 'redis', 'pgsql', 'postgres', 'sql', '6379', '5432'] as $pista) {
         expect(strtolower($sinBaseDeDatos))->not->toContain($pista);
     }
-});
+})->group('RF-PD-13');

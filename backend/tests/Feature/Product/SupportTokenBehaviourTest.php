@@ -451,8 +451,9 @@ it('sigue enseñando el codigo de servicio al administrador del cliente', functi
 
 it('el logout de un actor de soporte no toca la concesion ni su token', function (): void {
     /*
-     * `POST /auth/logout` no lleva ambito —lo alcanzan las tres clases de
-     * sesion— asi que un token de soporte llega. Antes de la 5.9 lo habria
+     * `POST /auth/logout` no lleva ambito y lo alcanzan las sesiones de gestion
+     * y los tokens de soporte (el quiosco y el portal reciben `403`, ADR-039),
+     * asi que un token de soporte llega. Antes de la 5.9 lo habria
      * tratado como una sesion de PORTAL: le habria borrado el token sin marcar
      * `revoked_at` —dejando una concesion que el panel enseña «activa» y que ya
      * no funciona— y habria escrito `auth.logout` en el canal del empleado.

@@ -94,7 +94,7 @@ it('persiste la bateria y la cola mas antigua que declara el latido', function (
         'oldest_pending_at' => '2026-09-16T05:12:44Z',
         'battery_level' => 83,
         'battery_charging' => true,
-    ])->assertOk()->assertValidRequest()->assertValidResponse();
+    ])->assertOk()->assertValidRequest()->assertValidResponse(200);
 
     /** @var object{battery_level: int|null, battery_charging: bool|null, oldest_pending_at: string|null, pending_queue_size: int} $row */
     $row = DB::table('devices')->where('id', $quiosco['deviceId'])->first();
@@ -117,7 +117,7 @@ it('deja la telemetria a null cuando la tablet no la informa, y no la inventa', 
         'pending_queue_size' => 0,
         'battery_level' => null,
         'battery_charging' => null,
-    ])->assertOk()->assertValidRequest()->assertValidResponse();
+    ])->assertOk()->assertValidRequest()->assertValidResponse(200);
 
     /** @var object{battery_level: int|null, battery_charging: bool|null, oldest_pending_at: string|null} $row */
     $row = DB::table('devices')->where('id', $quiosco['deviceId'])->first();
@@ -146,7 +146,7 @@ it('borra la cola mas antigua y la bateria cuando el latido siguiente ya no las 
     Api::as($quiosco['token'])->post('/api/v1/kiosk/heartbeat', [
         'app_version' => '2.2.0',
         'pending_queue_size' => 0,
-    ])->assertOk()->assertValidRequest()->assertValidResponse();
+    ])->assertOk()->assertValidRequest()->assertValidResponse(200);
 
     /** @var object{battery_level: int|null, battery_charging: bool|null, oldest_pending_at: string|null, pending_queue_size: int} $row */
     $row = DB::table('devices')->where('id', $quiosco['deviceId'])->first();
@@ -209,7 +209,7 @@ it('devuelve null como huella mientras la instalacion no tenga codigo', function
     ])
         ->assertOk()
         ->assertValidRequest()
-        ->assertValidResponse()
+        ->assertValidResponse(200)
         ->assertJsonPath('service_code_hash', null);
 })->group('RF-KI-08');
 
@@ -223,7 +223,7 @@ it('devuelve la huella del codigo, distinta en cada quiosco y sin el codigo dent
     $respuesta = Api::as($quiosco['token'])->post('/api/v1/kiosk/heartbeat', [
         'app_version' => '2.2.0',
         'pending_queue_size' => 0,
-    ])->assertOk()->assertValidRequest()->assertValidResponse();
+    ])->assertOk()->assertValidRequest()->assertValidResponse(200);
 
     $esperada = hash('sha256', $quiosco['deviceUuid'].':48392017');
 
@@ -253,7 +253,7 @@ it('lleva el codigo nuevo a la tablet en el latido siguiente', function (): void
         'app_version' => '2.2.0',
         'pending_queue_size' => 0,
     ])
-        ->assertValidResponse()
+        ->assertValidResponse(200)
         ->assertJsonPath('service_code_hash', hash('sha256', $quiosco['deviceUuid'].':900112233'));
 
     // Y retirarlo vuelve a dejar la pantalla sin codigo.
@@ -296,7 +296,7 @@ it('entrega el ajuste de fichaje de pausa y la tolerancia de desfase en cada lat
     ])
         ->assertOk()
         ->assertValidRequest()
-        ->assertValidResponse()
+        ->assertValidResponse(200)
         ->assertJsonPath('break_clocking_enabled', false)
         // Minutos en el ajuste, segundos en el contrato: la tablet compara con
         // su propio reloj y no tiene por que convertir nada.
@@ -323,7 +323,7 @@ it('lleva a la tablet el fichaje de pausa activado y el umbral cambiado', functi
         'pending_queue_size' => 0,
     ])
         ->assertOk()
-        ->assertValidResponse()
+        ->assertValidResponse(200)
         ->assertJsonPath('break_clocking_enabled', true)
         ->assertJsonPath('clock_skew_tolerance_seconds', 1200);
 
@@ -343,7 +343,7 @@ it('lleva a la tablet el fichaje de pausa activado y el umbral cambiado', functi
         'app_version' => '2.2.0',
         'pending_queue_size' => 0,
     ])
-        ->assertValidResponse()
+        ->assertValidResponse(200)
         ->assertJsonPath('break_clocking_enabled', false);
 })->group('RF-AT-12', 'RF-AT-10', 'RF-PD-01');
 
@@ -363,7 +363,7 @@ it('entrega la ventana de actualizacion de serie en cada latido', function (): v
     ])
         ->assertOk()
         ->assertValidRequest()
-        ->assertValidResponse()
+        ->assertValidResponse(200)
         ->assertJsonPath('update_window.start', '03:00')
         ->assertJsonPath('update_window.end', '05:00')
         ->assertJsonPath('update_window.quiet_minutes', 10);
@@ -391,7 +391,7 @@ it('lleva a la tablet la ventana de actualizacion cambiada, incluso cruzando la 
         'pending_queue_size' => 0,
     ])
         ->assertOk()
-        ->assertValidResponse()
+        ->assertValidResponse(200)
         ->assertJsonPath('update_window.start', '23:30')
         ->assertJsonPath('update_window.end', '02:15')
         // Cero es legitimo: apaga la guarda de silencio y deja mandar a la
@@ -430,7 +430,7 @@ it('anuncia como version minima el nucleo de la version del servidor', function 
     ])
         ->assertOk()
         ->assertValidRequest()
-        ->assertValidResponse()
+        ->assertValidResponse(200)
         ->assertJsonPath('minimum_app_version', $minima);
 })->with([
     'publicada' => ['2.2.1', '2.2.1'],
@@ -451,7 +451,7 @@ it('omite la version minima, y no la manda a null, cuando el servidor no la resu
     ])
         ->assertOk()
         ->assertValidRequest()
-        ->assertValidResponse()
+        ->assertValidResponse(200)
         ->assertJsonMissingPath('minimum_app_version');
 })->with([
     'desarrollo' => ['2.2.1-dev'],
@@ -480,7 +480,7 @@ it('responde el latido sin version minima si el puerto de la version falla', fun
         'pending_queue_size' => 0,
     ])
         ->assertOk()
-        ->assertValidResponse()
+        ->assertValidResponse(200)
         ->assertJsonMissingPath('minimum_app_version');
 
     /** @var object{last_seen_at: string|null} $row */
@@ -515,7 +515,7 @@ it('entrega la zona horaria del centro en cada latido', function (string $zona):
     ])
         ->assertOk()
         ->assertValidRequest()
-        ->assertValidResponse()
+        ->assertValidResponse(200)
         ->assertJsonPath('site_time_zone', $zona)
         // Solo presentacion: la hora del servidor sigue en UTC (regla dura 3).
         ->assertJsonPath('server_time', fn (string $hora): bool => str_ends_with($hora, 'Z'));
@@ -543,7 +543,7 @@ it('omite la zona del centro, y no la manda a null, si la instalacion no tiene c
         'pending_queue_size' => 0,
     ])
         ->assertOk()
-        ->assertValidResponse()
+        ->assertValidResponse(200)
         ->assertJsonMissingPath('site_time_zone');
 })->group('RF-KI-07', 'RF-AT-05', 'RF-PA-07');
 
@@ -568,7 +568,7 @@ it('responde el latido sin zona del centro si el puerto del centro falla', funct
         'pending_queue_size' => 0,
     ])
         ->assertOk()
-        ->assertValidResponse()
+        ->assertValidResponse(200)
         ->assertJsonMissingPath('site_time_zone');
 
     /** @var object{last_seen_at: string|null} $row */

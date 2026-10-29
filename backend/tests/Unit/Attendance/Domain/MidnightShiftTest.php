@@ -65,13 +65,16 @@ it('atribuye el turno de noche entero a la jornada del dia en que empezo', funct
         ->and($totals->shiftCount)->toBe(1);
 })->group('RN-05', 'RF-AT-08');
 
-it('deja a cero la jornada del dia siguiente al turno de noche', function (): void {
+it('no recalcula la jornada del dia siguiente al turno de noche', function (): void {
     // El dia 15 no recibe ni un minuto del turno que empezo el 14, aunque seis
-    // de sus horas hayan ocurrido en la fecha civil del 15.
-    $nextDay = WorkDayFactory::new()->forEmployee('marc')->onWorkDate('2026-03-15')->build();
+    // de sus horas hayan ocurrido en la fecha civil del 15: la salida recalcula
+    // el 14 y ningun recalculo lleva el 15.
+    $workDay = WorkDayFactory::new()->forEmployee('marc')->onWorkDate('2026-03-14')->build();
 
-    expect($nextDay->totalWorked()->minutes)->toBe(0)
-        ->and($nextDay->shiftCount())->toBe(0);
+    $workDay->clockIn('shift-entry-1', Instants::inMadrid('2026-03-14 22:00'), ScanOrigin::QR_KIOSK);
+    $workDay->clockOut(Instants::inMadrid('2026-03-15 06:00'), ScanOrigin::QR_KIOSK, ClockingPolicyFactory::standard());
+
+    expect(RecordedEvents::dailyTotalsWorkDates($workDay->releaseEvents()))->toBe(['2026-03-14', '2026-03-14']);
 })->group('RN-05', 'RF-AT-08');
 
 it('la vuelta de una pausa hereda la jornada aunque sea otro dia natural', function (): void {
@@ -105,10 +108,16 @@ it('da la misma jornada a los dos tramos que separa una pausa de madrugada', fun
     expect($workDates)->toBe(['2026-03-14', '2026-03-14']);
 })->group('RN-05', 'RN-12', 'RF-AT-12');
 
-it('deja a cero el dia siguiente cuando la pausa cae de madrugada', function (): void {
-    $nextDay = WorkDayFactory::new()->onWorkDate('2026-03-15')->build();
+it('no recalcula el dia siguiente cuando la pausa cae de madrugada', function (): void {
+    $workDay = WorkDayFactory::new()->onWorkDate('2026-03-14')->build();
 
-    expect($nextDay->totalWorked()->minutes)->toBe(0);
+    $workDay->clockIn('shift-entry-1', Instants::inMadrid('2026-03-14 22:00'), ScanOrigin::QR_KIOSK);
+    $workDay->clockOut(Instants::inMadrid('2026-03-15 02:00'), ScanOrigin::QR_KIOSK, ClockingPolicyFactory::standard());
+    $workDay->clockIn('shift-entry-2', Instants::inMadrid('2026-03-15 02:30'), ScanOrigin::QR_KIOSK);
+    $workDay->clockOut(Instants::inMadrid('2026-03-15 06:00'), ScanOrigin::QR_KIOSK, ClockingPolicyFactory::standard());
+
+    expect(RecordedEvents::dailyTotalsWorkDates($workDay->releaseEvents()))
+        ->toBe(['2026-03-14', '2026-03-14', '2026-03-14', '2026-03-14']);
 })->group('RN-05', 'RF-AT-12');
 
 it('no parte tampoco un turno que empieza justo antes de la medianoche', function (): void {

@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
 use Spectator\Spectator;
+use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
@@ -224,7 +225,7 @@ it('deja el alta repetible mientras no se confirme y cerrada cuando ya lo esta',
 
     // Con uno ya activo, no: reemplazarlo es un acto de administracion
     // (`identity:2fa-reset`), no algo que se haga con una sesion pendiente.
-    Api::as($pending)->post('/api/v1/auth/2fa/enrol')->assertStatus(409);
+    Api::as($pending)->post('/api/v1/auth/2fa/enrol')->assertValidResponse(409);
 })->group('RF-ID-01', 'RS-06');
 
 it('rechaza confirmar sin haber dado de alta nada', function (): void {
@@ -232,7 +233,7 @@ it('rechaza confirmar sin haber dado de alta nada', function (): void {
 
     Api::as(ManagementUsers::pendingTokenFor($user))
         ->post('/api/v1/auth/2fa/confirm', ['code' => '000000'])
-        ->assertStatus(409);
+        ->assertValidResponse(409);
 })->group('RF-ID-01', 'RS-06');
 
 it('escribe en audit_log la activacion del segundo factor y nunca el secreto', function (): void {
@@ -268,7 +269,7 @@ it('deniega los tres endpoints de segundo factor a un token de quiosco', functio
     // RS-04: el token de una tablet lleva `scan:write`, `roster:read` y
     // `heartbeat:write`. Ninguno abre esta puerta, y si la abriera, quien robase
     // la tablet podria canjearla por una sesion de gestion.
-    Api::as(ManagementUsers::kioskToken())->post($uri, ['code' => '000000'])->assertStatus(403);
+    Api::as(AttendanceFixtures::kioskToken())->post($uri, ['code' => '000000'])->assertStatus(403);
 })->with([
     'verificar' => '/api/v1/auth/2fa/verify',
     'dar de alta' => '/api/v1/auth/2fa/enrol',

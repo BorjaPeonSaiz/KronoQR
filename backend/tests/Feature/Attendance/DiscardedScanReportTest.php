@@ -18,7 +18,9 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\Credentials;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Identity\PortalLogins;
 use Tests\Support\Time\FrozenTime;
+use Tests\Support\Time\WallClockBudget;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -135,7 +137,7 @@ it('acusa todos los avisos y atribuye solo la tarjeta autentica y el codigo de q
 
     $respuesta = avisarDescartes($escenario['token'], [$porTarjeta, $porCodigo, $falsa, $inexistente, $deBaja, $basura]);
 
-    $respuesta->assertOk()->assertValidRequest()->assertValidResponse();
+    $respuesta->assertOk()->assertValidRequest()->assertValidResponse(200);
 
     expect($respuesta->json('acknowledged'))->toBe(array_column([$porTarjeta, $porCodigo, $falsa, $inexistente, $deBaja, $basura], 'scan_id'))
         ->and(filaDelAviso($porTarjeta['scan_id'])->attribution)->toBe('credential')
@@ -196,7 +198,7 @@ it('acusa igual un aviso repetido sin duplicar la fila ni la metrica', function 
     $primera = avisarDescartes($escenario['token'], [$aviso]);
     $segunda = avisarDescartes($escenario['token'], [$aviso]);
 
-    $segunda->assertOk()->assertValidResponse();
+    $segunda->assertOk()->assertValidResponse(200);
 
     expect($segunda->getContent())->toBe($primera->getContent())
         ->and(DB::table('discarded_scan_reports')->where('scan_id', $aviso['scan_id'])->count())->toBe(1)
@@ -270,13 +272,13 @@ it('deniega el aviso a cada rol de gestion', function (UserRole $rol): void {
     'rrhh' => [UserRole::RRHH],
     'responsable de departamento' => [UserRole::RESPONSABLE_DEPARTAMENTO],
     'auditor' => [UserRole::AUDITOR],
-    'empleado' => [UserRole::EMPLEADO],
+    'cuenta con rol empleado' => [UserRole::EMPLEADO],
 ])->group('RN-22', 'RS-04', 'RQ-07');
 
 it('deniega el aviso a una cuenta con rol de quiosco que no es un dispositivo', function (): void {
     escenarioDeDescartes();
 
-    Api::as(ManagementUsers::kioskToken())
+    Api::as(ManagementUsers::kioskRoleAccountToken())
         ->post('/api/v1/scan/discarded', ['reports' => [avisoPin('E1')]])
         ->assertStatus(403);
 
@@ -296,23 +298,32 @@ it('deniega el aviso a un quiosco cuyo token no tiene scan:write', function (): 
 })->group('RN-22', 'RS-04', 'RQ-07');
 
 it('deniega el aviso a una sesion de portal', function (): void {
-    $empleado = ManagementUsers::withRole(UserRole::EMPLEADO);
-    $portal = $empleado->createToken('Portal', [TokenAbility::SELF_READ->value])->plainTextToken;
+    // La sesion que abre `POST /me/login` de verdad (R4-QA-07), no una cuenta
+    // de `users` con el ambito puesto a mano.
+    $portal = PortalLogins::open(WorkforceFixtures::employee(WorkforceFixtures::site()));
 
     Api::as($portal)->post('/api/v1/scan/discarded', ['reports' => [avisoPin('E1')]])->assertStatus(403);
 })->group('RN-22', 'RS-04', 'RQ-07');
 
 // --- Tiempo constante (F5) ---------------------------------------------------
 
-it('cuesta lo mismo en consultas y en tiempo se atribuya o no, en lotes de diez', function (): void {
-    // F5 del dictamen del bloque 18: la respuesta no dice si se atribuyo, asi
-    // que lo unico que podria hablar es el tiempo. Siete casos: tarjeta vigente,
-    // retirada y falsa; codigo existente, inexistente y de baja; y un `scan_id`
-    // ya registrado. Cada aviso se rellena hasta el suelo.
-    //
-    // **Las consultas se comparan dentro de cada via** —tarjeta y PIN—: la via
-    // la declara la tablet y no dice nada de nadie, y la tarjeta paga ademas el
-    // resolutor. El TIEMPO se compara entre los siete.
+/**
+ * Siete casos de aviso, en lotes de diez: las consultas de cada lote, por via,
+ * y los milisegundos por aviso.
+ *
+ * F5 del dictamen del bloque 18: la respuesta no dice si se atribuyo, asi que
+ * lo unico que podria hablar es el tiempo. Siete casos: tarjeta vigente,
+ * retirada y falsa; codigo existente, inexistente y de baja; y un `scan_id` ya
+ * registrado. Cada aviso se rellena hasta el suelo.
+ *
+ * **Las consultas se comparan dentro de cada via** —tarjeta y PIN—: la via la
+ * declara la tablet y no dice nada de nadie, y la tarjeta paga ademas el
+ * resolutor. El TIEMPO se compara entre los siete.
+ *
+ * @return array{consultas: array{qr: array<string, int>, pin: array<string, int>}, medias: array<string, float>, suelo: int}
+ */
+function descartesMedidosPorCaso(): array
+{
     $escenario = escenarioDeDescartes();
     $titularId = AttendanceFixtures::employeeIdOf($escenario['employee']);
     $vigente = Credentials::issueFor($titularId)->toString();
@@ -320,7 +331,6 @@ it('cuesta lo mismo en consultas y en tiempo se atribuya o no, en lotes de diez'
     $falsa = Credentials::signedWithUnknownKey()->toString();
     $baja = codigoDelDescarte(WorkforceFixtures::employee($escenario['site'], $escenario['department'], 'terminated'));
     $existente = codigoDelDescarte($escenario['employee']);
-    $suelo = Config::integer('security.rejection_floor_ms');
 
     // Ocho envios seguidos del mismo quiosco: por encima de la zona propia de
     // seis por minuto, que aqui no es lo que se mide.
@@ -352,8 +362,7 @@ it('cuesta lo mismo en consultas y en tiempo se atribuya o no, en lotes de diez'
     avisarDescartes($escenario['token'], [avisoPin($existente)])->assertOk();
 
     $consultas = ['qr' => [], 'pin' => []];
-    /** @var array<string, list<float>> $porAviso */
-    $porAviso = [];
+    $medias = [];
 
     foreach ($casos as $caso => [$via, $aviso]) {
         $lote = [];
@@ -364,34 +373,46 @@ it('cuesta lo mismo en consultas y en tiempo se atribuya o no, en lotes de diez'
 
         DB::flushQueryLog();
         DB::enableQueryLog();
-        $inicio = hrtime(true);
 
-        avisarDescartes($escenario['token'], $lote)->assertOk();
-
-        $porAviso[$caso] = [(hrtime(true) - $inicio) / 1_000_000 / 10];
+        $medias[$caso] = WallClockBudget::seconds(static fn () => avisarDescartes($escenario['token'], $lote)->assertOk()) * 1000 / 10;
         $consultas[$via][$caso] = \count(DB::getRawQueryLog());
         DB::disableQueryLog();
     }
 
-    expect(array_unique(array_values($consultas['qr'])))->toHaveCount(1, 'Tarjeta: '.json_encode($consultas['qr']))
-        ->and(array_unique(array_values($consultas['pin'])))->toHaveCount(1, 'PIN: '.json_encode($consultas['pin']));
+    return ['consultas' => $consultas, 'medias' => $medias, 'suelo' => Config::integer('security.rejection_floor_ms')];
+}
 
-    $medias = array_map(static fn (array $ms): float => $ms[0], $porAviso);
+it('cuesta lo mismo en consultas se atribuya o no, y ningun aviso baja del suelo, en lotes de diez', function (): void {
+    $medida = descartesMedidosPorCaso();
+    $suelo = $medida['suelo'];
 
-    foreach ($medias as $caso => $ms) {
-        expect($ms)->toBeGreaterThanOrEqual($suelo * 0.9, "El caso «{$caso}» ha tardado {$ms} ms por aviso, por debajo del suelo.");
-    }
+    expect(array_unique(array_values($medida['consultas']['qr'])))->toHaveCount(1, 'Tarjeta: '.json_encode($medida['consultas']['qr']))
+        ->and(array_unique(array_values($medida['consultas']['pin'])))->toHaveCount(1, 'PIN: '.json_encode($medida['consultas']['pin']));
 
-    // La misma banda de 10 ms por aviso que `ConstantTimeRejectionTest`.
-    expect(max($medias) - min($medias))->toBeLessThan(10.0, 'Los avisos se distinguen por tiempo: '.json_encode($medias));
+    // Los SUELOS se quedan aqui: una maquina cargada solo puede alejar la medida
+    // de ellos. N2: el caso de uso rellena cada aviso hasta el DOBLE del suelo
+    // del resolutor, despues del INSERT, tambien la tarjeta vigente, que no
+    // paga el del resolutor.
+    $lentos = array_filter($medida['medias'], static fn (float $ms): bool => $ms < $suelo * 0.9);
 
-    // N2: el caso de uso rellena cada aviso hasta el DOBLE del suelo del
-    // resolutor, despues del INSERT. Una tarjeta vigente (sin suelo del
-    // resolutor) y una retirada (con el) tardan lo mismo: banda de 3 ms.
-    expect($medias['tarjeta vigente'])->toBeGreaterThanOrEqual(2 * $suelo * 0.9)
-        ->and(abs($medias['tarjeta vigente'] - $medias['tarjeta retirada']))
-        ->toBeLessThan(3.0, 'Vigente y retirada se distinguen por tiempo: '.json_encode($medias));
+    expect($lentos)->toBe([], 'Avisos por debajo del suelo: '.json_encode($lentos))
+        ->and($medida['medias']['tarjeta vigente'])->toBeGreaterThanOrEqual(2 * $suelo * 0.9);
 })->group('RN-22', 'RS-03');
+
+it('cuesta lo mismo en tiempo se atribuya o no, en lotes de diez', function (): void {
+    // Las BANDAS van en la suite nocturna de rendimiento (D4): son de reloj, y
+    // una maquina cargada las ensancha sin que el producto haya cambiado.
+    $medias = descartesMedidosPorCaso()['medias'];
+    \assert($medias !== []);
+
+    fwrite(STDERR, 'RS-03 avisos de descarte (ms por aviso): '.json_encode($medias)."\n");
+
+    // La misma banda de 10 ms por aviso que `ConstantTimeRejectionTest`, y una
+    // de 3 ms entre la tarjeta vigente (sin suelo del resolutor) y la retirada
+    // (con el).
+    WallClockBudget::expectBelow(max($medias) - min($medias), 10.0, 'RS-03', 'ms');
+    WallClockBudget::expectBelow(abs($medias['tarjeta vigente'] - $medias['tarjeta retirada']), 3.0, 'RS-03', 'ms');
+})->group('RN-22', 'RS-03', 'performance');
 
 it('limita los avisos por dispositivo en su zona propia, seis por minuto', function (): void {
     // F8 del dictamen del bloque 18 y el contrato: la zona no consume la de los

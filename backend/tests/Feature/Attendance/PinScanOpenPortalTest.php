@@ -156,7 +156,7 @@ it('sigue dando el rechazo generico del quiosco tras treinta fallos desde la mis
 
     expect($codigos)->toBe(array_fill(0, 30, 422));
 
-    $trigesimoPrimero->assertStatus(422)->assertValidResponse();
+    $trigesimoPrimero->assertStatus(422)->assertValidResponse(422);
 })->group('RF-AT-11', 'RS-03', 'RS-12');
 
 it('deja fichar con el PIN bueno tras treinta fallos desde la misma direccion', function (): void {
@@ -164,7 +164,7 @@ it('deja fichar con el PIN bueno tras treinta fallos desde la misma direccion', 
 
     pinScanOpenPortalThirtyFailures($scenario);
 
-    pinScanOpenPortalPost($scenario, PIN_SCAN_OPEN_PORTAL_SIX)->assertOk()->assertValidResponse();
+    pinScanOpenPortalPost($scenario, PIN_SCAN_OPEN_PORTAL_SIX)->assertOk()->assertValidResponse(200);
 })->group('RF-AT-11', 'RS-12');
 
 it('no suma los fallos del quiosco a la cuenta del portal de esa direccion', function (): void {
@@ -191,13 +191,13 @@ it('ficha con un PIN de ocho cifras', function (): void {
     pinScanOpenPortalPost($scenario, PIN_SCAN_OPEN_PORTAL_EIGHT)
         ->assertOk()
         ->assertValidRequest()
-        ->assertValidResponse();
+        ->assertValidResponse(200);
 })->group('RF-AT-11', 'RF-ID-09');
 
 it('no acepta los seis primeros de un PIN de ocho cifras', function (): void {
     $scenario = pinScanOpenPortalScenario(PIN_SCAN_OPEN_PORTAL_EIGHT);
 
-    pinScanOpenPortalPost($scenario, '481902')->assertStatus(422)->assertValidResponse();
+    pinScanOpenPortalPost($scenario, '481902')->assertStatus(422)->assertValidResponse(422);
 })->group('RF-AT-11', 'RF-ID-09', 'RS-03');
 
 // --- 3 · Siete cifras no revela la longitud ---------------------------------
@@ -208,7 +208,7 @@ it('rechaza siete cifras en el quiosco igual que un PIN de seis equivocado', fun
     $seis = pinScanOpenPortalPost($scenario, '000999');
     $siete = pinScanOpenPortalPost($scenario, '0009991');
 
-    $siete->assertStatus(422)->assertValidRequest()->assertValidResponse();
+    $siete->assertStatus(422)->assertValidRequest()->assertValidResponse(422);
 
     expect($seis->getStatusCode())->toBe(422)
         ->and(pinScanOpenPortalBody($siete))->toBe(pinScanOpenPortalBody($seis))

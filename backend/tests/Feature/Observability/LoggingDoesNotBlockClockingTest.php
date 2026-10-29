@@ -12,6 +12,7 @@ use Tests\Support\Attendance\FakeCredentialResolver;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Time\FrozenTime;
+use Tests\Support\Time\WallClockBudget;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -130,7 +131,7 @@ function conLokiInalcanzable(callable $body): void
     }
 }
 
-it('responde igual y en tiempo razonable con Loki caido', function (): void {
+it('responde igual con Loki caido', function (): void {
     // La referencia: el mismo fichaje sin canal Loki, que es la instalacion de la
     // mayoria. Dos escenarios equivalentes y no dos escaneos del mismo: el
     // segundo escaneo de una persona es una SALIDA y su respuesta es
@@ -138,31 +139,32 @@ it('responde igual y en tiempo razonable con Loki caido', function (): void {
     $sinLoki = ficharMidiendoConLogs(escenarioDeFichajeConLogs()['token']);
 
     conLokiInalcanzable(function () use ($sinLoki): void {
-        $escenario = escenarioDeFichajeConLogs();
-
-        $conLokiCaido = ficharMidiendoConLogs($escenario['token']);
+        $conLokiCaido = ficharMidiendoConLogs(escenarioDeFichajeConLogs()['token']);
 
         expect($conLokiCaido['status'])->toBe($sinLoki['status'])
             ->and($conLokiCaido['body'])->toBe($sinLoki['body']);
-
-        /*
-         * El cliente de pruebas ejecuta `terminate()`, que es donde
-         * `LoggingServiceProvider` vacia el buffer: el `POST` fallido esta DENTRO
-         * del tiempo medido, que es justo lo que hay que acotar.
-         *
-         * Dos segundos de techo, no uno: el handler tiene un segundo de tiempo
-         * maximo y el margen restante absorbe la variabilidad de un runner
-         * cargado. Lo que esta prueba tiene que detectar es un canal que
-         * REINTENTA o que espera indefinidamente, no cien milisegundos de mas.
-         */
-        expect($conLokiCaido['seconds'])->toBeLessThan(
-            2.0,
-            'Un Loki caido ha anadido '.round($conLokiCaido['seconds'], 3).' s al fichaje. '
-            .'La regla dura 19 no lo admite: perder una linea de log es infinitamente mas barato que '
-            .'retrasar un fichaje (decision 8 de la ficha 3.1).'
-        );
     });
 })->group('RF-AT-10', 'RN-15');
+
+it('responde en tiempo razonable con Loki caido, en mediana', function (): void {
+    /*
+     * El cliente de pruebas ejecuta `terminate()`, que es donde
+     * `LoggingServiceProvider` vacia el buffer: el `POST` fallido esta DENTRO
+     * del tiempo medido, que es justo lo que hay que acotar.
+     *
+     * Dos segundos de techo, no uno: el handler tiene un segundo de tiempo
+     * maximo. Lo que esta prueba tiene que detectar es un canal que REINTENTA o
+     * que espera indefinidamente, no cien milisegundos de mas. Un Loki caido
+     * que retrase el fichaje es lo que la regla dura 19 no admite: perder una
+     * linea de log es infinitamente mas barato que retrasar un fichaje
+     * (decision 8 de la ficha 3.1). En la suite nocturna de rendimiento (D4).
+     */
+    conLokiInalcanzable(function (): void {
+        $muestras = WallClockBudget::samples(static fn (): float => ficharMidiendoConLogs(escenarioDeFichajeConLogs()['token'])['seconds']);
+
+        WallClockBudget::expectMedianBelow($muestras, 2.0, 'RN-15');
+    });
+})->group('RF-AT-10', 'RN-15', 'performance');
 
 it('el fichaje sigue funcionando cuando LOKI_URL no es una URL', function (): void {
     // El fallo real de configuracion: una linea mal copiada en el `.env`. La

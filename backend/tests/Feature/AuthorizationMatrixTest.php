@@ -2,21 +2,26 @@
 
 declare(strict_types=1);
 
+use App\Modules\Compliance\Domain\ValueObject\AuditAction;
+use App\Modules\Identity\Application\Port\AccessTokenIssuer;
 use App\Modules\Identity\Application\Port\CardRenderer;
 use App\Modules\Identity\Application\Port\InstructionsSheetRenderer;
-use App\Modules\Shared\Domain\ValueObject\UserRole;
-use App\Modules\Workforce\Infrastructure\Persistence\Department;
+use App\Modules\Identity\Application\Port\UserAccounts;
+use App\Modules\Identity\Domain\ValueObject\AuthenticatedUser;
+use App\Modules\Identity\Domain\ValueObject\TokenAbility;
+use App\Modules\Identity\Infrastructure\Persistence\User;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Routing\Route;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route as Router;
-use Tests\Support\Attendance\AttendanceFixtures;
+use Laravel\Sanctum\PersonalAccessToken;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
+use Tests\Support\Http\AuthorizationMatrix;
 use Tests\Support\Identity\FakeCardRenderer;
 use Tests\Support\Identity\FakeInstructionsSheetRenderer;
 use Tests\Support\Identity\ManagementUsers;
-use Tests\Support\Identity\PortalLogins;
 use Tests\Support\Product\LicenseKeys;
-use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
  * La matriz de autorizacion de la API, cruzada con el router real (regla dura
@@ -67,6 +72,13 @@ use Tests\Support\Workforce\WorkforceFixtures;
  * no el estado pendiente, y una ruta nueva sin `ability:` dejaria pasar el token
  * pendiente de un admin sin que nada fallara.
  *
+ * ## Donde vive la tabla
+ *
+ * La matriz, los actores y sus tokens estan en
+ * {@see AuthorizationMatrix}, porque los barridos del contrato
+ * (`tests/Contract/*SweepTest.php`) piden el `403` de cada operacion con un
+ * actor al que la matriz deniega. Esta prueba es la que la ata al router.
+ *
  * ## Una prueba por ruta, no una por celda
  *
  * Cada caso siembra la instalacion una vez, emite los siete tokens y pide la
@@ -85,7 +97,66 @@ use Tests\Support\Workforce\WorkforceFixtures;
  * `AbsenceScopeTest`. Ni que el responsable vea solo su departamento: aqui el
  * empleado de la ruta es de su departamento a proposito, para que lo que se
  * mida sea el rol y no el alcance.
+ *
+ * Lo que SI afirma de la auditoria es lo contrario: un 403 por rol o por
+ * ambito no deja `access.denied` (doc 02 §9.4, doc 07 A-16); si lo dejara,
+ * llenaria de ruido lo que se enseña en una inspeccion. En esta instalacion
+ * solo una denegacion es por alcance, y esta escrita abajo con los asientos
+ * que deja; cualquier otro `access.denied` al terminar un caso es un fallo.
  */
+
+/**
+ * Las rutas cuya denegacion en la instalacion de la matriz SI es por alcance,
+ * con el actor al que se deniega y los `access.denied` que le deja cada caso.
+ * Por actor y no por ruta: que la ruta deje un asiento no autoriza a que lo
+ * deje cualquier otro de sus actores.
+ */
+const AUTHORIZATION_MATRIX_SCOPE_DENIALS = [
+    // El responsable tiene el permiso de la presencia en vivo, pero su alcance
+    // no llega al canal de toda la instalacion (`private-presence.all`):
+    // `PresenceChannelAuthorizer` lo anota por el diario de autorizacion, como
+    // `PresenceChannelAuditTest` comprueba con el canal de otro departamento.
+    'POST api/v1/broadcasting/auth' => [AuthorizationMatrix::RESPONSABLE => 1],
+];
+
+/**
+ * Los `access.denied` de `audit_log`, por actor de la matriz: el asiento lleva
+ * el portador del token (`CurrentAuditContext`). Los que no son de ningun actor
+ * van bajo `otro`, para que tambien cuenten.
+ *
+ * @param  array<string, string>  $tokens
+ * @return array<string, int>
+ */
+function authorizationMatrixScopeDenialsByActor(array $tokens): array
+{
+    $denials = DB::table('audit_log')->where('action', AuditAction::AccessDenied->value)->get(['actor_type', 'actor_id']);
+    $actorOf = [];
+
+    foreach ($tokens as $actor => $token) {
+        $tokenable = PersonalAccessToken::findToken($token)?->tokenable;
+        if (! $tokenable instanceof Model || ! is_scalar($tokenable->getKey())) {
+            continue;
+        }
+
+        $type = match ($tokenable->getTable()) {
+            'users' => 'user',
+            'devices' => 'device',
+            default => $tokenable->getTable(),
+        };
+        $actorOf[$type.':'.$tokenable->getKey()] = $actor;
+    }
+
+    $found = [];
+
+    foreach ($denials as $denial) {
+        $actor = $actorOf[$denial->actor_type.':'.$denial->actor_id] ?? 'otro';
+        $found[$actor] = ($found[$actor] ?? 0) + 1;
+    }
+
+    ksort($found);
+
+    return $found;
+}
 
 uses(RefreshDatabase::class);
 
@@ -120,245 +191,6 @@ beforeEach(function (): void {
     app()->instance(CardRenderer::class, new FakeCardRenderer);
     app()->instance(InstructionsSheetRenderer::class, new FakeInstructionsSheetRenderer);
 });
-
-const AUTHORIZATION_MATRIX_ADMIN = 'admin';
-
-const AUTHORIZATION_MATRIX_RRHH = 'rrhh';
-
-const AUTHORIZATION_MATRIX_RESPONSABLE = 'responsable';
-
-const AUTHORIZATION_MATRIX_AUDITOR = 'auditor';
-
-const AUTHORIZATION_MATRIX_EMPLEADO = 'empleado';
-
-const AUTHORIZATION_MATRIX_QUIOSCO = 'quiosco';
-
-const AUTHORIZATION_MATRIX_2FA_PENDIENTE = '2fa pendiente';
-
-/** El `uuid` de las rutas que no son de un empleado: no existe, y da igual. */
-const AUTHORIZATION_MATRIX_UUID = '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90';
-
-/**
- * Los actores que pueden portar un token en una instalacion.
- *
- * @return list<string>
- */
-function authorizationMatrixActors(): array
-{
-    return [
-        AUTHORIZATION_MATRIX_ADMIN,
-        AUTHORIZATION_MATRIX_RRHH,
-        AUTHORIZATION_MATRIX_RESPONSABLE,
-        AUTHORIZATION_MATRIX_AUDITOR,
-        AUTHORIZATION_MATRIX_EMPLEADO,
-        AUTHORIZATION_MATRIX_QUIOSCO,
-        AUTHORIZATION_MATRIX_2FA_PENDIENTE,
-    ];
-}
-
-/**
- * LA MATRIZ: cada ruta autenticada de la API y los actores que la alcanzan.
- *
- * La clave es la que da el router —verbo y URI sin barra inicial— para que la
- * comparacion con `Router::getRoutes()` sea literal. Todo actor que no aparece
- * en la lista de una ruta tiene que recibir `403` (o el `401` de
- * {@see authorizationMatrixUnauthenticatedDenials()}).
- *
- * Es el Anexo B del doc 01 en forma de tabla comprobable. Cambiar una fila es
- * cambiar quien ve los datos de la plantilla: se hace a la vista, en revision, y
- * con el contrato modificado antes.
- *
- * @return array<string, list<string>>
- */
-function authorizationMatrix(): array
-{
-    $admin = AUTHORIZATION_MATRIX_ADMIN;
-    $rrhh = AUTHORIZATION_MATRIX_RRHH;
-    $responsable = AUTHORIZATION_MATRIX_RESPONSABLE;
-    $auditor = AUTHORIZATION_MATRIX_AUDITOR;
-    $empleado = AUTHORIZATION_MATRIX_EMPLEADO;
-    $quiosco = AUTHORIZATION_MATRIX_QUIOSCO;
-    $pendiente = AUTHORIZATION_MATRIX_2FA_PENDIENTE;
-
-    return [
-        // Fichaje y quiosco: solo el token de dispositivo (RS-04).
-        'POST api/v1/scan' => [$quiosco],
-        'POST api/v1/scan/batch' => [$quiosco],
-        'POST api/v1/scan/pin' => [$quiosco],
-        'POST api/v1/scan/discarded' => [$quiosco],
-        'GET api/v1/kiosk/roster' => [$quiosco],
-        'POST api/v1/kiosk/heartbeat' => [$quiosco],
-
-        // Emparejamiento y flota: solo admin (tarea 5.6).
-        'POST api/v1/kiosk/pair/confirm' => [$admin],
-        'GET api/v1/devices' => [$admin],
-        'POST api/v1/devices/{uuid}/unpair' => [$admin],
-
-        // Correcciones (RF-AT-08): anular es solo de rrhh y admin.
-        'POST api/v1/shift-entries' => [$admin, $rrhh, $responsable],
-        'PATCH api/v1/shift-entries/{uuid}' => [$admin, $rrhh, $responsable],
-        'POST api/v1/shift-entries/{uuid}/void' => [$admin, $rrhh],
-
-        // Lectura de presencia, cumplimiento, jornadas e incidencias: manager+.
-        'GET api/v1/attendance/live' => [$admin, $rrhh, $responsable],
-        'GET api/v1/compliance/summary' => [$admin, $rrhh, $responsable],
-        'GET api/v1/employees/{uuid}/workdays' => [$admin, $rrhh, $responsable],
-        'GET api/v1/incidents' => [$admin, $rrhh, $responsable],
-        'POST api/v1/incidents/{id}/resolve' => [$admin, $rrhh, $responsable],
-        // El canal global de presencia: el responsable solo firma el de sus
-        // departamentos, y el auditor no tiene ni el ambito ni el rol.
-        'POST api/v1/broadcasting/auth' => [$admin, $rrhh],
-
-        // Informes: rrhh y admin; la exportacion legal, tambien el auditor.
-        'GET api/v1/reports/period' => [$admin, $rrhh],
-        'GET api/v1/reports/period/export' => [$admin, $rrhh],
-        'GET api/v1/reports/legal-export' => [$admin, $rrhh, $auditor],
-        // Y la busqueda de la persona de esa exportacion, con los mismos tres
-        // roles: quien exporta a una persona tiene que poder elegirla (RF-IN-05).
-        'POST api/v1/reports/legal-export/employees/search' => [$admin, $rrhh, $auditor],
-        'GET api/v1/reports/payroll-export' => [$admin, $rrhh],
-        'GET api/v1/reports/adoption' => [$admin, $rrhh],
-        'GET api/v1/reports/adoption/export' => [$admin, $rrhh],
-        // El diferido admite al auditor desde la 2.3.0 (V5-PA-4): consulta,
-        // cancela y descarga las suyas, que solo pueden ser `kind: legal`. Pedir
-        // con el cuerpo vacio de esta matriz cae en la policy mas estrecha —la de
-        // nomina— y le responde 403; su `kind: legal` lo prueba
-        // `DeferredLongExportsTest`.
-        'GET api/v1/reports/exports' => [$admin, $rrhh, $auditor],
-        'POST api/v1/reports/exports' => [$admin, $rrhh],
-        'GET api/v1/reports/exports/{uuid}' => [$admin, $rrhh, $auditor],
-        'POST api/v1/reports/exports/{uuid}/cancel' => [$admin, $rrhh, $auditor],
-
-        // Plantilla: lee el responsable; escribe rrhh y admin.
-        'GET api/v1/employees' => [$admin, $rrhh, $responsable],
-        'GET api/v1/employees/{uuid}' => [$admin, $rrhh, $responsable],
-        'POST api/v1/employees' => [$admin, $rrhh],
-        'POST api/v1/employees/import' => [$admin, $rrhh],
-        'PATCH api/v1/employees/{uuid}' => [$admin, $rrhh],
-        'POST api/v1/employees/{uuid}/offboard' => [$admin, $rrhh],
-        'POST api/v1/employees/{uuid}/pin/reset' => [$admin, $rrhh],
-        'POST api/v1/employees/{uuid}/pin/deliver' => [$admin, $rrhh],
-        'GET api/v1/employees/{uuid}/contracts' => [$admin, $rrhh],
-        'POST api/v1/employees/{uuid}/contracts' => [$admin, $rrhh],
-        'GET api/v1/absences' => [$admin, $rrhh, $responsable],
-        'GET api/v1/absences/{uuid}' => [$admin, $rrhh, $responsable],
-        'POST api/v1/absences' => [$admin, $rrhh],
-        'POST api/v1/absences/import' => [$admin, $rrhh],
-        'PATCH api/v1/absences/{uuid}' => [$admin, $rrhh],
-        'POST api/v1/absences/{uuid}/void' => [$admin, $rrhh],
-        // Lectura de departamentos: quien lleva `employees:read` (2.2.0). El
-        // auditor no desde la 2.2.1: solo la exportacion legal (RF-ID-02).
-        'GET api/v1/departments' => [$admin, $rrhh, $responsable],
-        'GET api/v1/departments/{id}' => [$admin, $rrhh, $responsable],
-        'POST api/v1/departments' => [$admin, $rrhh],
-        'PATCH api/v1/departments/{id}' => [$admin, $rrhh],
-        'GET api/v1/site' => [$admin, $rrhh],
-        'PATCH api/v1/site' => [$admin, $rrhh],
-
-        // Credenciales (ADR-034).
-        'POST api/v1/credentials' => [$admin, $rrhh],
-        'GET api/v1/credentials/status' => [$admin, $rrhh],
-        'GET api/v1/credentials/instructions-sheet' => [$admin, $rrhh],
-        'POST api/v1/credentials/print-batch' => [$admin, $rrhh],
-        'POST api/v1/credentials/{uuid}/print' => [$admin, $rrhh],
-        'POST api/v1/credentials/{uuid}/deliver' => [$admin, $rrhh],
-        'POST api/v1/credentials/{uuid}/revoke' => [$admin, $rrhh],
-
-        // La instalacion: solo admin.
-        'GET api/v1/settings' => [$admin],
-        'PATCH api/v1/settings' => [$admin],
-        'GET api/v1/compliance-profile' => [$admin],
-        'PATCH api/v1/compliance-profile' => [$admin],
-        'GET api/v1/license' => [$admin],
-        'POST api/v1/license/activate' => [$admin],
-        'POST api/v1/diagnostics/bundle' => [$admin],
-        'GET api/v1/diagnostics/errors' => [$admin],
-        'POST api/v1/diagnostics/errors/{id}/resolve' => [$admin],
-        'GET api/v1/support/grants' => [$admin],
-        'POST api/v1/support/grants' => [$admin],
-        'DELETE api/v1/support/grants/{uuid}' => [$admin],
-        'GET api/v1/support/grants/{uuid}/uses' => [$admin],
-        'GET api/v1/data-export' => [$admin],
-        'POST api/v1/data-export' => [$admin],
-        'GET api/v1/data-export/{uuid}/download' => [$admin],
-        'POST api/v1/setup/site' => [$admin],
-        'GET api/v1/setup/steps' => [$admin],
-        'PUT api/v1/setup/steps/{step}' => [$admin],
-        'POST api/v1/setup/complete' => [$admin],
-        'GET api/v1/management-accounts' => [$admin],
-        'POST api/v1/management-accounts' => [$admin],
-        'POST api/v1/management-accounts/{uuid}/deactivate' => [$admin],
-        'POST api/v1/management-accounts/{uuid}/password/reset' => [$admin],
-        'POST api/v1/management-accounts/{uuid}/two-factor/reset' => [$admin],
-
-        // Sesion propia.
-        'POST api/v1/auth/2fa/verify' => [$pendiente],
-        'POST api/v1/auth/2fa/enrol' => [$pendiente],
-        'POST api/v1/auth/2fa/confirm' => [$pendiente],
-        // Cerrar la propia sesion no lee ni escribe nada de nadie: todo portador.
-        'POST api/v1/auth/logout' => [$admin, $rrhh, $responsable, $auditor, $empleado, $quiosco, $pendiente],
-        'GET api/v1/auth/me' => [$admin, $rrhh, $responsable, $auditor],
-        'POST api/v1/auth/password' => [$admin, $rrhh, $responsable, $auditor],
-        'GET api/v1/me/workdays' => [$empleado],
-        'GET api/v1/me/export' => [$empleado],
-        'POST api/v1/me/logout' => [$empleado],
-        // Quien sufre el error lo reporta: toda sesion completa menos el
-        // dispositivo, que tiene su canal en el latido (`ErrorEventPolicy::report`).
-        // La pendiente de segundo factor no ha terminado de entrar (RS-06).
-        'POST api/v1/client-errors' => [$admin, $rrhh, $responsable, $auditor, $empleado],
-    ];
-}
-
-/**
- * Las denegaciones que el contrato fija en `401` y no en `403`, con su motivo.
- *
- * `GET /auth/me` y `POST /auth/password` son de cuentas de gestion: un portador
- * que no es una cuenta completa no tiene a nadie de quien hablar, y
- * `openapi.yaml` declara `401` para la sesion pendiente de segundo factor en las
- * dos. El quiosco y el portal tampoco son cuentas en `/auth/me`.
- * `POST /client-errors` no exige ambito y la pendiente la para el mismo
- * `session.complete` de `/auth/me`, con el mismo `401` («todavia no has
- * terminado de entrar»). Lista cerrada: cualquier otra denegacion es `403`.
- *
- * @return array<string, list<string>>
- */
-function authorizationMatrixUnauthenticatedDenials(): array
-{
-    return [
-        'GET api/v1/auth/me' => [AUTHORIZATION_MATRIX_EMPLEADO, AUTHORIZATION_MATRIX_QUIOSCO, AUTHORIZATION_MATRIX_2FA_PENDIENTE],
-        'POST api/v1/auth/password' => [AUTHORIZATION_MATRIX_2FA_PENDIENTE],
-        'POST api/v1/client-errors' => [AUTHORIZATION_MATRIX_2FA_PENDIENTE],
-    ];
-}
-
-/**
- * Las rutas de la API sin `auth:sanctum`, lista cerrada.
- *
- * Cada una es publica por necesidad: las sondas (`/health`, `/ready`), los dos
- * accesos, el emparejamiento antes de tener token, la marca que pinta la
- * pantalla de acceso, el asistente antes de que exista el primer admin y la
- * descarga del enlace de un solo uso de ADR-041. Lo que las protege tiene sus
- * pruebas propias.
- *
- * @return list<string>
- */
-function authorizationMatrixPublicRoutes(): array
-{
-    return [
-        'GET api/v1/branding',
-        'GET api/v1/branding/logo',
-        'GET api/v1/branding/manifest.webmanifest',
-        'GET api/v1/health',
-        'GET api/v1/ready',
-        'GET api/v1/reports/exports/{uuid}/download',
-        'GET api/v1/setup/status',
-        'POST api/v1/auth/login',
-        'POST api/v1/kiosk/pair',
-        'POST api/v1/kiosk/pair/claim',
-        'POST api/v1/me/login',
-        'POST api/v1/setup/administrator',
-    ];
-}
 
 /**
  * El cuerpo de las rutas que no se pueden juzgar vacias: el canal es lo que la
@@ -413,61 +245,9 @@ function authorizationMatrixKeysOf(Route $route): array
  */
 function authorizationMatrixRoutes(): array
 {
-    $routes = array_keys(authorizationMatrix());
+    $routes = array_keys(AuthorizationMatrix::routes());
 
     return array_combine($routes, array_map(static fn (string $route): array => [$route], $routes));
-}
-
-/**
- * La instalacion minima: un centro, el departamento del responsable y una
- * persona en el. Las rutas de un empleado se piden con esa persona, para que al
- * responsable lo juzgue su rol y no su alcance.
- *
- * @return array{employee: string, responsable: string}
- */
-function authorizationMatrixInstallation(): array
-{
-    $site = WorkforceFixtures::site();
-    $department = WorkforceFixtures::department($site);
-    $responsable = ManagementUsers::withRole(UserRole::RESPONSABLE_DEPARTAMENTO);
-    Department::query()->whereKey($department)->update(['manager_user_id' => $responsable->id]);
-
-    return [
-        'employee' => WorkforceFixtures::employee($site, $department),
-        'responsable' => ManagementUsers::tokenFor($responsable),
-    ];
-}
-
-/**
- * El token de cada actor, emitido como lo emite el producto, una sola vez por
- * caso.
- *
- * El `default` lanza: un actor nuevo sin token revienta aqui y no pasa por
- * denegado.
- *
- * @param  array{employee: string, responsable: string}  $installation
- * @return array<string, string>
- */
-function authorizationMatrixTokens(array $installation): array
-{
-    $tokens = [];
-
-    foreach (authorizationMatrixActors() as $actor) {
-        $tokens[$actor] = match ($actor) {
-            AUTHORIZATION_MATRIX_ADMIN => ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN)),
-            AUTHORIZATION_MATRIX_RRHH => ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH)),
-            AUTHORIZATION_MATRIX_RESPONSABLE => $installation['responsable'],
-            AUTHORIZATION_MATRIX_AUDITOR => ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::AUDITOR)),
-            AUTHORIZATION_MATRIX_EMPLEADO => PortalLogins::open($installation['employee']),
-            AUTHORIZATION_MATRIX_QUIOSCO => AttendanceFixtures::tokenFor(
-                AttendanceFixtures::device(WorkforceFixtures::onlySiteId())['id'],
-            ),
-            AUTHORIZATION_MATRIX_2FA_PENDIENTE => ManagementUsers::pendingTokenFor(ManagementUsers::withRole(UserRole::ADMIN)),
-            default => throw new InvalidArgumentException('La matriz nombra un actor sin token: '.$actor.'.'),
-        };
-    }
-
-    return $tokens;
 }
 
 /**
@@ -476,7 +256,7 @@ function authorizationMatrixTokens(array $installation): array
  *
  * Tres comprobaciones, en este orden: sin token, `401` con el problema
  * `unauthenticated`; cada actor no autorizado, `403` (o el `401` de
- * {@see authorizationMatrixUnauthenticatedDenials()}); cada actor autorizado,
+ * {@see AuthorizationMatrix::unauthenticatedDenials()}); cada actor autorizado,
  * ni `401` ni `403` ni un `5xx` —un `500` no es «ha pasado la autorizacion», es
  * un fallo del producto que esta mitad tiene que ver—.
  *
@@ -486,9 +266,9 @@ function authorizationMatrixTokens(array $installation): array
  */
 function authorizationMatrixDiscrepanciesOf(string $route, array $installation, array $tokens): array
 {
-    $allowed = authorizationMatrix()[$route];
-    $unauthenticated = authorizationMatrixUnauthenticatedDenials()[$route] ?? [];
-    [$method, $uri] = authorizationMatrixRequestOf($route, $installation);
+    $allowed = AuthorizationMatrix::routes()[$route];
+    $unauthenticated = AuthorizationMatrix::unauthenticatedDenials()[$route] ?? [];
+    [$method, $uri] = AuthorizationMatrix::requestOf($route, $installation);
     $body = authorizationMatrixBodyFor($route);
     $found = [];
 
@@ -497,7 +277,7 @@ function authorizationMatrixDiscrepanciesOf(string $route, array $installation, 
         ? null
         : sprintf('%s · sin token: esperado 401 unauthenticated, recibido %d', $route, $guest->getStatusCode());
 
-    foreach (array_diff(authorizationMatrixActors(), $allowed) as $actor) {
+    foreach (array_diff(AuthorizationMatrix::actors(), $allowed) as $actor) {
         $expected = \in_array($actor, $unauthenticated, true) ? 401 : 403;
         $status = Api::as($tokens[$actor])->call($method, $uri, $body)->getStatusCode();
         $found[] = $status === $expected
@@ -522,33 +302,8 @@ function authorizationMatrixDiscrepanciesOf(string $route, array $installation, 
     return array_values(array_filter($found, static fn (?string $line): bool => $line !== null));
 }
 
-/**
- * Verbo y URI concreta de una clave de la matriz.
- *
- * Las rutas `employees/{uuid}` se piden con la persona del departamento del
- * responsable; el resto, con un `uuid` que no existe: la autorizacion tiene que
- * cortar antes de mirar si existe.
- *
- * @param  array{employee: string, responsable: string}  $installation
- * @return array{0: string, 1: string}
- */
-function authorizationMatrixRequestOf(string $route, array $installation): array
-{
-    [$method, $uri] = explode(' ', $route, 2);
-
-    $employeeUri = str_starts_with($uri, 'api/v1/employees/{uuid}');
-
-    $concrete = str_replace(
-        ['{uuid}', '{id}', '{step}'],
-        [$employeeUri ? $installation['employee'] : AUTHORIZATION_MATRIX_UUID, '1', 'site'],
-        $uri,
-    );
-
-    return [$method, '/'.$concrete];
-}
-
 it('declara en la matriz toda ruta autenticada del router, y ninguna que no exista', function (): void {
-    $declared = array_keys(authorizationMatrix());
+    $declared = array_keys(AuthorizationMatrix::routes());
     sort($declared);
 
     $router = authorizationMatrixRouterKeys(authenticated: true);
@@ -556,7 +311,7 @@ it('declara en la matriz toda ruta autenticada del router, y ninguna que no exis
     expect(array_values(array_diff($router, $declared)))->toBe(
         [],
         'Ruta(s) autenticada(s) sin fila en la matriz de autorizacion: decide que actores la alcanzan y '
-        .'anadela a authorizationMatrix() (regla dura 18).',
+        .'anadela a AuthorizationMatrix::routes() (regla dura 18).',
     )->and(array_values(array_diff($declared, $router)))->toBe(
         [],
         'Fila(s) de la matriz que el router ya no sirve: quitalas.',
@@ -565,48 +320,199 @@ it('declara en la matriz toda ruta autenticada del router, y ninguna que no exis
 
 it('encuentra en el router las rutas autenticadas que la matriz recorre', function (): void {
     // El control que impide que la prueba de arriba pase sobre un router vacio.
-    expect(authorizationMatrixRouterKeys(authenticated: true))->toHaveCount(\count(authorizationMatrix()))
-        ->and(\count(authorizationMatrix()))->toBeGreaterThan(90);
+    expect(authorizationMatrixRouterKeys(authenticated: true))->toHaveCount(\count(AuthorizationMatrix::routes()))
+        ->and(\count(AuthorizationMatrix::routes()))->toBeGreaterThan(90);
 })->group('RQ-07');
 
 it('no deja ninguna ruta publica fuera de la lista cerrada', function (): void {
     // Una ruta que se olvide de `auth:sanctum` no aparece en la matriz: aparece
     // aqui, y rompe la prueba.
-    $public = authorizationMatrixPublicRoutes();
+    $public = AuthorizationMatrix::publicRoutes();
     sort($public);
 
     expect(authorizationMatrixRouterKeys(authenticated: false))->toBe($public);
 })->group('RQ-07', 'RS-05');
 
 it('no reconoce mas actores que los que la matriz recorre', function (): void {
-    $named = array_values(array_unique(array_merge(...array_values(authorizationMatrix()))));
+    $named = array_values(array_unique(array_merge(...array_values(AuthorizationMatrix::routes()))));
     sort($named);
 
-    $actors = authorizationMatrixActors();
+    $actors = AuthorizationMatrix::actors();
     sort($actors);
 
     expect($named)->toBe($actors);
 })->group('RQ-07');
 
 it('responde a cada actor, y sin token, lo que la matriz dice de la ruta', function (string $route): void {
-    $installation = authorizationMatrixInstallation();
-    $tokens = authorizationMatrixTokens($installation);
+    $installation = AuthorizationMatrix::installation();
+    $tokens = AuthorizationMatrix::tokens($installation);
 
     $discrepancies = authorizationMatrixDiscrepanciesOf($route, $installation, $tokens);
 
-    expect($discrepancies)->toBe([], implode("\n", $discrepancies));
+    expect($discrepancies)->toBe([], implode("\n", $discrepancies))
+        ->and(authorizationMatrixScopeDenialsByActor($tokens))->toBe(AUTHORIZATION_MATRIX_SCOPE_DENIALS[$route] ?? []);
 })->with(authorizationMatrixRoutes())->group('RQ-07', 'RS-05', 'RS-04', 'RS-06');
 
 it('detecta la discrepancia cuando la matriz autoriza a quien la ruta deniega', function (): void {
     // El control de la prueba de arriba: con el auditor apuntado como si
     // pudiera leer la configuracion, la ruta tiene que salir con su linea. Sin
     // esto, un acumulador que nunca acumulara pasaria en verde.
-    $installation = authorizationMatrixInstallation();
-    $tokens = authorizationMatrixTokens($installation);
-    $tokens[AUTHORIZATION_MATRIX_ADMIN] = $tokens[AUTHORIZATION_MATRIX_AUDITOR];
+    $installation = AuthorizationMatrix::installation();
+    $tokens = AuthorizationMatrix::tokens($installation);
+    $tokens[AuthorizationMatrix::ADMIN] = $tokens[AuthorizationMatrix::AUDITOR];
 
     $discrepancies = authorizationMatrixDiscrepanciesOf('GET api/v1/settings', $installation, $tokens);
 
     expect($discrepancies)->toHaveCount(1)
         ->and($discrepancies[0])->toStartWith('GET api/v1/settings · admin: autorizado, recibido 403');
 })->group('RQ-07');
+
+/*
+ * ---------------------------------------------------------------------------
+ * CADA AMBITO DE UN ACTOR ABRE ALGO (V4-QA-2 de la verificacion de la 2.2.0)
+ * ---------------------------------------------------------------------------
+ *
+ * La matriz fija que recibe cada actor, pero no que cada ambito que lleva en el
+ * token le sirva para algo. Un ambito concedido que ninguna ruta autorizada
+ * consume es una de dos cosas: un permiso de mas que alguien activara sin
+ * querer el dia que una ruta lo pida, o un menu del panel que se enciende con
+ * ese ambito y lleva a un `403` (V2-PA-01: el auditor con `attendance:read` veia
+ * la presencia en el menu y el servidor se la negaba).
+ *
+ * Los ambitos se leen del token que la matriz emite a cada actor
+ * (`PersonalAccessToken::findToken(...)->abilities`), no de una copia escrita
+ * aqui: con la copia, un ambito de mas en el emisor del quiosco, del portal o
+ * de un rol pasaba esta prueba, que seguia mirando la lista de antes.
+ */
+
+/**
+ * Los ambitos que lleva el token de cada actor de la matriz, tal como los
+ * emite el codigo de produccion.
+ *
+ * @return array<string, list<string>>
+ */
+function authorizationMatrixAbilitiesByActor(): array
+{
+    $abilities = [];
+
+    foreach (AuthorizationMatrix::tokens(AuthorizationMatrix::installation()) as $actor => $token) {
+        $abilities[$actor] = array_values(array_map(
+            strval(...),
+            (array) PersonalAccessToken::findToken(authorizationMatrixIssuedByProduction($actor, $token))?->abilities,
+        ));
+    }
+
+    return $abilities;
+}
+
+/**
+ * El token del actor emitido por el emisor de produccion. Los de gestion de
+ * la matriz los crea `ManagementUsers::tokenFor()` a partir de los permisos de
+ * la cuenta; aqui se vuelven a pedir a `AccessTokenIssuer` (el que usa
+ * `POST /auth/login` y el segundo factor), para que un ambito de mas o de
+ * menos en el emisor se vea. El portal y el quiosco ya llegan con el suyo.
+ */
+function authorizationMatrixIssuedByProduction(string $actor, string $token): string
+{
+    $tokenable = PersonalAccessToken::findToken($token)?->tokenable;
+
+    if (! $tokenable instanceof User) {
+        return $token;
+    }
+
+    $account = app(UserAccounts::class)->findByUuid((string) $tokenable->uuid);
+    $issuer = app(AccessTokenIssuer::class);
+
+    if (! $account instanceof AuthenticatedUser) {
+        throw new RuntimeException('La cuenta del actor '.$actor.' no existe para el emisor.');
+    }
+
+    return $actor === AuthorizationMatrix::TWO_FACTOR_PENDING
+        ? $issuer->issuePendingFor($account, 'matriz de autorizacion')->plainTextToken
+        : $issuer->issueFor($account, 'matriz de autorizacion')->plainTextToken;
+}
+
+/**
+ * Las claves de la matriz cuyo middleware `ability:` acepta un ambito
+ * (`CheckForAnyAbility`: la lista separada por comas significa «o»).
+ *
+ * @return list<string>
+ */
+function authorizationMatrixRoutesRequiring(string $ability): array
+{
+    $keys = [];
+
+    foreach (Router::getRoutes()->getRoutes() as $route) {
+        $declared = array_values(array_filter(
+            $route->gatherMiddleware(),
+            static fn (mixed $middleware): bool => \is_string($middleware) && str_starts_with($middleware, 'ability:'),
+        ));
+        $abilities = explode(',', substr((string) ($declared[0] ?? 'ability:'), \strlen('ability:')));
+
+        $keys[] = \in_array($ability, $abilities, true) ? authorizationMatrixKeysOf($route) : [];
+    }
+
+    return array_values(array_unique(array_merge(...$keys)));
+}
+
+/**
+ * Los pares «actor · ambito» que no abren ninguna ruta que la matriz le
+ * autorice a ese actor.
+ *
+ * @param  array<string, list<string>>  $abilitiesByActor
+ * @return list<string>
+ */
+function authorizationMatrixAbilitiesThatOpenNothing(array $abilitiesByActor): array
+{
+    $routes = AuthorizationMatrix::routes();
+    $found = [];
+
+    foreach ($abilitiesByActor as $actor => $abilities) {
+        foreach ($abilities as $ability) {
+            $opened = array_filter(
+                authorizationMatrixRoutesRequiring($ability),
+                static fn (string $key): bool => \in_array($actor, $routes[$key] ?? [], true),
+            );
+            $found[] = $opened === [] ? $actor.' · '.$ability : null;
+        }
+    }
+
+    return array_values(array_filter($found));
+}
+
+it('no concede a ningun actor un ambito que no le abra ninguna ruta', function (): void {
+    // La unica excepcion, a la vista: `audit:read` de `admin`. El contrato lo
+    // dice («Hoy no lo exige ninguna ruta», `openapi.yaml`, `securitySchemes`)
+    // y `SupportScope` lo razona: lo contempla la tabla del doc 02 §7.3 para el
+    // visor del registro de auditoria, que aun no existe. La prueba siguiente
+    // obliga a revisar la excepcion el dia que una ruta lo pida.
+    $excepciones = [AuthorizationMatrix::ADMIN.' · '.TokenAbility::AUDIT_READ->value];
+
+    $sinRuta = authorizationMatrixAbilitiesThatOpenNothing(authorizationMatrixAbilitiesByActor());
+
+    expect(array_values(array_diff($sinRuta, $excepciones)))->toBe(
+        [],
+        'Ambito(s) concedido(s) que no abren ninguna ruta al actor que los lleva: '.implode(', ', array_diff($sinRuta, $excepciones)),
+    )->and($sinRuta)->toBe($excepciones);
+})->group('RQ-07', 'RF-ID-02');
+
+it('mantiene audit:read sin ninguna ruta que lo exija', function (): void {
+    // Si aparece el visor de auditoria, la excepcion de arriba sobra y hay que
+    // decidir quien lo lee, incluido el acceso de soporte `read_only`, que
+    // tambien lleva este ambito (`SupportScope`, ADR-020).
+    expect(authorizationMatrixRoutesRequiring(TokenAbility::AUDIT_READ->value))->toBe([]);
+})->group('RQ-07', 'RF-PD-11');
+
+it('detecta un ambito concedido que no abre nada', function (): void {
+    // El control: con los ambitos del auditor anteriores a la 2.2.1, los dos
+    // que perdio salen en la lista. Sin esto, una funcion que nunca encontrara
+    // nada pasaria la primera prueba.
+    $sinRuta = authorizationMatrixAbilitiesThatOpenNothing([
+        AuthorizationMatrix::AUDITOR => ManagementUsers::legacyAuditorAbilities(),
+    ]);
+
+    expect($sinRuta)->toBe([
+        AuthorizationMatrix::AUDITOR.' · '.TokenAbility::ATTENDANCE_READ->value,
+        AuthorizationMatrix::AUDITOR.' · '.TokenAbility::AUDIT_READ->value,
+    ]);
+})->group('RQ-07', 'RF-ID-02');

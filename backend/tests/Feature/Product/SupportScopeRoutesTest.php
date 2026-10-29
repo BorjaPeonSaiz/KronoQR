@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Route as Router;
 use Illuminate\Support\Str;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
+use Tests\Support\Http\AuthorizationMatrix;
 use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Product\SupportGrants;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -609,3 +610,79 @@ it('no deja al fabricante leer el catalogo de departamentos', function (SupportS
     expect($abiertas)->not->toContain('GET /api/v1/departments')
         ->and($abiertas)->not->toContain('GET /api/v1/departments/{id}');
 })->with(SupportScope::cases())->group('RF-PD-11', 'RL-19', 'RF-ID-03', 'ADR-020');
+
+/*
+ * ---------------------------------------------------------------------------
+ * LAS LECTURAS QUE EL AMBITO NO ALCANZA, PEDIDAS DE VERDAD (A2)
+ * ---------------------------------------------------------------------------
+ *
+ * Todo lo de arriba pide por HTTP solo las lecturas que el ambito de un alcance
+ * alcanza. Las demas se daban por cerradas porque las corta
+ * `CheckForAnyAbility`, y eso era un razonamiento, no una prueba: una ruta
+ * nueva sin `ability:`, o con un ambito que alguien anadiera despues a un
+ * alcance, se las saltaba sin que nada se pusiera rojo.
+ *
+ * Aqui se piden todas, una por una, con el token de cada alcance, y cada una
+ * tiene que responder `403`. Con identificadores que no existen: el middleware
+ * corta antes de buscar nada, y si no cortara, un `404` tambien saldria en la
+ * lista de discrepancias.
+ */
+
+/**
+ * Las rutas de lectura con sesion que el AMBITO de un alcance no alcanza.
+ *
+ * @return list<Route>
+ */
+function supportReadRoutesUnreachableBy(SupportScope $scope): array
+{
+    $alcanzables = supportReadRoutesReachableBy($scope);
+
+    return array_values(array_filter(
+        supportReadRoutes(),
+        static fn (Route $route): bool => \in_array('auth:sanctum', $route->gatherMiddleware(), true)
+            && ! \in_array($route, $alcanzables, true),
+    ));
+}
+
+/**
+ * De las lecturas que el ambito no alcanza, las que no responden la denegacion
+ * esperada, con el estado recibido.
+ *
+ * @return list<string>
+ */
+function supportUnreachableReadsAnsweredWithoutDenial(SupportScope $scope, string $token): array
+{
+    $discrepancias = [];
+
+    // La unica que no es `403`, y lo fija el contrato: `GET /auth/me` solo
+    // tiene `200` y `401`, y un acceso de soporte no es una cuenta de gestion
+    // de la que hablar (`CurrentUserController`). Es el mismo `401` que la
+    // matriz espera ahi del quiosco y del portal.
+    $esperado = ['api/v1/auth/me' => 401];
+
+    foreach (supportReadRoutesUnreachableBy($scope) as $route) {
+        $camino = '/'.str_replace(['{uuid}', '{id}', '{step}'], [AuthorizationMatrix::UUID, '1', 'site'], $route->uri());
+        $status = Api::as($token)->get($camino)->status();
+
+        $discrepancias[] = $status === ($esperado[$route->uri()] ?? 403) ? null : 'GET /'.$route->uri().' -> '.$status;
+    }
+
+    return array_values(array_filter($discrepancias));
+}
+
+it('encuentra lecturas que ningun alcance alcanza por su ambito', function (SupportScope $scope): void {
+    // El control: sin el, la prueba de abajo pasaria sobre una lista vacia.
+    expect(supportReadRoutesUnreachableBy($scope))->not->toBe([]);
+})->with(SupportScope::cases())->group('RF-PD-11');
+
+it('deniega cada lectura que el ambito del alcance no alcanza', function (SupportScope $scope): void {
+    // arrange
+    $token = SupportGrants::tokenFor($scope);
+
+    // act
+    $discrepancias = supportUnreachableReadsAnsweredWithoutDenial($scope, $token);
+
+    // assert
+    expect($discrepancias)->toBe([], 'El alcance '.$scope->value.' no recibe la denegacion esperada en: '
+        .implode(', ', $discrepancias));
+})->with(SupportScope::cases())->group('RF-PD-11', 'RL-19', 'ADR-020');

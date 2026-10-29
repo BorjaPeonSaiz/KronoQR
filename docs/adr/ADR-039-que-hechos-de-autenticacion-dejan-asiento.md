@@ -155,3 +155,26 @@ el asiento `auth.lockout_started`, que lleva el `employee_uuid` y los segundos.
   escritura sin correr.
 - Sabotaje: volver a escribir el asiento del bloqueo en línea tiene que hacer fallar la prueba de
   `500`; añadir el asiento del fallo tiene que hacer fallar las tres pruebas de «cero filas».
+
+## Nota del 28-10-2026 (2.3.0, bloque 22): `/auth/logout` es de la gestión y del soporte
+
+**Decisión del propietario.** `POST /api/v1/auth/logout` solo admite una cuenta de gestión y un
+acceso de soporte; este último sigue recibiendo `204` sin efecto (ADR-020). **Un token de quiosco o
+de portal recibe `403`**, sin asiento, sin línea `auth.logged_out` y con el token intacto
+(`SessionPolicy`).
+
+**Por qué.** Ningún cliente oficial llama a esa ruta con esos tokens: el quiosco no cierra sesión y el
+portal cierra la suya por `POST /api/v1/me/logout`. Admitirlos solo servía a quien tuviera el token
+robado de una tablet, que con una llamada la dejaba sin servicio sin dejar asiento. La credencial de
+un quiosco se retira desvinculándolo desde el panel, que deja `device.revoked` con su actor.
+
+**No cambia la tabla de la decisión, la precisa.** El cierre sigue dejando asiento solo en el canal
+`management`, y el del portal sigue sin asiento por `/me/logout`. Lo que desaparece es un caso que la
+tabla no contemplaba: el cierre de sesión de un dispositivo. Como ya no puede producirse, **no hay
+canal `device` en `AuthChannel` ni asiento ni línea de log para él**. Si algún día un cliente oficial
+necesitara que el quiosco cerrara su propia sesión, eso es una enmienda de este ADR —qué rastro deja y
+con qué actor—, no un caso más en el controlador.
+
+Lo prueban `tests/Feature/Identity/LogoutDenialTest.php` (el `403` del quiosco y del portal sin
+efecto, y la tablet fichando después), `LogoutPolicyTest` y la fila de la ruta en
+`AuthorizationMatrix`.

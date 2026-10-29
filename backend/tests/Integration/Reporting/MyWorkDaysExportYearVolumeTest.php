@@ -22,6 +22,7 @@ use Tests\Support\Identity\PortalLogins;
 use Tests\Support\Reporting\PersonalRecordCsvTable;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Time\Instants;
+use Tests\Support\Time\WallClockBudget;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -163,7 +164,7 @@ function anoCompletoHayChromium(): bool
     return is_executable('/usr/bin/chromium') || is_executable('/usr/bin/chromium-browser');
 }
 
-it('descarga en blanco un año de 1.464 tramos en CSV dentro del presupuesto y cuadrando', function (): void {
+it('descarga en blanco un año de 1.464 tramos en CSV cuadrando y en pocas sentencias', function (): void {
     App::setLocale('es');
     $contexto = anoCompletoDeTramos();
 
@@ -199,11 +200,10 @@ it('descarga en blanco un año de 1.464 tramos en CSV dentro del presupuesto y c
         ->and($minutos)->toBe(203_130)
         // Un año no puede ser una consulta por dia: el mismo techo que el de los
         // noventa dias de `MyWorkDaysVolumeTest`.
-        ->and($sentencias)->toBeLessThan(20)
-        ->and($descarga['seconds'])->toBeLessThan(MY_WORK_DAYS_EXPORT_YEAR_BUDGET_SECONDS);
-})->group('RF-ID-05', 'RL-05', 'RN-06', 'RNF-P-05');
+        ->and($sentencias)->toBeLessThan(20);
+})->group('RF-ID-05', 'RL-05', 'RN-06');
 
-it('descarga en blanco un año de 1.464 tramos en PDF sellado dentro del presupuesto', function (): void {
+it('descarga en blanco un año de 1.464 tramos en PDF sellado, etiquetado y sin cortar', function (): void {
     // El riesgo de PR19: Chromium compone el documento entero antes de devolver
     // los bytes. Se mide con el motor real, no con el doble de feature.
     App::setLocale('es');
@@ -238,6 +238,29 @@ it('descarga en blanco un año de 1.464 tramos en PDF sellado dentro del presupu
         // Y pesa: 4,5 MiB con 4 tramos al dia (4616 KiB medidos en el bloque 23
         // de la 2.2.1), casi todo arbol de estructura. El techo de 5,5 MiB deja
         // ~20 % de margen y avisa si la plantilla engorda.
-        ->and($bytes)->toBeLessThan((int) (5.5 * 1_048_576))
-        ->and($descarga['seconds'])->toBeLessThan(MY_WORK_DAYS_EXPORT_YEAR_SYNC_LIMIT_SECONDS);
-})->group('RF-ID-05', 'RL-05', 'RNF-P-05')->skip(! anoCompletoHayChromium(), 'Chromium no esta instalado en este contenedor.');
+        ->and($bytes)->toBeLessThan((int) (5.5 * 1_048_576));
+})->group('RF-ID-05', 'RL-05')->skip(! anoCompletoHayChromium(), 'Chromium no esta instalado en este contenedor.');
+
+/*
+ * El tiempo de las dos descargas, en la suite nocturna de rendimiento (D4): la
+ * mediana de varias pasadas sobre el mismo año sembrado. En la de integracion,
+ * una sola descarga contra el reloj fallaba cuando el runner iba cargado.
+ */
+it('descarga en blanco el año en CSV dentro del objetivo sincrono de RNF-P-05, en mediana', function (): void {
+    App::setLocale('es');
+    $contexto = anoCompletoDeTramos();
+
+    $muestras = WallClockBudget::samples(static fn (): float => descargarAnoEnBlanco($contexto['token'], [])['seconds']);
+
+    WallClockBudget::expectMedianBelow($muestras, MY_WORK_DAYS_EXPORT_YEAR_BUDGET_SECONDS, 'RNF-P-05');
+})->group('RNF-P-05', 'performance');
+
+it('descarga en blanco el año en PDF por debajo de la frontera del diferido de RNF-P-05, en mediana', function (): void {
+    App::setLocale('es');
+    config()->set('reporting.pdf.tagged', false);
+    $contexto = anoCompletoDeTramos();
+
+    $muestras = WallClockBudget::samples(static fn (): float => descargarAnoEnBlanco($contexto['token'], ['format' => 'pdf'])['seconds']);
+
+    WallClockBudget::expectMedianBelow($muestras, MY_WORK_DAYS_EXPORT_YEAR_SYNC_LIMIT_SECONDS, 'RNF-P-05');
+})->group('RNF-P-05', 'performance')->skip(! anoCompletoHayChromium(), 'Chromium no esta instalado en este contenedor.');

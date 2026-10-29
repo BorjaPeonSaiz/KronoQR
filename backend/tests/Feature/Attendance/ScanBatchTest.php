@@ -112,7 +112,7 @@ it('procesa el lote en orden de occurred_at aunque llegue del reves', function (
 
     $respuesta = sincronizar($escenario, [$salida, $entrada]);
 
-    $respuesta->assertStatus(207)->assertValidRequest()->assertValidResponse();
+    $respuesta->assertStatus(207)->assertValidRequest()->assertValidResponse(207);
 
     // Los resultados vienen en el orden en que se procesaron, no en el que se
     // enviaron: el contrato lo promete y aqui se comprueba.
@@ -138,7 +138,7 @@ it('registra el occurred_at original y no la hora de llegada', function (): void
 
     $respuesta = sincronizar($escenario, [escaneoEncolado('2026-03-14T07:02:31Z')]);
 
-    $respuesta->assertStatus(207)->assertValidResponse();
+    $respuesta->assertStatus(207)->assertValidResponse(207);
 
     $tramo = DB::table('shift_entries')->first();
     $evento = DB::table('scan_events')->first();
@@ -160,7 +160,7 @@ it('devuelve un 207 aunque todos los elementos se acepten', function (): void {
 
     sincronizar($escenario, [escaneoEncolado('2026-03-14T07:02:31Z')])
         ->assertStatus(207)
-        ->assertValidResponse();
+        ->assertValidResponse(207);
 })->group('RF-KI-04', 'RQ-06');
 
 it('no deja que un elemento rechazado invalide el lote', function (): void {
@@ -174,7 +174,7 @@ it('no deja que un elemento rechazado invalide el lote', function (): void {
         escaneoEncolado('2026-03-14T15:03:12Z'),
     ]);
 
-    $respuesta->assertStatus(207)->assertValidResponse();
+    $respuesta->assertStatus(207)->assertValidResponse(207);
 
     expect($respuesta->json('results.0.status'))->toBe(200)
         ->and($respuesta->json('results.1.status'))->toBe(422)
@@ -199,7 +199,7 @@ it('no revela la causa del rechazo de un elemento', function (): void {
 
     $respuesta = sincronizar($escenario, [$revocada, $inventada]);
 
-    $respuesta->assertStatus(207)->assertValidResponse();
+    $respuesta->assertStatus(207)->assertValidResponse(207);
 
     /** @var array<string, mixed> $primero */
     $primero = $respuesta->json('results.0.outcome');
@@ -230,7 +230,7 @@ it('devuelve el anti-rebote como desenlace aceptado dentro del lote', function (
         escaneoEncolado('2026-03-14T07:02:51Z'),
     ]);
 
-    $respuesta->assertStatus(207)->assertValidResponse();
+    $respuesta->assertStatus(207)->assertValidResponse(207);
 
     expect($respuesta->json('results.0.outcome.action'))->toBe('clock_in')
         ->and($respuesta->json('results.1.status'))->toBe(200)
@@ -255,8 +255,8 @@ it('devuelve la respuesta original al reenviar el mismo lote', function (): void
     $primera = sincronizar($escenario, $scans);
     $segunda = sincronizar($escenario, $scans);
 
-    $primera->assertStatus(207)->assertValidResponse();
-    $segunda->assertStatus(207)->assertValidResponse();
+    $primera->assertStatus(207)->assertValidResponse(207);
+    $segunda->assertStatus(207)->assertValidResponse(207);
 
     expect($segunda->json('results'))->toBe($primera->json('results'))
         ->and(DB::table('shift_entries')->count())->toBe(1)
@@ -277,7 +277,7 @@ it('deduplica tambien un lote que solapa con otro ya enviado', function (): void
 
     $segunda = sincronizar($escenario, [$entrada, $salida]);
 
-    $segunda->assertStatus(207)->assertValidResponse();
+    $segunda->assertStatus(207)->assertValidResponse(207);
 
     expect($segunda->json('results.0.outcome.action'))->toBe('clock_in')
         ->and($segunda->json('results.1.outcome.action'))->toBe('clock_out')
@@ -295,7 +295,7 @@ it('devuelve el mismo resultado para un scan_id repetido dentro del mismo lote',
 
     $respuesta = sincronizar($escenario, [$escaneo, $escaneo]);
 
-    $respuesta->assertStatus(207)->assertValidResponse();
+    $respuesta->assertStatus(207)->assertValidResponse(207);
 
     expect($respuesta->json('results.0.outcome'))->toBe($respuesta->json('results.1.outcome'))
         ->and(DB::table('scan_events')->count())->toBe(1)
@@ -317,7 +317,7 @@ it('rechaza el lote entero si un elemento no cumple el contrato', function (): v
         escaneoEncolado('2026-03-14T09:00:00+02:00'),
     ]);
 
-    $respuesta->assertStatus(400)->assertValidResponse();
+    $respuesta->assertStatus(400)->assertValidResponse(400);
 
     expect($respuesta->json('type'))->toBe('urn:kronoqr:problem:invalid-request')
         // Y no se registra NADA: el lote no se proceso a medias.
@@ -333,7 +333,7 @@ it('rechaza un lote de mas de cincuenta escaneos', function (): void {
         $scans[] = escaneoEncolado(sprintf('2026-03-14T%02d:%02d:00Z', 6 + intdiv($i, 60), $i % 60));
     }
 
-    sincronizar($escenario, $scans)->assertStatus(400)->assertValidResponse();
+    sincronizar($escenario, $scans)->assertStatus(400)->assertValidResponse(400);
 
     expect(DB::table('scan_events')->count())->toBe(0);
 })->group('RF-KI-04');
@@ -341,7 +341,7 @@ it('rechaza un lote de mas de cincuenta escaneos', function (): void {
 it('rechaza un lote vacio', function (): void {
     $escenario = escenarioDeLote();
 
-    sincronizar($escenario, [])->assertStatus(400)->assertValidResponse();
+    sincronizar($escenario, [])->assertStatus(400)->assertValidResponse(400);
 })->group('RF-KI-04');
 
 it('rechaza un campo desconocido dentro de un elemento', function (): void {
@@ -355,7 +355,7 @@ it('rechaza un campo desconocido dentro de un elemento', function (): void {
 
     $respuesta = sincronizar($escenario, [$escaneo]);
 
-    $respuesta->assertStatus(400)->assertValidResponse();
+    $respuesta->assertStatus(400)->assertValidResponse(400);
 
     expect($respuesta->json('errors'))->toHaveKey('scans.0.device_id');
 })->group('RQ-06', 'RS-04');
@@ -414,7 +414,7 @@ it('atribuye igual una pausa encolada que una en linea, aunque llegue del reves'
 
     $respuesta = sincronizar($escenario, [$salida, $vuelta, $pausa, $entrada]);
 
-    $respuesta->assertStatus(207)->assertValidRequest()->assertValidResponse();
+    $respuesta->assertStatus(207)->assertValidRequest()->assertValidResponse(207);
 
     expect(array_column((array) $respuesta->json('results'), 'scan_id'))
         ->toBe([$entrada['scan_id'], $pausa['scan_id'], $vuelta['scan_id'], $salida['scan_id']])
@@ -470,7 +470,7 @@ it('aplaza la salida si la entrada no se pudo procesar y las registra en orden a
 
     $primera = sincronizar($escenario, [$salida, $entrada]);
 
-    $primera->assertStatus(207)->assertValidRequest()->assertValidResponse();
+    $primera->assertStatus(207)->assertValidRequest()->assertValidResponse(207);
 
     expect($primera->json('results.0.scan_id'))->toBe($entrada['scan_id'])
         ->and($primera->json('results.0.status'))->toBe(503)
@@ -485,7 +485,7 @@ it('aplaza la salida si la entrada no se pudo procesar y las registra en orden a
 
     $reenvio = sincronizar($escenario, [$salida, $entrada]);
 
-    $reenvio->assertStatus(207)->assertValidResponse();
+    $reenvio->assertStatus(207)->assertValidResponse(207);
 
     expect($reenvio->json('results.0.outcome.action'))->toBe('clock_in')
         ->and($reenvio->json('results.1.outcome.action'))->toBe('clock_out')
@@ -512,7 +512,7 @@ it('deja en error_events el fallo del elemento no procesado, sin datos personale
 
     sincronizar($escenario, [escaneoEncolado('2026-03-14T07:00:00Z')])
         ->assertStatus(207)
-        ->assertValidResponse();
+        ->assertValidResponse(207);
 
     $fila = DB::table('error_events')->where('exception_class', RuntimeException::class)->first();
 
@@ -566,7 +566,7 @@ it('con la conexion cortada en el tercer elemento responde el lote parcial sin f
             escaneoEncolado('2026-03-14T16:00:00Z'),
         ]);
 
-        $respuesta->assertStatus(207)->assertValidResponse();
+        $respuesta->assertStatus(207)->assertValidResponse(207);
 
         $peticion = array_values(array_filter(
             $tracer->finishedSpans(),

@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Identity\Credentials;
 use Tests\Support\Time\Samples;
+use Tests\Support\Time\WallClockBudget;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -199,52 +200,61 @@ it('hace el mismo trabajo en un rechazo que en una aceptacion', function (): voi
     expect($rechazado)->toBe($aceptado);
 })->group('RS-03');
 
-it('consume el mismo tiempo en los siete rechazos', function (): void {
-    // La comprobacion que exige el §9.4: «medir que los cuatro rechazos consumen
-    // el mismo tiempo». El suelo configurado —25 ms de serie— absorbe la
-    // varianza de PostgreSQL, que es lo que sin el hace que un acierto de indice
-    // y un fallo de indice se distingan con suficientes muestras.
+/**
+ * La mediana de lo que tarda cada uno de los siete rechazos, en milisegundos.
+ *
+ * Intercaladas y no en bloques: si la maquina se ralentiza a mitad de la
+ * prueba —otra prueba, el recolector, la CI— el sesgo cae por igual sobre los
+ * siete casos en vez de sobre el que se estuviera midiendo.
+ *
+ * @return non-empty-array<string, float>
+ */
+function constantTimeRejectionMedians(): array
+{
     $resolver = app(CredentialResolver::class);
     $casos = fourRejections();
-    $suelo = Config::integer('security.rejection_floor_ms');
-
-    expect($suelo)->toBeGreaterThan(0, 'La suite tiene el suelo de RS-03 desactivado.');
 
     /** @var array<string, list<float>> $muestras */
     $muestras = array_fill_keys(array_keys($casos), []);
 
-    // Intercaladas y no en bloques: si la maquina se ralentiza a mitad de la
-    // prueba —otra prueba, el recolector, la CI— el sesgo cae por igual sobre
-    // los cinco casos en vez de sobre el que se estuviera midiendo.
     for ($ronda = 0; $ronda < 12; $ronda++) {
         foreach ($casos as $caso => $payload) {
-            $inicio = hrtime(true);
-            $resolver->resolve($payload);
-            $muestras[$caso][] = (hrtime(true) - $inicio) / 1_000_000;
+            $muestras[$caso][] = WallClockBudget::seconds(static fn () => $resolver->resolve($payload)) * 1000;
         }
     }
 
     /** @var non-empty-array<string, float> $medianas */
     $medianas = array_map(Samples::median(...), $muestras);
 
-    foreach ($medianas as $caso => $mediana) {
-        expect($mediana)->toBeGreaterThanOrEqual(
-            $suelo * 0.9,
-            "El caso «{$caso}» ha tardado {$mediana} ms, por debajo del suelo de {$suelo} ms."
-        );
-    }
+    return $medianas;
+}
 
-    // Banda de 10 ms entre la mediana mas rapida y la mas lenta. No es cero
-    // —esto corre en un contenedor compartido con PostgreSQL— pero es un orden
-    // de magnitud menor que lo que hace falta para distinguir dos casos con un
-    // numero razonable de muestras a traves de la red.
-    $dispersion = max($medianas) - min($medianas);
+it('no deja ninguno de los siete rechazos por debajo del suelo de tiempo configurado', function (): void {
+    // El suelo configurado —25 ms de serie— absorbe la varianza de PostgreSQL,
+    // que es lo que sin el hace que un acierto de indice y un fallo de indice
+    // se distingan con suficientes muestras. Es un SUELO: una maquina cargada
+    // solo puede alejar la medida de el, asi que esta prueba no depende de la
+    // carga y se queda en la suite de integracion.
+    $suelo = Config::integer('security.rejection_floor_ms');
 
-    expect($dispersion)->toBeLessThan(
-        10.0,
-        'Los rechazos se distinguen por tiempo: '.json_encode(array_map(
-            static fn (float $ms): float => round($ms, 2),
-            $medianas,
-        ))
-    );
+    expect($suelo)->toBeGreaterThan(0, 'La suite tiene el suelo de RS-03 desactivado.');
+
+    $lentos = array_filter(constantTimeRejectionMedians(), static fn (float $mediana): bool => $mediana < $suelo * 0.9);
+
+    expect($lentos)->toBe([], "Rechazos por debajo del suelo de {$suelo} ms: ".json_encode($lentos));
 })->group('RS-03', 'RS-02', 'RF-QR-02', 'RF-QR-07');
+
+it('consume el mismo tiempo en los siete rechazos', function (): void {
+    // La comprobacion que exige el §9.4: «medir que los cuatro rechazos consumen
+    // el mismo tiempo». Banda de 10 ms entre la mediana mas rapida y la mas
+    // lenta. No es cero —esto corre en un contenedor compartido con
+    // PostgreSQL— pero es un orden de magnitud menor que lo que hace falta para
+    // distinguir dos casos con un numero razonable de muestras a traves de la
+    // red. En la suite nocturna de rendimiento (D4): la banda es de reloj, y
+    // una maquina cargada la ensancha sin que el producto haya cambiado.
+    $medianas = constantTimeRejectionMedians();
+
+    fwrite(STDERR, 'RS-03 rechazos (ms): '.json_encode(array_map(static fn (float $ms): float => round($ms, 2), $medianas))."\n");
+
+    WallClockBudget::expectBelow(max($medianas) - min($medianas), 10.0, 'RS-03', 'ms');
+})->group('RS-03', 'RS-02', 'RF-QR-02', 'RF-QR-07', 'performance');

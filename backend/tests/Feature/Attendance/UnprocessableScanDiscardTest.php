@@ -194,7 +194,7 @@ it('descarta en el lote el elemento que falla diez veces durante una hora y proc
 
         $respuesta = loteDeDescarte($escenario, [$entrada, $salida]);
 
-        $respuesta->assertStatus(207)->assertValidResponse();
+        $respuesta->assertStatus(207)->assertValidResponse(207);
 
         expect($respuesta->json('results.0.outcome.type'))->toBe('urn:kronoqr:problem:scan-not-processed')
             ->and($respuesta->json('results.1.outcome.type'))->toBe('urn:kronoqr:problem:scan-held-back');
@@ -229,7 +229,7 @@ it('descarta en el lote el elemento que falla diez veces durante una hora y proc
 
     $decimo = loteDeDescarte($escenario, [$entrada, $salida]);
 
-    $decimo->assertStatus(207)->assertValidResponse();
+    $decimo->assertStatus(207)->assertValidResponse(207);
 
     expect($decimo->json('results.0.scan_id'))->toBe($entrada['scan_id'])
         ->and($decimo->json('results.0.status'))->toBe(422)
@@ -295,7 +295,7 @@ it('sigue conservando con diez intentos si no ha pasado la hora', function (): v
 
     $respuesta = loteDeDescarte($escenario, [$entrada]);
 
-    $respuesta->assertStatus(207)->assertValidResponse();
+    $respuesta->assertStatus(207)->assertValidResponse(207);
 
     expect($respuesta->json('results.0.status'))->toBe(503)
         ->and($respuesta->json('results.0.outcome.type'))->toBe('urn:kronoqr:problem:scan-not-processed')
@@ -314,7 +314,7 @@ it('no descarta con el cupo del quiosco agotado y avisa de ello', function (): v
 
     $respuesta = loteDeDescarte($escenario, [$entrada]);
 
-    $respuesta->assertStatus(207)->assertValidResponse();
+    $respuesta->assertStatus(207)->assertValidResponse(207);
 
     expect($respuesta->json('results.0.status'))->toBe(503)
         ->and(DB::table('scan_events')->count())->toBe(0)
@@ -344,7 +344,7 @@ it('no cuenta una dependencia caida aunque falle cien veces', function (): void 
     $entrada = fichajeDeDescarte('2026-03-14T07:00:00Z');
     sembrarFallos($escenario['device'], $entrada['scan_id'], hash('sha256', DESCARTE_TARJETA), 20, 120);
 
-    loteDeDescarte($escenario, [$entrada])->assertStatus(207)->assertValidResponse();
+    loteDeDescarte($escenario, [$entrada])->assertStatus(207)->assertValidResponse(207);
 
     // Ni un apunte mas: la caida de ADR-059 no es un veneno.
     expect(DB::table('scan_processing_failures')->where('scan_id', $entrada['scan_id'])->count())->toBe(20)
@@ -387,7 +387,7 @@ it('responde 500 por /scan dentro de la ventana y 422 scan-discarded al cumplirl
     $respuesta->assertStatus(422)
         ->assertHeader('Content-Type', 'application/problem+json')
         ->assertValidRequest()
-        ->assertValidResponse();
+        ->assertValidResponse(422);
 
     expect($respuesta->json())->toBe([
         'type' => DESCARTE_TIPO,
@@ -418,8 +418,8 @@ it('repite el mismo 422 byte a byte por /scan y por el lote sin volver a procesa
     $reenvio = escaneoSueltoDeDescarte($escenario, $escaneo);
     $lote = loteDeDescarte($escenario, [$escaneo]);
 
-    $reenvio->assertStatus(422)->assertValidResponse();
-    $lote->assertStatus(207)->assertValidResponse();
+    $reenvio->assertStatus(422)->assertValidResponse(422);
+    $lote->assertStatus(207)->assertValidResponse(207);
 
     expect($reenvio->getContent())->toBe($original->getContent())
         ->and($lote->json('results.0.status'))->toBe(422)
@@ -500,7 +500,7 @@ it('descarta por /scan/pin con la misma regla y el mismo cuerpo', function (): v
         ->withHeaders(['Idempotency-Key' => $scanId])
         ->post('/api/v1/scan/pin', $cuerpo);
 
-    $respuesta->assertStatus(422)->assertValidRequest()->assertValidResponse();
+    $respuesta->assertStatus(422)->assertValidRequest()->assertValidResponse(422);
 
     expect($respuesta->json('type'))->toBe(DESCARTE_TIPO)
         ->and(DB::table('scan_events')->where('scan_id', $scanId)->value('origin'))->toBe('pin_kiosk')

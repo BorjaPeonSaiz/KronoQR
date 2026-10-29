@@ -533,6 +533,20 @@ it('no deja que el plazo vigente del perfil convierta en sospechosa una purga le
         ->and(WorkRecordPurgeBoundary::violations($purga, new DateTimeImmutable('2031-01-01T00:00:00Z'), 5))->toBe(['retention_years']);
 })->group('RS-14', 'RL-02');
 
+it('admite la purga justo en el limite de cada condicion y la rechaza un paso mas alla', function (AuditedPurge $purga, string $pasada, int $suelo, array $incumple): void {
+    // V2-QB-3: los valores frontera de ADR-057 §4, escritos tal cual. Una purga
+    // con los años exactos del suelo legal, o escrita en el mismo instante de la
+    // pasada, es la purga real; un año o un microsegundo mas alla, no.
+    expect(WorkRecordPurgeBoundary::violations($purga, new DateTimeImmutable($pasada), $suelo))->toBe($incumple);
+})->with([
+    'plazo igual al suelo' => [new AuditedPurge(90, new DateTimeImmutable('2030-10-08T05:00:00Z'), '2026-10-08', 4, 1), '2031-01-01T00:00:00Z', 4, []],
+    'plazo un año bajo el suelo' => [new AuditedPurge(90, new DateTimeImmutable('2030-10-08T05:00:00Z'), '2027-10-08', 3, 1), '2031-01-01T00:00:00Z', 4, ['retention_years']],
+    'escrita en el instante de la pasada' => [new AuditedPurge(90, new DateTimeImmutable('2030-10-08T05:00:00Z'), '2026-10-08', 4, 1), '2030-10-08T05:00:00Z', 4, []],
+    'escrita un microsegundo despues de la pasada' => [new AuditedPurge(90, new DateTimeImmutable('2030-10-08T05:00:00.000001Z'), '2026-10-08', 4, 1), '2030-10-08T05:00:00Z', 4, ['occurred_at']],
+    'corte igual al que permite el plazo' => [new AuditedPurge(90, new DateTimeImmutable('2030-10-08T23:59:59Z'), '2026-10-08', 4, 1), '2031-01-01T00:00:00Z', 4, []],
+    'corte un dia despues del que permite el plazo' => [new AuditedPurge(90, new DateTimeImmutable('2030-10-08T23:59:59Z'), '2026-10-09', 4, 1), '2031-01-01T00:00:00Z', 4, ['cutoff_date']],
+])->group('RS-14', 'RL-02', 'RS-07');
+
 // --- Piezas -----------------------------------------------------------------
 
 it('cuenta los minutos del asiento con la regla unica del registro', function (string $salida, int $minutos): void {

@@ -7,6 +7,8 @@ use App\Modules\Shared\Application\Port\PinAttempts;
 use App\Modules\Shared\Domain\ValueObject\PinOrigin;
 use App\Modules\Shared\Infrastructure\Adapter\CachePinAttempts;
 use Illuminate\Contracts\Cache\Repository as Cache;
+use Illuminate\Testing\TestResponse;
+use Symfony\Component\HttpFoundation\Response;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\PortalLogins;
@@ -101,6 +103,24 @@ function fallaEnElPortal(string $codigo): void
 }
 
 /**
+ * El acceso con el PIN BUENO en un instante: lo que se ve desde fuera de un
+ * bloqueo. Mientras dura, ni el PIN correcto entra (`401`); cuando termina,
+ * entra (`200`).
+ *
+ * @return TestResponse<Response>
+ */
+function entraEnElPortalEn(string $codigo, string $instante): TestResponse
+{
+    FrozenTime::at($instante);
+    app()->forgetInstance(PinAttempts::class);
+
+    return Api::guest()->post('/api/v1/me/login', [
+        'employee_code' => $codigo,
+        'pin' => PortalLogins::PIN,
+    ]);
+}
+
+/**
  * El mismo intento, pero con el reloj del servidor puesto en un instante.
  *
  * **Hay que olvidar la instancia del contador ademas de sustituir el `Clock`**:
@@ -185,52 +205,83 @@ it('deja intentarlo en el portal a quien esta bloqueado en el quiosco', function
     ])->assertStatus(200);
 })->group('RS-12', 'RF-AT-11', 'RF-ID-06');
 
-it('escala el bloqueo del portal en los tres escalones', function (): void {
-    // 3 -> 5 min, 5 -> 15 min, 10 -> 60 min (§7.5), todo por el endpoint real.
-    //
-    // **Los fallos hay que repartirlos en el tiempo, y esa es la mitad de la
-    // prueba.** Un empleado bloqueado NO acumula intentos: el verificador
-    // devuelve «bloqueado» sin llegar a comparar el PIN, asi que insistir
-    // durante el castigo no acerca al escalon siguiente. Para llegar a diez
-    // fallos hay que esperar a que cada bloqueo termine, que es exactamente el
-    // coste que el escalado impone a quien esta probando PIN — y por eso barrer
-    // un espacio de 10^6 es inviable.
+/*
+ * LOS TRES ESCALONES, POR HTTP (A8 de la 2.1.0): 3 fallos -> 5 min, 5 -> 15 min,
+ * 10 -> 60 min (§7.5). Cada escalon se mira como lo ve quien intenta entrar: con
+ * el PIN bueno, un segundo antes de que acabe el castigo (`401`) y un segundo
+ * despues (`200`). Una prueba por escalon, porque el acierto del final limpia el
+ * contador.
+ *
+ * **Los fallos se reparten en el tiempo, y esa es la mitad de la prueba.** Un
+ * empleado bloqueado NO acumula intentos: el verificador devuelve «bloqueado»
+ * sin llegar a comparar el PIN, asi que insistir durante el castigo no acerca al
+ * escalon siguiente. Para llegar a diez fallos hay que esperar a que cada
+ * bloqueo termine, que es el coste que el escalado impone a quien esta probando
+ * PIN — y por eso barrer un espacio de 10^6 es inviable.
+ */
+
+it('cierra el portal cinco minutos tras el tercer fallo, ni un segundo mas', function (): void {
     $empleado = empleadoParaBloqueo();
 
-    // Tres fallos seguidos: escalon 1, cinco minutos.
     fallaEnElPortalEn($empleado['code'], '2026-03-14 08:00:00');
     fallaEnElPortalEn($empleado['code'], '2026-03-14 08:00:01');
     fallaEnElPortalEn($empleado['code'], '2026-03-14 08:00:02');
 
-    expect(contadorDelPortalEn('2026-03-14 08:05:01')->isLocked($empleado['uuid'], PinOrigin::PORTAL))->toBeTrue()
-        ->and(contadorDelPortalEn('2026-03-14 08:05:03')->isLocked($empleado['uuid'], PinOrigin::PORTAL))->toBeFalse();
+    entraEnElPortalEn($empleado['code'], '2026-03-14 08:05:01')->assertStatus(401);
+    entraEnElPortalEn($empleado['code'], '2026-03-14 08:05:03')->assertStatus(200);
+})->group('RS-12', 'RF-ID-06');
 
-    // Cuarto fallo pasado el castigo: sigue en el escalon 1, otros cinco
-    // minutos. Quinto fallo pasado ESE castigo: escalon 2, quince minutos.
+it('cierra el portal quince minutos tras el quinto fallo, ni un segundo mas', function (): void {
+    $empleado = empleadoParaBloqueo();
+
+    fallaEnElPortalEn($empleado['code'], '2026-03-14 08:00:00');
+    fallaEnElPortalEn($empleado['code'], '2026-03-14 08:00:01');
+    fallaEnElPortalEn($empleado['code'], '2026-03-14 08:00:02');
+    // Cuarto fallo pasado el castigo: sigue en el escalon 1. Quinto pasado ESE
+    // castigo: escalon 2.
     fallaEnElPortalEn($empleado['code'], '2026-03-14 08:05:04');
     fallaEnElPortalEn($empleado['code'], '2026-03-14 08:10:05');
 
-    expect(contadorDelPortalEn('2026-03-14 08:25:04')->isLocked($empleado['uuid'], PinOrigin::PORTAL))->toBeTrue()
-        ->and(contadorDelPortalEn('2026-03-14 08:25:06')->isLocked($empleado['uuid'], PinOrigin::PORTAL))->toBeFalse();
-
-    // Del sexto al decimo, cada uno esperando sus quince minutos: escalon 3, una
-    // hora.
-    foreach ([
-        '2026-03-14 08:25:07',
-        '2026-03-14 08:40:08',
-        '2026-03-14 08:55:09',
-        '2026-03-14 09:10:10',
-        '2026-03-14 09:25:11',
-    ] as $instante) {
-        fallaEnElPortalEn($empleado['code'], $instante);
-    }
-
-    expect(contadorDelPortalEn('2026-03-14 10:25:10')->isLocked($empleado['uuid'], PinOrigin::PORTAL))->toBeTrue()
-        ->and(contadorDelPortalEn('2026-03-14 10:25:12')->isLocked($empleado['uuid'], PinOrigin::PORTAL))->toBeFalse()
-        // Y el contador del quiosco sigue a cero despues de diez fallos en el
-        // portal: sondear una puerta no cierra la otra (§7.5, regla dura 19).
-        ->and(contadorDelPortalEn('2026-03-14 10:00:00')->isLocked($empleado['uuid'], PinOrigin::KIOSK))->toBeFalse();
+    entraEnElPortalEn($empleado['code'], '2026-03-14 08:25:04')->assertStatus(401);
+    entraEnElPortalEn($empleado['code'], '2026-03-14 08:25:06')->assertStatus(200);
 })->group('RS-12', 'RF-ID-06');
+
+it('cierra el portal una hora tras el decimo fallo, ni un segundo mas', function (): void {
+    $empleado = empleadoParaBloqueo();
+
+    fallaEnElPortalEn($empleado['code'], '2026-03-14 08:00:00');
+    fallaEnElPortalEn($empleado['code'], '2026-03-14 08:00:01');
+    fallaEnElPortalEn($empleado['code'], '2026-03-14 08:00:02');
+    fallaEnElPortalEn($empleado['code'], '2026-03-14 08:05:04');
+    fallaEnElPortalEn($empleado['code'], '2026-03-14 08:10:05');
+    // Del sexto al decimo, cada uno esperando sus quince minutos.
+    fallaEnElPortalEn($empleado['code'], '2026-03-14 08:25:07');
+    fallaEnElPortalEn($empleado['code'], '2026-03-14 08:40:08');
+    fallaEnElPortalEn($empleado['code'], '2026-03-14 08:55:09');
+    fallaEnElPortalEn($empleado['code'], '2026-03-14 09:10:10');
+    fallaEnElPortalEn($empleado['code'], '2026-03-14 09:25:11');
+
+    entraEnElPortalEn($empleado['code'], '2026-03-14 10:25:10')->assertStatus(401);
+    entraEnElPortalEn($empleado['code'], '2026-03-14 10:25:12')->assertStatus(200);
+})->group('RS-12', 'RF-ID-06');
+
+it('deja el contador del quiosco a cero despues de diez fallos en el portal', function (): void {
+    // Sondear una puerta no cierra la otra (§7.5, regla dura 19).
+    $empleado = empleadoParaBloqueo();
+
+    fallaEnElPortalEn($empleado['code'], '2026-03-14 08:00:00');
+    fallaEnElPortalEn($empleado['code'], '2026-03-14 08:00:01');
+    fallaEnElPortalEn($empleado['code'], '2026-03-14 08:00:02');
+    fallaEnElPortalEn($empleado['code'], '2026-03-14 08:05:04');
+    fallaEnElPortalEn($empleado['code'], '2026-03-14 08:10:05');
+    fallaEnElPortalEn($empleado['code'], '2026-03-14 08:25:07');
+    fallaEnElPortalEn($empleado['code'], '2026-03-14 08:40:08');
+    fallaEnElPortalEn($empleado['code'], '2026-03-14 08:55:09');
+    fallaEnElPortalEn($empleado['code'], '2026-03-14 09:10:10');
+    fallaEnElPortalEn($empleado['code'], '2026-03-14 09:25:11');
+
+    expect(contadorDelPortalEn('2026-03-14 10:00:00')->isLocked($empleado['uuid'], PinOrigin::KIOSK))->toBeFalse();
+})->group('RS-12', 'RF-ID-06', 'RF-AT-11');
 
 it('no anuncia el bloqueo ni con el codigo de estado ni con Retry-After', function (): void {
     // RS-03 y regla dura 17. Un `429` con `Retry-After` aqui —que es lo que hace
@@ -269,23 +320,11 @@ it('limita las peticiones por origen ademas de contar los fallos por empleado', 
 
     config()->set('identity.portal.rate_limit_per_minute', 3);
 
-    $codigos = [];
-
-    for ($intento = 1; $intento <= 4; $intento++) {
-        // Codigo distinto en cada peticion: sin esto, lo que cortaria seria el
-        // limite por codigo y no el de IP, y la prueba no distinguiria cual de
-        // los dos actuo.
-        $codigos[] = 'ENOEXISTE'.$intento;
-    }
-
-    $estados = [];
-
-    foreach ($codigos as $codigo) {
-        $estados[] = Api::guest()->post('/api/v1/me/login', [
-            'employee_code' => $codigo,
-            'pin' => '000999',
-        ])->getStatusCode();
-    }
-
-    expect($estados)->toBe([401, 401, 401, 429]);
+    // Codigo distinto en cada peticion: sin esto, lo que cortaria seria el
+    // limite por codigo y no el de IP, y la prueba no distinguiria cual de los
+    // dos actuo.
+    Api::guest()->post('/api/v1/me/login', ['employee_code' => 'ENOEXISTE1', 'pin' => '000999'])->assertStatus(401);
+    Api::guest()->post('/api/v1/me/login', ['employee_code' => 'ENOEXISTE2', 'pin' => '000999'])->assertStatus(401);
+    Api::guest()->post('/api/v1/me/login', ['employee_code' => 'ENOEXISTE3', 'pin' => '000999'])->assertStatus(401);
+    Api::guest()->post('/api/v1/me/login', ['employee_code' => 'ENOEXISTE4', 'pin' => '000999'])->assertStatus(429);
 })->group('RS-12', 'RS-02', 'RF-ID-06');
