@@ -257,7 +257,9 @@ return [
      * framework.
      */
     'measured_off_ci' => [
+        'RNF-P-02' => 'make load-test en el hardware de referencia del doc 02 §11.6.2, modo threshold. En el runner solo se compara con la línea base, en unidades de velocidad de la máquina (doc 02 §10.1)',
         'RNF-P-06' => 'make load-test INSTANCES=10 en el hardware de referencia del doc 02 §11.6.2, modo threshold. Nunca se ha medido (K6-1, doc 07 A-11): hasta entonces es un objetivo de diseño',
+        'RNF-P-08' => 'make load-test en el hardware de referencia del doc 02 §11.6.2, modo threshold. Cifras estimadas, a confirmar cuando se midan allí (doc 01 §RNF-P-08); en el runner solo se compara con la línea base',
     ],
 
 ];
