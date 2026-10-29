@@ -449,14 +449,46 @@ async function readJson<T>(
   deadline: Deadline | null,
   readBody?: (response: Response) => Promise<unknown>,
 ): Promise<T> {
+  // Un `readBody` que cede el cuerpo a otro hilo (un Worker) no se entera del aborto de la
+  // peticion: el plazo se hace valer aqui, compitiendo con la lectura, para que cubra de verdad
+  // la lectura y no solo las cabeceras.
+  let stopWatching = (): void => {}
+
   try {
-    return (await (readBody === undefined ? response.json() : readBody(response))) as T
+    const reading = readBody === undefined ? response.json() : readBody(response)
+
+    if (deadline === null || readBody === undefined) {
+      return (await reading) as T
+    }
+
+    const expired = new Promise<never>((_, reject) => {
+      const onAbort = (): void => {
+        // Si fue el plazo, el `catch` de abajo lo convierte en `timeout`; si fue el llamante, queda aborto.
+        reject(new DOMException('aborted', 'AbortError'))
+      }
+
+      if (deadline.signal.aborted) {
+        onAbort()
+      } else {
+        deadline.signal.addEventListener('abort', onAbort, { once: true })
+        stopWatching = () => {
+          deadline.signal.removeEventListener('abort', onAbort)
+        }
+      }
+    })
+
+    // La lectura abandonada puede fallar despues: no es un rechazo sin atender.
+    reading.catch(() => {})
+
+    return (await Promise.race([reading, expired])) as T
   } catch (failure) {
     if (deadline?.timedOut === true) {
       throw new ApiError({ kind: 'timeout', status: 0 })
     }
 
     throw failure
+  } finally {
+    stopWatching()
   }
 }
 
