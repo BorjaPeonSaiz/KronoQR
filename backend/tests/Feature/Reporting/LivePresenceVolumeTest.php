@@ -39,19 +39,24 @@ use Tests\Support\Workforce\WorkforceFixtures;
  *
  * ## Con historico, para que los indices cuenten
  *
- * Con 500 tramos en la tabla cualquier plan es bueno. Se siembran 365 jornadas
- * cerradas por persona —182 500 tramos y 365 000 escaneos— y el tramo abierto de
- * hoy. La consulta tiene que encontrar los 500 abiertos por el indice parcial
- * `one_open_shift_per_employee` y el quiosco de cada uno por
- * `scan_events_clock_in_shift_entry_index`, sin recorrer el historico. Una
- * prueba lo mira en el PLAN, que vale en cualquier maquina; la del reloj va en
- * la suite nocturna de rendimiento (D4, {@see WallClockBudget}). Sin los dos
- * indices de `scan_events` por tramo, la misma peticion tarda 15 s en el
- * anfitrion: es lo que esta prueba existe para cazar.
+ * Con 500 tramos en la tabla cualquier plan es bueno. La consulta tiene que
+ * encontrar los 500 abiertos por el indice parcial `one_open_shift_per_employee`
+ * y el quiosco de cada uno por `scan_events_clock_in_shift_entry_index`, sin
+ * recorrer el historico. Sin los dos indices de `scan_events` por tramo, la
+ * peticion sobre un año tarda 15 s en el anfitrion: es lo que este fichero
+ * existe para cazar. El historico que siembra cada prueba depende de donde corre:
  *
- * La afirmacion funcional —500 filas en la forma del contrato— no necesita el
- * historico y se siembra sin el: cada siembra con un año cuesta ~35 s, y esta
- * prueba corre en cada push.
+ * - **La del PLAN corre en cada push** y siembra un trimestre
+ *   ({@see LIVE_PRESENCE_VOLUME_DIAS_DE_HISTORICO_DEL_PLAN}: 45 000 tramos y
+ *   90 000 escaneos). El plan vale en cualquier maquina, y con un trimestre ya
+ *   falla si falta `scan_events_clock_in_shift_entry_index`; con un año, la
+ *   siembra costaba ~35 s en cada push.
+ * - **La del RELOJ va en la suite nocturna de rendimiento** (D4,
+ *   {@see WallClockBudget}) y se queda con el año
+ *   ({@see LIVE_PRESENCE_VOLUME_DIAS_DE_HISTORICO}: 182 500 tramos y 365 000
+ *   escaneos), que es la cifra que promete RNF-P-04.
+ * - **La afirmacion funcional** —500 filas en la forma del contrato— no
+ *   necesita el historico y se siembra sin el.
  *
  * ## El presupuesto: 200 ms de los 1 500
  *
@@ -87,8 +92,14 @@ beforeEach(function (): void {
 /** La plantilla del Anexo A del doc 02 y la cifra de RNF-P-04. */
 const LIVE_PRESENCE_VOLUME_EMPLEADOS = 500;
 
-/** Un año de jornadas cerradas por persona, antes de la de hoy. */
+/** Un año de jornadas cerradas por persona, antes de la de hoy: el presupuesto nocturno. */
 const LIVE_PRESENCE_VOLUME_DIAS_DE_HISTORICO = 365;
+
+/**
+ * Un trimestre: lo que siembra la prueba del plan, que corre en cada push. Basta
+ * para que sin el indice el planificador elija recorrer `scan_events`.
+ */
+const LIVE_PRESENCE_VOLUME_DIAS_DE_HISTORICO_DEL_PLAN = 90;
 
 /** Un hotel con una decena de departamentos (doc 02, Anexo A). */
 const LIVE_PRESENCE_VOLUME_DEPARTAMENTOS = 10;
@@ -202,6 +213,15 @@ function presenciaConHistorico(int $diasDeHistorico): array
     return ['token' => ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH))];
 }
 
+/** Los asientos de RS-05 que ha dejado la presencia en vivo hasta ahora. */
+function presenciaAsientosDeDivulgacion(): int
+{
+    return DB::table('audit_log')
+        ->where('action', 'personal_data.accessed')
+        ->whereRaw("payload->>'dataset' = 'live_presence'")
+        ->count();
+}
+
 it('devuelve a las 500 personas dentro, cada una con su quiosco y en la forma del contrato', function (): void {
     $escenario = presenciaConHistorico(0);
     Spectator::using('openapi.yaml');
@@ -218,8 +238,8 @@ it('devuelve a las 500 personas dentro, cada una con su quiosco y en la forma de
         ->and(array_filter(array_column((array) $respuesta->json('data'), 'device')))->toHaveCount(500);
 })->group('RNF-P-04', 'RF-PA-01');
 
-it('resuelve las 500 filas sobre un año de historico sin recorrer el de tramos ni el de escaneos', function (): void {
-    $escenario = presenciaConHistorico(LIVE_PRESENCE_VOLUME_DIAS_DE_HISTORICO);
+it('resuelve las 500 filas sobre un trimestre de historico sin recorrer el de tramos ni el de escaneos', function (): void {
+    $escenario = presenciaConHistorico(LIVE_PRESENCE_VOLUME_DIAS_DE_HISTORICO_DEL_PLAN);
 
     $consultas = QueryPlans::capture(
         static fn (): mixed => Api::as($escenario['token'])
@@ -246,6 +266,7 @@ it('resuelve las 500 filas sobre un año de historico sin recorrer el de tramos 
 
 it('sirve la presencia de 500 personas sobre un año de historico dentro de su parte de RNF-P-04, en mediana', function (): void {
     $escenario = presenciaConHistorico(LIVE_PRESENCE_VOLUME_DIAS_DE_HISTORICO);
+    $asientosAntes = presenciaAsientosDeDivulgacion();
 
     $muestras = WallClockBudget::samples(static function () use ($escenario): float {
         // Cada muestra es una carga de la vista, con su asiento de RS-05.
@@ -264,6 +285,11 @@ it('sirve la presencia de 500 personas sobre un año de historico dentro de su p
         WallClockBudget::median($muestras),
         implode(', ', array_map(static fn (float $s): string => \sprintf('%.3f', $s), $muestras)),
     ));
+
+    // Lo medido incluye la escritura en audit_log: una pasada de calentamiento y
+    // cinco medidas son seis asientos. Si la cache no se vaciara, la agrupacion
+    // dejaria uno solo y el reloj mediria un sondeo sin escritura.
+    expect(presenciaAsientosDeDivulgacion() - $asientosAntes)->toBe(6);
 
     WallClockBudget::expectMedianBelow($muestras, LIVE_PRESENCE_VOLUME_PRESUPUESTO_SEGUNDOS, 'RNF-P-04');
 })->group('RNF-P-04', 'RF-PA-01', 'performance');
