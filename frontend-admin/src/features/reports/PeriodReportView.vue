@@ -232,7 +232,7 @@ async function submit(): Promise<void> {
     // Mientras llega el informe, el formateo de fechas se calienta: su primera vez cuesta decenas
     // de ms que, si no, caerian en la tarea que pinta las primeras filas.
     setTimeout(() => {
-      warmInstantFormatting(locale.value)
+      warmInstantFormatting(locale.value, report.value?.meta.time_zone)
     }, 0)
     report.value = await request
     generatedQuery.value = query

@@ -183,6 +183,9 @@ export interface InstantWithSecondsOptions extends InstantFormatOptions {
   readonly seconds?: boolean
 }
 
+/** La ultima zona con la que se formateo un instante: la del centro, para calentar sin adivinar. */
+let lastInstantZone: string | null = null
+
 /**
  * Un instante UTC en la zona del centro: `8 oct 2026, 07:14` (`Oct 8, 2026,
  * 07:14` en ingles), sin segundos ni decimales salvo que se pidan. Nunca
@@ -206,6 +209,8 @@ export function formatInstant(
   if (instant === null) {
     return ''
   }
+
+  lastInstantZone = timeZone
 
   return new Intl.DateTimeFormat(locale, {
     timeZone,
@@ -442,9 +447,16 @@ export function minutesBetween(from: string, to: string | null): number | null {
  * horaria carga los datos del idioma y de la zona y cuesta decenas de ms en un portatil lento. Se
  * llama mientras se espera una respuesta, para que ese coste no caiga en la tarea que pinta el
  * resultado. No devuelve nada ni se enseña: la hora que se muestra sigue siendo la de la zona del
- * centro, resuelta por `formatInstant`.
+ * centro, resuelta por `formatInstant`. La zona es la que se
+ * pasa o, si no, la ultima con la que se formateo algo: nunca la del navegador ni una inventada;
+ * sin ninguna conocida solo se calienta la fecha civil.
  */
-export function warmInstantFormatting(locale: string): void {
-  formatInstant('2026-01-01T00:00:00Z', 'UTC', locale)
+export function warmInstantFormatting(locale: string, timeZone?: string): void {
+  const zone = timeZone ?? lastInstantZone
+
+  if (zone !== null) {
+    formatInstant('2026-01-01T00:00:00Z', zone, locale)
+  }
+
   formatCivilDate('2026-01-01', locale)
 }
