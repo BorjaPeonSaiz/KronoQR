@@ -38,7 +38,10 @@
 # `secrets.*`, y por eso `ci.yml` lo llama SIN `secrets: inherit`. No se usa
 # `pull_request_target`, que ejecutaria codigo del PR con el contexto del
 # repositorio base. La aprobacion de la ejecucion para colaboradores externos es
-# ajuste del repositorio (Settings → Actions → «Fork pull request workflows»).
+# ajuste del repositorio (Settings → Actions → «Fork pull request workflows»):
+# desde el 29-10-2026, `all_external_contributors` (toda ejecucion de un fork
+# externo necesita aprobacion). Un PR ejecuta SU version de este fichero: riesgo
+# aceptado A-30 del doc 07, con sus controles.
 #
 # Los tres jobs son los mismos que vivian en `ci.yml`, movidos sin tocar sus pasos.
 
