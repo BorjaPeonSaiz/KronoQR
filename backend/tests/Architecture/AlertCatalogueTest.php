@@ -548,3 +548,17 @@ it('vigila las bajas programadas sin aplicar con la serie de la tarea, dos horas
         ->and($regla['runbook'] ?? '')->toBe('docs/runbooks/turno-abierto-prolongado.md')
         ->and(preg_replace('/\s+/', '', $regla['expr'] ?? ''))->toBe('kronoqr_scheduled_offboardings_overdue>0');
 })->group('RN-14', 'RF-PR-04');
+
+it('vigila que la tarea de las bajas programadas siga corriendo con su latido, como las demas tareas', function (): void {
+    // El recuento de pendientes solo se mueve cuando la pasada corre: con el
+    // planificador parado, solo el latido lo delata.
+    $regla = AlertRules::named('ScheduledOffboardingTaskAbsent');
+
+    expect($regla)->not->toBeNull('No existe la regla ScheduledOffboardingTaskAbsent.');
+    expect($regla['severity'] ?? '')->toBe('warning')
+        ->and($regla['destinatario'] ?? '')->toBe('it-cliente')
+        ->and($regla['for'] ?? '')->toBe('30m')
+        ->and($regla['runbook'] ?? '')->toBe('docs/runbooks/turno-abierto-prolongado.md')
+        ->and(preg_replace('/\s+/', '', $regla['expr'] ?? ''))->toContain('absent(kronoqr_scheduled_offboardings_last_run_timestamp_seconds)')
+        ->and(preg_replace('/\s+/', '', $regla['expr'] ?? ''))->toContain('>7200');
+})->group('RN-14', 'RF-PR-04');

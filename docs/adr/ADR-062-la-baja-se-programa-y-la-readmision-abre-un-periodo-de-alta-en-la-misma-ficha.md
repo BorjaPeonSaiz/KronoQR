@@ -141,7 +141,9 @@ Sirve para un despido con efecto inmediato: con cese de hoy, la baja se hace efe
 | Anterior a hoy y no anterior al alta | **Baja en el acto**: tarjetas revocadas, portal cerrado, asiento `employee.offboarded`. No hay nada que esperar: el último día ya pasó | igual |
 | Hoy | **Baja programada**: se aplica al terminar el día, por la tarea de §4. Asiento `employee.offboarding_scheduled` | **Baja en el acto**, con asiento `employee.offboarded` y `apply_now: true` |
 | Posterior a hoy | **Baja programada**: la persona sigue `active` (o `suspended`), con `terminated_at` = la fecha. Ficha, tarjetas y portal no cambian. Asiento `employee.offboarding_scheduled` | `422` en `apply_now`: no se aplica en el acto una baja cuyo último día no ha llegado. Un despido con efecto inmediato lleva el cese de hoy |
-| Fecha de alta futura y cese igual a esa fecha | **Baja sin efectos en el acto**, como hoy: la contratación que no llegó a empezar | igual |
+| Fecha de alta futura y cese igual a esa fecha | **Baja programada**, como cualquier fecha de hoy o posterior: el extra de un solo día ficha ese día y la tarea aplica la baja | **Baja sin efectos en el acto**: la contratación que no llegó a empezar. Es la única excepción a «`apply_now` con cese futuro da `422`» |
+
+**Enmienda del 29-10-2026 (decisión del propietario).** La última fila cambia: antes, el cese igual a un alta futura era siempre la baja sin efectos en el acto, y un contrato de un solo día que aún no había empezado no se podía programar. Ahora sin `apply_now` se programa y con `apply_now` es la baja sin efectos.
 
 `Employee::offboard($terminatedOn, $today, $applyNow)` decide el efecto con esta tabla. El indicador
 es un dato de la decisión, no del canal: la validación de la petición lo comprueba primero, pero lo
@@ -219,6 +221,13 @@ corregir la fecha (§7) cuando la baja ya sea efectiva.
   en el periodo → evento `EmployeeOffboarded` (con `scheduled: true`). Por ese evento, `Identity`
   revoca las tarjetas y cierra el portal **en la misma transacción**, con el mismo caso de uso que la
   baja en el acto, y `Compliance` escribe el asiento `employee.offboarded` con actor `system`.
+- **Solo lo que se programó por el producto** (enmienda del 29-10-2026). Antes de aplicar, con la
+  cadena tomada, la tarea comprueba que el último asiento `employee.offboarding_*` de esa persona es
+  `employee.offboarding_scheduled` con la misma fecha de cese, por el puerto
+  `Shared\Application\Port\ScheduledOffboardingRecord`, que implementa `Compliance`. Si no lo es, la
+  fecha se escribió por fuera del producto: no la aplica, la cuenta como `failed`, deja
+  `workforce.scheduled_offboarding_without_audit` en el log y la persona queda pendiente, así que la
+  ve la alerta del retraso. Así `system` nunca firma una baja que nadie pidió.
 - **Idempotente.** La segunda pasada no encuentra a nadie, y `saveTermination` lleva el predicado de
   ADR-046 §3. Ni una persona ni una tarjeta reciben dos asientos.
 - **Llegar tarde no cambia la fecha.** Si el `scheduler` estuvo parado tres días, la baja se aplica en
@@ -230,6 +239,10 @@ corregir la fecha (§7) cuando la baja ya sea efectiva.
     `kronoqr_scheduled_offboardings_overdue`, con las personas cuyo cese pasó hace más de un día sin
     aplicar.
   - Alerta `ScheduledOffboardingOverdue` si ese *gauge* pasa de 0 durante 2 h.
+  - *Gauge* `kronoqr_scheduled_offboardings_last_run_timestamp_seconds` al final de cada pasada, y
+    alerta `ScheduledOffboardingTaskAbsent` si falta o lleva más de 2 h sin moverse (30 min): el
+    *gauge* de pendientes solo se mueve cuando la tarea corre. La programación lleva
+    `withoutOverlapping(55)`.
   - `product:doctor` lo comprueba.
   - En el log técnico, solo `employee_uuid` (regla dura 21).
 
@@ -351,7 +364,7 @@ fechas e identificadores de la organización, **nunca nombre, documento ni motiv
 |---|---|---|---|
 | `employee.offboarding_scheduled` | cuenta de gestión | se programa o se reprograma una baja, también con cese de hoy sin `apply_now` | `terminated_on`, `previous_terminated_on` (al reprogramar) |
 | `employee.offboarding_cancelled` | cuenta de gestión | se anula | `terminated_on` anulada |
-| `employee.offboarded` | cuenta de gestión o `system` | la baja se hace efectiva, en el acto o por la tarea | `terminated_on`; `apply_now: true` si se aplicó ya con cese de hoy; si la aplica la tarea, `scheduled: true`, `due_on` y `days_late` |
+| `employee.offboarded` | cuenta de gestión o `system` | la baja se hace efectiva, en el acto o por la tarea | `terminated_on`; `apply_now: true` si se aplicó ya con cese de hoy; si la aplica la tarea, `scheduled: true`, `due_on`, `days_late` y, si la jornada del cese siguió después de su día (un turno de noche o una pausa que la hizo esperar), `deferred: true`: explica unos `days_late` que no son una tarea parada |
 | `employee.rehired` | cuenta de gestión | readmisión, individual, en lote o por importación | `employment_period_uuid`, `hired_at`, `department_id`, `previous_department_id` (si cambia), `pin_reset`, `via_import` |
 | `employee.termination_date_corrected` | cuenta de gestión | corrección de §7 | `employment_period_uuid`, `previous_terminated_on`, `terminated_on`, `correction_id` |
 
@@ -370,7 +383,7 @@ por rol (regla dura 18).
 
 | Operación | Ruta y cuerpo | Respuestas |
 |---|---|---|
-| Baja, en el acto o programada | `POST /api/v1/employees/{uuid}/offboard`, `{ terminated_at, reason?, apply_now?: false }`. **`apply_now` es el único campo nuevo**, opcional y `false` por omisión: con cese de hoy aplica la baja en el acto (despido con efecto inmediato) | `200` `Employee`, que gana `offboarding: { state: "scheduled" \| "effective", terminated_at } \| null`. `409` `employee-terminated` si ya es efectiva. `422` `terminated_at`, o `apply_now` con un cese posterior a hoy |
+| Baja, en el acto o programada | `POST /api/v1/employees/{uuid}/offboard`, `{ terminated_at, reason?, apply_now?: false }`. **`apply_now` es el único campo nuevo**, opcional y `false` por omisión: con cese de hoy aplica la baja en el acto (despido con efecto inmediato) | `200` `Employee`, que gana `offboarding: { state: "scheduled" \| "effective", terminated_at } \| null`. `409` `employee-terminated` si ya es efectiva. `422` `terminated_at`, o `apply_now` con un cese posterior a hoy salvo el cese en un alta futura (la baja sin efectos). `409` `offboarding-due` si se cambia la fecha de una baja programada cuyo cese ya pasó |
 | Anular la baja programada | `POST /api/v1/employees/{uuid}/offboard/cancel`, sin cuerpo | `200` `Employee`. `409` `offboarding-not-scheduled`, `offboarding-due` o `employee-terminated` |
 | Readmisión | `POST /api/v1/employees/{uuid}/rehire`, `{ hired_at, department_id?, locale?, contract?: { weekly_hours, annual_hours, schedule_type } \| null, reset_pin?: false }` | `200` `{ employee, employment_period, credential: { uuid, status: "pending_print" }, pin? }`. `pin` solo con `reset_pin`, una vez. `409` `employee-not-terminated` o `employee-record-minimised`. `422` `hired_at` |
 | Readmisión en lote | `POST /api/v1/employees/rehire`, `{ employee_uuids: [uuid, …], hired_at, reset_pin?: false }` | `200` `{ rehired: [ … como arriba ] }`. `422` con un error por posición y nada escrito |

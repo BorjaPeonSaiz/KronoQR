@@ -904,6 +904,7 @@ kronoqr_management_account_changes_total{action,role}       counter
 # Plantilla — bajas programadas (ADR-062 §4)
 kronoqr_offboardings_applied_total{outcome}             counter
 kronoqr_scheduled_offboardings_overdue                   gauge
+kronoqr_scheduled_offboardings_last_run_timestamp_seconds  gauge
 
 # Credenciales y respaldo
 employees_without_delivered_credential{site,site_name}   gauge
@@ -1067,7 +1068,7 @@ Reglas anti-fatiga: agrupación por dispositivo, silenciamiento durante ventanas
 
 **Alertas de los ficheros generados (ADR-045, `rules/generated-files.yml`, runbook [`ficheros-generados.md`](runbooks/ficheros-generados.md)).** `FicheroGeneradoDesaparecidoAntesDeCaducar` (`generated_files_missing_total` sube; severidad alta, responsable de seguridad; esperada tras una restauración o una actualización desde la 2.1.0), `FicheroGeneradoSinRetirarPasadoSuPlazo` (`generated_files_overdue > 0` durante 1 h; IT) y `PurgaDeFicherosGeneradosSeHaNegadoATocarAlgo` (`generated_files_refused_total` sube; IT) y `PurgaDeFicherosGeneradosNoPuedeBorrar` (`generated_files_remove_failed_total` sube: el sistema de ficheros negó un borrado que tocaba y el fichero con datos personales sigue pasado su plazo, normalmente por permisos; IT). Los contadores se evalúan con `increase` más la rama «serie nueva», porque un contador en Redis nace ya con valor 1. `generated_files_orphans_removed_total` es informativa y no alerta. Con Redis caído estas series desaparecen en vez de saltar (R4-DV-01, bloque 22).
 
-**Alerta de la baja programada (ADR-062 §4, `rules/workforce.yml`, runbook [`turno-abierto-prolongado.md`](runbooks/turno-abierto-prolongado.md) §7).** `ScheduledOffboardingOverdue` (`kronoqr_scheduled_offboardings_overdue > 0` durante 2 h; media, IT). Nadie ficha después del cese aunque la baja no se aplique, porque la regla de las jornadas no depende de la tarea; lo que queda a medias son las tarjetas, el portal y el asiento. Con Redis caído la serie desaparece en vez de saltar, y lo cubre `product:doctor`.
+**Alerta de la baja programada (ADR-062 §4, `rules/workforce.yml`, runbook [`turno-abierto-prolongado.md`](runbooks/turno-abierto-prolongado.md) §7).** `ScheduledOffboardingOverdue` (`kronoqr_scheduled_offboardings_overdue > 0` durante 2 h; media, IT) dice que la última pasada no pudo aplicar alguna baja pasado su tope; como la serie solo se mueve cuando la tarea corre, la vigila `ScheduledOffboardingTaskAbsent` (`kronoqr_scheduled_offboardings_last_run_timestamp_seconds` ausente o con más de 2 h, durante 30 min; media, IT). Nadie ficha después del cese aunque la baja no se aplique, porque la regla de las jornadas no depende de la tarea; lo que queda a medias son las tarjetas, el portal y el asiento. Con Redis caído la serie desaparece en vez de saltar, y lo cubre `product:doctor`.
 
 ---
 
