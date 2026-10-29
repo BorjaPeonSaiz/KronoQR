@@ -109,9 +109,9 @@ final readonly class OffboardEmployeeHandler
                     terminatedOn: $command->terminatedAt,
                     reason: $command->reason,
                     occurredAt: $receivedAt,
-                    // Solo dice algo con el cese de hoy: con uno pasado la baja
-                    // era en el acto con o sin el indicador.
-                    applyNow: $command->applyNow && $command->terminatedAt === $today->format('Y-m-d'),
+                    // Solo dice algo con el cese de hoy o el de un alta futura: con uno
+                    // pasado la baja era en el acto con o sin el indicador.
+                    applyNow: $command->applyNow && $command->terminatedAt >= $today->format('Y-m-d'),
                 ));
 
                 return $offboarded;

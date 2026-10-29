@@ -28,6 +28,9 @@ return [
         'offboarding_due' => 'La fecha de cese (:terminated_on) ya ha pasado (hoy es :today). La baja ya rige y no se '
             .'puede anular.',
 
+        'offboarding_due_reschedule' => 'La fecha de cese (:terminated_on) ya ha pasado (hoy es :today) y ya no se '
+            .'puede cambiar. Con esa misma fecha, la baja se aplica en el acto.',
+
         'record_minimised' => 'La ficha de esta persona se minimizó el :anonymized_on al vencer su plazo de '
             .'conservación: ya no admite contratos ni ausencias.',
     ],

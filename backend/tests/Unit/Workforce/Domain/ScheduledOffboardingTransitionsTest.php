@@ -199,3 +199,27 @@ it('la baja programada sobrevive a la suspension y a la reincorporacion', functi
         ->and($programada->suspend()->reinstate()->isOffboardingScheduled())->toBeTrue()
         ->and($programada->updateProfile(firstName: 'Yusuf')->terminatedAt?->format('Y-m-d'))->toBe('2026-10-31');
 })->group('RN-14', 'RN-25');
+
+it('con un alta futura y el cese en el alta, aplicar ya es la unica excepcion al 422 del cese futuro', function (): void {
+    // Enmienda de ADR-062 §3: sin «Aplicar ya» se programa (el extra de un solo
+    // dia); con el, es la baja sin efectos de la contratacion que no empezo.
+    $ficha = fichaDeLaBajaProgramada(hiredAt: '2026-10-15');
+
+    expect($ficha->offboard(diaDeLaBajaProgramada('2026-10-15'), diaDeLaBajaProgramada())->isOffboardingScheduled())->toBeTrue()
+        ->and($ficha->offboard(diaDeLaBajaProgramada('2026-10-15'), diaDeLaBajaProgramada(), true)->status)->toBe(EmploymentStatus::TERMINATED)
+        ->and(fn (): Employee => $ficha->offboard(diaDeLaBajaProgramada('2026-10-20'), diaDeLaBajaProgramada(), true))
+        ->toThrow(ImmediateOffboardingNotDue::class);
+})->group('RN-14', 'RF-GP-03');
+
+it('al cambiar la fecha de una baja vencida dice que ya no se puede cambiar, no que no se puede anular', function (): void {
+    try {
+        fichaDeLaBajaProgramada(terminatedAt: '2026-09-30')->offboard(diaDeLaBajaProgramada('2026-10-15'), diaDeLaBajaProgramada());
+    } catch (ScheduledOffboardingDue $rechazo) {
+        expect($rechazo->translationKey)->toBe('employees.errors.offboarding_due_reschedule')
+            ->and($rechazo->parameters)->toBe(['terminated_on' => '2026-09-30', 'today' => '2026-10-02']);
+
+        return;
+    }
+
+    throw new RuntimeException('Se esperaba ScheduledOffboardingDue.');
+})->group('RN-14', 'RF-GP-03');

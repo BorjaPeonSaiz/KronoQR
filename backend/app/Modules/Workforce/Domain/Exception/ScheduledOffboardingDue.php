@@ -40,4 +40,17 @@ final class ScheduledOffboardingDue extends WorkforceDomainException implements 
             sprintf('The termination date %s has already passed (today is %s at the site): the offboarding cannot be cancelled (RN-14).', $terminatedOn, $today),
         );
     }
+
+    /**
+     * Lo mismo al reprogramar: pasado el cese, la fecha de una baja programada
+     * ya no cambia. Con la misma fecha se aplica en el acto.
+     */
+    public static function forReschedule(string $terminatedOn, string $today): self
+    {
+        return new self(
+            'employees.errors.offboarding_due_reschedule',
+            ['terminated_on' => $terminatedOn, 'today' => $today],
+            sprintf('The termination date %s has already passed (today is %s at the site): it can no longer be moved (RN-14).', $terminatedOn, $today),
+        );
+    }
 }

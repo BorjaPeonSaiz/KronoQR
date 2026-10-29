@@ -192,7 +192,7 @@ final readonly class Employee
      * | Anterior a hoy | en el acto | igual |
      * | Hoy | programada | en el acto |
      * | Posterior a hoy | programada | {@see ImmediateOffboardingNotDue} |
-     * | Alta futura y cese igual al alta | en el acto, sin efectos | igual |
+     * | Alta futura y cese igual al alta | programada (el extra de un solo dia) | en el acto, sin efectos |
      *
      * **Programada** es el mismo estado con fecha de cese: la persona sigue en
      * alta (o suspendida) y ficha hasta ese dia. No hay un estado nuevo; lo dice
@@ -247,10 +247,11 @@ final readonly class Employee
     private static function takesEffectNow(string $termination, string $hiring, string $today, bool $applyNow): bool
     {
         return $termination < $today
-            // La contratacion que no llego a empezar: la unica baja coherente
-            // es la que no deja ningun dia, y no hay nada que esperar.
-            || ($hiring > $today && $termination === $hiring)
-            || ($applyNow && $termination === $today);
+            || ($applyNow && ($termination === $today
+                // La contratacion que no llego a empezar: con el cese en su
+                // alta futura, «Aplicar ya» es la baja sin efectos. Sin el, es el
+                // extra de un solo dia y se programa como cualquier otra.
+                || ($hiring > $today && $termination === $hiring)));
     }
 
     /**
@@ -269,7 +270,7 @@ final readonly class Employee
         $current = self::civilDate($this->terminatedAt);
 
         if ($current !== $termination) {
-            throw ScheduledOffboardingDue::forTermination($current, self::civilDate($today));
+            throw ScheduledOffboardingDue::forReschedule($current, self::civilDate($today));
         }
     }
 

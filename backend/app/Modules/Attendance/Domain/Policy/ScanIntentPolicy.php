@@ -224,30 +224,36 @@ final readonly class ScanIntentPolicy
      */
     private function breakToContinue(DateTimeImmutable $scanAt, ?AcceptedScan $lastAccepted): ?string
     {
-        if (! $lastAccepted instanceof AcceptedScan) {
-            return null;
+        return $lastAccepted instanceof AcceptedScan && $this->breakMayStillEnd($lastAccepted, $scanAt)
+            ? $lastAccepted->breakInProgressShiftEntry()
+            : null;
+    }
+
+    /**
+     * **¿Puede todavia volverse en `$at` de la pausa que dejo `$lastAccepted`?**
+     * Es la regla de {@see breakToContinue()}, publica porque la necesita
+     * tambien quien pregunta si la jornada del cese aun puede crecer (RN-14): la
+     * vuelta de una pausa del ultimo dia es un tramo de esa jornada.
+     *
+     * Las tres condiciones de arriba, mas el tope de RN-05 (2.3.0): una jornada
+     * se continua, como mucho, hasta el dia civil siguiente al suyo. Una vuelta
+     * posterior abre jornada nueva; nunca se rechaza (regla dura 19).
+     */
+    public function breakMayStillEnd(AcceptedScan $lastAccepted, DateTimeImmutable $at): bool
+    {
+        if ($lastAccepted->breakInProgressShiftEntry() === null || ! $lastAccepted->precedes($at)) {
+            return false;
         }
 
-        $continues = $lastAccepted->breakInProgressShiftEntry();
-
-        if ($continues === null || ! $lastAccepted->precedes($scanAt)) {
-            return null;
-        }
-
-        // RN-05, el tope (2.3.0): una jornada se continua, como mucho, hasta el
-        // dia civil siguiente al suyo. Una vuelta posterior abre jornada nueva;
-        // nunca se rechaza (regla dura 19).
         $workDate = $lastAccepted->workDate;
 
-        if ($workDate instanceof WorkDate && $scanAt >= $workDate->next()->endsAt()) {
-            return null;
+        if ($workDate instanceof WorkDate && $at >= $workDate->next()->endsAt()) {
+            return false;
         }
 
         // Estricto: con 12 h de descanso minimo, 11 h 59 sigue siendo pausa y
         // 12 h 00 exactas ya son dos jornadas. Misma semantica `[inicio, fin)`
         // que el resto del dominio, y la misma cota que el alta manual.
-        return $this->breakContinuationCeiling->continues($lastAccepted->occurredAt, $scanAt)
-            ? $continues
-            : null;
+        return $this->breakContinuationCeiling->continues($lastAccepted->occurredAt, $at);
     }
 }

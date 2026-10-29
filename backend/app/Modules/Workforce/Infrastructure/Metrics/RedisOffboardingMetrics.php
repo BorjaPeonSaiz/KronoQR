@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Infrastructure\Metrics;
 
 use App\Modules\Workforce\Application\Port\OffboardingMetrics;
+use DateTimeImmutable;
 use Illuminate\Contracts\Redis\Factory as Redis;
 use Throwable;
 
@@ -29,6 +30,8 @@ final readonly class RedisOffboardingMetrics implements OffboardingMetrics
 
     public const string OVERDUE = self::KEY_PREFIX.'kronoqr_scheduled_offboardings_overdue';
 
+    public const string LAST_RUN = self::KEY_PREFIX.'kronoqr_scheduled_offboardings_last_run_timestamp_seconds';
+
     /** El campo del HASH de una serie sin etiquetas. */
     public const string UNLABELLED = 'value';
 
@@ -42,6 +45,11 @@ final readonly class RedisOffboardingMetrics implements OffboardingMetrics
     public function overdueScheduledOffboardings(int $count): void
     {
         $this->command('HSET', [self::OVERDUE, self::UNLABELLED, max(0, $count)]);
+    }
+
+    public function passCompleted(DateTimeImmutable $at): void
+    {
+        $this->command('HSET', [self::LAST_RUN, self::UNLABELLED, $at->getTimestamp()]);
     }
 
     /** @param  list<int|string>  $parameters */

@@ -6,13 +6,16 @@ namespace App\Modules\Attendance\Infrastructure\Adapter;
 
 use App\Modules\Attendance\Application\Port\ScanLog;
 use App\Modules\Attendance\Application\Support\ContinuationCeilings;
+use App\Modules\Attendance\Domain\Policy\ScanIntentPolicy;
 use App\Modules\Attendance\Domain\ValueObject\AcceptedScan;
 use App\Modules\Attendance\Domain\ValueObject\ShiftEntryStatus;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Shared\Application\Port\CompliancePolicyProvider;
 use App\Modules\Shared\Application\Port\FinalWorkDayActivity;
 use DateTimeImmutable;
+use DateTimeZone;
 use Illuminate\Database\ConnectionInterface;
+use Illuminate\Database\Query\Builder;
 
 /**
  * Si la jornada del cese de una persona puede seguir creciendo (RN-14, RN-05,
@@ -52,6 +55,20 @@ final readonly class DatabaseFinalWorkDayActivity implements FinalWorkDayActivit
             || $this->hasBreakThatMayContinue($employeeUuid, $siteId, $terminatedOn, $at);
     }
 
+    public function extendedPast(string $employeeUuid, string $terminatedOn, DateTimeImmutable $dayEndsAt): bool
+    {
+        return $this->connection->table('shift_entries')
+            ->join('employees', 'employees.id', '=', 'shift_entries.employee_id')
+            ->where('employees.uuid', $employeeUuid)
+            ->whereNotIn('shift_entries.status', [ShiftEntryStatus::VOIDED->value, ShiftEntryStatus::SUPERSEDED->value])
+            ->where('shift_entries.work_date', '<=', $terminatedOn)
+            ->where(static function (Builder $query) use ($dayEndsAt): void {
+                $query->whereNull('shift_entries.clocked_out_at')
+                    ->orWhere('shift_entries.clocked_out_at', '>', $dayEndsAt->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:sP'));
+            })
+            ->exists();
+    }
+
     private function hasOpenEntryUntil(string $employeeUuid, string $terminatedOn): bool
     {
         // El indice unico parcial `one_open_shift_per_employee` sirve esta
@@ -69,17 +86,18 @@ final readonly class DatabaseFinalWorkDayActivity implements FinalWorkDayActivit
     {
         $last = $this->scans->lastAcceptedScanOf($employeeUuid);
 
-        if (! $last instanceof AcceptedScan || $last->breakInProgressShiftEntry() === null) {
+        if (! $last instanceof AcceptedScan) {
             return false;
         }
 
-        $workDate = $last->workDate;
-
-        if (! $workDate instanceof WorkDate || $workDate->isoDate > $terminatedOn) {
+        // Una pausa de una jornada posterior al cese no es de su ultimo dia. Sin
+        // jornada conocida no se descarta: lo acota el tope de la tarea.
+        if ($last->workDate instanceof WorkDate && $last->workDate->isoDate > $terminatedOn) {
             return false;
         }
 
-        return $at < $workDate->next()->endsAt()
-            && ContinuationCeilings::forSite($this->compliance, $siteId)->continues($last->occurredAt, $at);
+        // La misma regla con la que el fichaje decide si vuelve de la pausa.
+        return new ScanIntentPolicy(ContinuationCeilings::forSite($this->compliance, $siteId))
+            ->breakMayStillEnd($last, $at);
     }
 }

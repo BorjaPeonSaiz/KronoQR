@@ -7,7 +7,9 @@ use App\Modules\Attendance\Application\Port\ScanMetrics;
 use App\Modules\Identity\Application\Command\RotateSigningKeyCommand;
 use App\Modules\Identity\Application\UseCase\RotateSigningKey;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
+use App\Modules\Workforce\Application\Command\OffboardEmployeeCommand;
 use App\Modules\Workforce\Application\UseCase\ApplyDueOffboardings;
+use App\Modules\Workforce\Application\UseCase\OffboardEmployeeHandler;
 use App\Modules\Workforce\Application\UseCase\PlanEmployeeImport;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
@@ -602,7 +604,8 @@ it('treinta fichajes del dia del cese a la vez que la tarea de las bajas program
     $tanda = tandaContraLaBaja(static function (int $ronda) use ($quiosco): array {
         $ultimoDia = personaParaLaCarrera($ronda);
         $diaSiguiente = personaParaLaCarrera($ronda + 1000);
-        DB::table('employees')->whereIn('uuid', [$ultimoDia, $diaSiguiente])->update(['terminated_at' => '2026-10-01']);
+        programarBajaEnLaCarrera($ultimoDia, '2026-10-01');
+        programarBajaEnLaCarrera($diaSiguiente, '2026-10-01');
         app()->instance(
             CredentialResolver::class,
             FakeCredentialResolver::new()
@@ -647,3 +650,51 @@ it('treinta fichajes del dia del cese a la vez que la tarea de las bajas program
         ->and(desenlacesEnLaPosicion($tanda['rondas'], 1))->toBe(['http:422' => OFFBOARD_UPDATE_RACE_ROUNDS])
         ->and(desenlacesEnLaPosicion($tanda['rondas'], 2))->toBe(['task:0' => OFFBOARD_UPDATE_RACE_ROUNDS]);
 })->group('RN-14', 'RN-05', 'RF-GP-03', 'RL-04');
+
+/**
+ * Programa la baja por el caso de uso, con su asiento, antes del cese: la tarea
+ * no aplica una baja sin el. Vuelve al reloj de la carrera.
+ */
+function programarBajaEnLaCarrera(string $persona, string $cese): void
+{
+    FrozenTime::at('2026-09-30 10:00:00');
+    app(OffboardEmployeeHandler::class)->handle(new OffboardEmployeeCommand($persona, $cese));
+    FrozenTime::at(OFFBOARD_UPDATE_RACE_NOW);
+}
+
+it('treinta anulaciones y reprogramaciones a la vez que la tarea de las bajas programadas: una sola baja y ningun abrazo mortal', function (): void {
+    // ADR-062 §5, fila 4. Con el cese pasado, la anulacion responde siempre 409
+    // (offboarding-due), haya pasado la tarea o no; la misma fecha la aplica en
+    // el acto, y compite con la tarea: la que llega segunda relee y ve la baja
+    // ya efectiva (409 employee-terminated, o la tarea no hace nada).
+    WorkforceFixtures::site('Hotel de la carrera');
+    $token = tokenDeLaCarrera();
+
+    $tanda = tandaContraLaBaja(static function (int $ronda) use ($token): array {
+        $persona = personaParaLaCarrera($ronda);
+        programarBajaEnLaCarrera($persona, '2026-10-01');
+
+        return [
+            static fn (): string => desenlaceHttpDeLaCarrera(Api::as($token)->post('/api/v1/employees/'.$persona.'/offboard/cancel')),
+            static fn (): string => desenlaceHttpDeLaCarrera(Api::as($token)->post(
+                '/api/v1/employees/'.$persona.'/offboard',
+                ['terminated_at' => '2026-10-01'],
+            )),
+            static function (): string {
+                try {
+                    return 'task:'.app(ApplyDueOffboardings::class)->handle()->failed;
+                } catch (QueryException $exception) {
+                    return 'sqlstate:'.$exception->getCode();
+                }
+            },
+        ];
+    });
+
+    expect(desenlacesImposibles($tanda['rondas']))->toBe([])
+        ->and($tanda['abrazos'])->toBe(0)
+        ->and(contradiccionesTrasLaCarrera())->toBe([])
+        ->and(desenlacesEnLaPosicion($tanda['rondas'], 0))->toBe(['http:409' => OFFBOARD_UPDATE_RACE_ROUNDS])
+        ->and(array_diff(array_keys(desenlacesEnLaPosicion($tanda['rondas'], 1)), ['http:200', 'http:409']))->toBe([])
+        ->and(desenlacesEnLaPosicion($tanda['rondas'], 2))->toBe(['task:0' => OFFBOARD_UPDATE_RACE_ROUNDS])
+        ->and(DB::table('employees')->where('status', 'terminated')->count())->toBe(OFFBOARD_UPDATE_RACE_ROUNDS);
+})->group('RN-14', 'RF-GP-03', 'RL-04');

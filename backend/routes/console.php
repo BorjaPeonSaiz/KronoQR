@@ -405,14 +405,16 @@ $detectIncidents->onFailure(LogScheduledCommandFailure::of('attendance:detect-in
  * moveria dos veces al año.
  *
  * El minuto 7 la aparta del cambio de hora en punto de las demas tareas
- * horarias. Es idempotente; `withoutOverlapping` evita pasadas simultaneas que
- * se esperarian en el candado de la cadena. Sale con FAILURE si una persona
- * fallo, y `onFailure()` lo deja en el log. La alerta es
- * `ScheduledOffboardingOverdue`, sobre `kronoqr_scheduled_offboardings_overdue`.
+ * horarias. Es idempotente; `withoutOverlapping(55)` evita pasadas simultaneas que
+ * se esperarian en el candado de la cadena, y el bloqueo caduca antes de la
+ * pasada siguiente aunque una se muera sin soltarlo. Sale con FAILURE si una persona
+ * fallo, y `onFailure()` lo deja en el log. Las alertas son
+ * `ScheduledOffboardingOverdue` (`kronoqr_scheduled_offboardings_overdue`) y
+ * `ScheduledOffboardingTaskAbsent`, que avisa si la pasada deja de correr.
  */
 $applyScheduledOffboardings = ScheduledTaskOutput::toLog(Schedule::command('workforce:apply-scheduled-offboardings')
     ->hourlyAt(7)
-    ->withoutOverlapping()
+    ->withoutOverlapping(55)
     ->runInBackground());
 $applyScheduledOffboardings->onFailure(LogScheduledCommandFailure::of('workforce:apply-scheduled-offboardings', $applyScheduledOffboardings));
 

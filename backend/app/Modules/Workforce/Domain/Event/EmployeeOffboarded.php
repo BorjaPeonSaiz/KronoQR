@@ -43,6 +43,12 @@ final readonly class EmployeeOffboarded implements DomainEvent
         public ?string $dueOn = null,
         /** Con `scheduled`: dias civiles de retraso sobre `dueOn`; 0 si se aplico a tiempo. */
         public ?int $daysLate = null,
+        /**
+         * Con `scheduled`: la jornada del cese siguio despues de su dia (un turno
+         * de noche o una pausa) y la tarea tuvo que esperar. Explica unos
+         * `daysLate` que no son una tarea parada.
+         */
+        public bool $deferred = false,
     ) {}
 
     public function eventName(): string

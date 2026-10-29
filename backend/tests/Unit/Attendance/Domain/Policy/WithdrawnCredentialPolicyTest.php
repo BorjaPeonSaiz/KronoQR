@@ -50,3 +50,22 @@ it('no afirma nada con el reloj de la tablet adelantado sobre la recepcion', fun
         $recibido,
     ))->toBeFalse();
 })->group('RN-20', 'RF-AT-10');
+
+it('no marca un escaneo posterior al final del dia del cese aunque la tarjeta siguiera sin retirar', function (string $occurredAt, bool $expected): void {
+    // RN-20 con la baja programada (2.3.0): la tarea revoca la tarjeta el dia
+    // despues del cese. Un escaneo offline de ese dia que sube despues era
+    // anterior a la retirada, pero no hay jornada que revisar.
+    $policy = new WithdrawnCredentialPolicy;
+
+    expect($policy->requiresReview(
+        retiradaALas($occurredAt),
+        retiradaALas('2026-08-14 06:00:00'),
+        retiradaALas('2026-11-01 00:07:00'),
+        retiradaALas('2026-10-31 23:00:00'),
+    ))->toBe($expected);
+})->with([
+    'el ultimo dia' => ['2026-10-31 20:00:00', true],
+    'un segundo antes del final del dia del cese' => ['2026-10-31 22:59:59', true],
+    'en el final del dia del cese' => ['2026-10-31 23:00:00', false],
+    'el dia siguiente, antes de la retirada' => ['2026-11-01 00:05:00', false],
+])->group('RN-20', 'RN-14');

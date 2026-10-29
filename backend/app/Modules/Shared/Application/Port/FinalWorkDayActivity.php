@@ -32,4 +32,12 @@ interface FinalWorkDayActivity
      * @param  DateTimeImmutable  $at  el instante de la pasada, en UTC
      */
     public function mayStillGrow(string $employeeUuid, int $siteId, string $terminatedOn, DateTimeImmutable $at): bool;
+
+    /**
+     * Si la jornada del cese siguio despues de su dia: un tramo de una jornada
+     * hasta el cese abierto, o cerrado a partir de `$dayEndsAt` (el final del dia
+     * civil del cese en la zona del centro). Es lo que dice que la tarea tuvo que
+     * esperar, y lo que explica unos dias de retraso que no son una tarea parada.
+     */
+    public function extendedPast(string $employeeUuid, string $terminatedOn, DateTimeImmutable $dayEndsAt): bool;
 }

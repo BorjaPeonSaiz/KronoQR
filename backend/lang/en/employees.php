@@ -24,6 +24,9 @@ return [
         'offboarding_due' => 'The termination date (:terminated_on) has already passed (today is :today). The '
             .'offboarding already applies and cannot be cancelled.',
 
+        'offboarding_due_reschedule' => 'The termination date (:terminated_on) has already passed (today is :today) '
+            .'and can no longer be changed. With that same date, the offboarding is applied at once.',
+
         'record_minimised' => 'This person\'s record was minimised on :anonymized_on when its retention period '
             .'ended: it no longer accepts contracts or absences.',
     ],

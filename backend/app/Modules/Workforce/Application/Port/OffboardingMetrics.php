@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Application\Port;
 
+use DateTimeImmutable;
+
 /**
  * Las series de la tarea que aplica las bajas programadas (RN-14, ADR-062 §4).
  *
@@ -22,4 +24,11 @@ interface OffboardingMetrics
     public function offboardingProcessed(string $outcome): void;
 
     public function overdueScheduledOffboardings(int $count): void;
+
+    /**
+     * `kronoqr_scheduled_offboardings_last_run_timestamp_seconds`: el final de la
+     * ultima pasada, haya encontrado algo o no. De ella cuelga la alerta de vida
+     * de la tarea.
+     */
+    public function passCompleted(DateTimeImmutable $at): void;
 }

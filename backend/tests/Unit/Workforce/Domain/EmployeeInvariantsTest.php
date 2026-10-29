@@ -221,13 +221,18 @@ it('rechaza un cese anterior al alta con su clave, sus fechas y su mensaje tecni
         ->and($rechazo->getMessage())->toBe('The termination date 2026-01-14 is earlier than the hiring date 2026-01-15 (RF-GP-03).');
 })->with(['sin aplicar ya' => [false], 'con aplicar ya' => [true]])->group('RF-GP-03', 'RN-14');
 
-it('con el alta todavia por llegar da de baja sin efectos en la fecha del alta, con o sin aplicar ya', function (bool $aplicarYa): void {
+it('con el alta todavia por llegar y el cese en el alta, programa sin aplicar ya y da de baja sin efectos con el', function (bool $aplicarYa, EmploymentStatus $estado): void {
+    // Sin «Aplicar ya» es el extra de un solo dia: ficha ese dia y la tarea le
+    // aplica la baja. Con el, la contratacion que no llego a empezar.
     $baja = fichaParaInvariantes(hiredAt: '2026-10-15')
         ->offboard(fechaCivilDeLaBaja('2026-10-15'), fechaCivilDeLaBaja('2026-10-02'), $aplicarYa);
 
-    expect($baja->status)->toBe(EmploymentStatus::TERMINATED)
+    expect($baja->status)->toBe($estado)
         ->and($baja->terminatedAt?->format('Y-m-d'))->toBe('2026-10-15');
-})->with(['sin aplicar ya' => [false], 'con aplicar ya' => [true]])->group('RN-14', 'RF-GP-03');
+})->with([
+    'sin aplicar ya: programada' => [false, EmploymentStatus::ACTIVE],
+    'con aplicar ya: sin efectos' => [true, EmploymentStatus::TERMINATED],
+])->group('RN-14', 'RF-GP-03');
 
 it('con el alta todavia por llegar rechaza un cese anterior al alta y programa uno posterior', function (): void {
     $ficha = fichaParaInvariantes(hiredAt: '2026-10-15');

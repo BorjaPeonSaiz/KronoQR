@@ -266,11 +266,11 @@ final readonly class HmacSignatureVerifier implements CredentialResolver
         }
 
         if (! $credential->isActive()) {
-            return CredentialHolder::of($employeeUuid, $credential->issuedAt, $credential->revokedAt);
+            return CredentialHolder::of($employeeUuid, $credential->issuedAt, $credential->revokedAt, $employee->terminatedOn, $employee->siteId);
         }
 
         return $employee->status === EmploymentStatus::TERMINATED
-            ? CredentialHolder::of($employeeUuid, $credential->issuedAt, null)
+            ? CredentialHolder::of($employeeUuid, $credential->issuedAt, null, $employee->terminatedOn, $employee->siteId)
             : null;
     }
 

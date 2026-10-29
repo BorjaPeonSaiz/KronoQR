@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 use App\Modules\Compliance\Application\UseCase\VerifyAuditChain;
 use App\Modules\Shared\Application\Port\FinalWorkDayActivity;
+use App\Modules\Workforce\Application\Command\OffboardEmployeeCommand;
 use App\Modules\Workforce\Application\Port\OffboardingMetrics;
 use App\Modules\Workforce\Application\UseCase\ApplyDueOffboardings;
+use App\Modules\Workforce\Application\UseCase\OffboardEmployeeHandler;
 use App\Modules\Workforce\Domain\Event\EmployeeOffboarded;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -51,6 +54,9 @@ final class RecordingOffboardingMetricsForTheTask implements OffboardingMetrics
     /** @var list<int> */
     public array $overdue = [];
 
+    /** @var list<int> */
+    public array $lastRuns = [];
+
     public function offboardingProcessed(string $outcome): void
     {
         $this->processed[] = $outcome;
@@ -59,6 +65,11 @@ final class RecordingOffboardingMetricsForTheTask implements OffboardingMetrics
     public function overdueScheduledOffboardings(int $count): void
     {
         $this->overdue[] = $count;
+    }
+
+    public function passCompleted(DateTimeImmutable $at): void
+    {
+        $this->lastRuns[] = $at->getTimestamp();
     }
 }
 
@@ -72,7 +83,10 @@ function metricasDeLaTareaDeBajas(): RecordingOffboardingMetricsForTheTask
 
 /**
  * Una persona con la baja programada y una tarjeta activa, en un centro de la
- * zona indicada. La baja se escribe directamente: lo que se prueba es la tarea.
+ * zona indicada. La baja se programa por el caso de uso, con su asiento
+ * `employee.offboarding_scheduled`: la tarea no aplica una baja sin el. Si el
+ * reloj ya ha pasado el cese, se programa el dia anterior y se vuelve al reloj
+ * de la prueba.
  *
  * @return array{site: int, employee: string, employee_id: int, device_token: string, card: string}
  */
@@ -82,7 +96,15 @@ function bajaProgramadaParaLaTarea(string $cese, string $zona = 'Europe/Madrid',
     $id = AttendanceFixtures::employeeIdOf($escenario['employee']);
     // La tarjeta del fixture se emite en agosto: una baja de marzo no la puede revocar.
     $card = $conTarjeta ? Credentials::issueFor($id)->toString() : '';
-    DB::table('employees')->where('id', $id)->update(['terminated_at' => $cese]);
+
+    $ahora = CarbonImmutable::now()->utc();
+
+    if ($ahora->format('Y-m-d') >= $cese) {
+        FrozenTime::at(CarbonImmutable::parse($cese.' 10:00:00', 'UTC')->subDay()->format('Y-m-d H:i:s'));
+    }
+
+    app(OffboardEmployeeHandler::class)->handle(new OffboardEmployeeCommand($escenario['employee'], $cese));
+    FrozenTime::at($ahora->format('Y-m-d H:i:s'));
 
     return [
         'site' => $escenario['site'],
@@ -270,10 +292,10 @@ it('aplaza mientras la pausa del ultimo dia admite vuelta, y no despues de la co
 
 it('un fallo no detiene a las demas, se mide y queda en el gauge pasado el tope', function (): void {
     $metricas = metricasDeLaTareaDeBajas();
-    FrozenTime::at('2026-10-20 10:00:00');
+    FrozenTime::at('2026-09-20 10:00:00');
     $falla = bajaProgramadaParaLaTarea('2026-10-01');
     $otra = WorkforceFixtures::employee(WorkforceFixtures::onlySiteId());
-    DB::table('employees')->where('uuid', $otra)->update(['terminated_at' => '2026-10-01']);
+    app(OffboardEmployeeHandler::class)->handle(new OffboardEmployeeCommand($otra, '2026-10-01'));
 
     app()->instance(FinalWorkDayActivity::class, new class($falla['employee']) implements FinalWorkDayActivity
     {
@@ -285,6 +307,11 @@ it('un fallo no detiene a las demas, se mide y queda en el gauge pasado el tope'
                 throw new RuntimeException('Fallo simulado de la tarea.');
             }
 
+            return false;
+        }
+
+        public function extendedPast(string $employeeUuid, string $terminatedOn, DateTimeImmutable $dayEndsAt): bool
+        {
             return false;
         }
     });
@@ -300,10 +327,13 @@ it('un fallo no detiene a las demas, se mide y queda en el gauge pasado el tope'
         ->and($aTiempo->applied)->toBe(1)
         ->and($aTiempo->overdue)->toBe(0)
         ->and($estadoTrasLaPrimera)->toBe(['active', 'terminated'])
-        // Pasado el tope ya no pregunta por la jornada: se aplica.
-        ->and($tarde->applied)->toBe(1)
-        ->and($metricas->processed)->toBe(['failed', 'applied', 'applied'])
-        ->and($metricas->overdue)->toBe([0, 0]);
+        // La pregunta sigue fallando pasado el tope: queda pendiente, y el gauge
+        // la cuenta.
+        ->and($tarde->failed)->toBe(1)
+        ->and($tarde->overdue)->toBe(1)
+        ->and($metricas->processed)->toBe(['failed', 'applied', 'failed'])
+        ->and($metricas->overdue)->toBe([0, 1])
+        ->and($metricas->lastRuns)->toHaveCount(2);
 })->group('RN-14', 'RF-GP-03');
 
 it('cuenta en el gauge la baja que sigue sin aplicar pasado el tope, y no deja nada a medias', function (): void {
@@ -357,7 +387,92 @@ it('se lanza por consola, sale bien sin nada que hacer y en falso si una falla',
         {
             throw new RuntimeException('Fallo simulado de la tarea.');
         }
+
+        public function extendedPast(string $employeeUuid, string $terminatedOn, DateTimeImmutable $dayEndsAt): bool
+        {
+            return false;
+        }
     });
 
     expect(Artisan::call('workforce:apply-scheduled-offboardings'))->toBe(1);
 })->group('RN-14', 'RF-GP-03');
+
+it('no aplica una fecha de cese escrita por fuera del producto, sin su asiento de programacion', function (): void {
+    // ADR-062 §4: `system` no firma una baja que nadie pidio. Con la credencial
+    // del runtime se podria escribir `terminated_at` directamente (T1565.001).
+    $metricas = metricasDeLaTareaDeBajas();
+    FrozenTime::at('2026-09-20 10:00:00');
+    $escenario = AttendanceFixtures::scenario();
+    $id = AttendanceFixtures::employeeIdOf($escenario['employee']);
+    Credentials::issueFor($id);
+    DB::statement("UPDATE employees SET terminated_at = '2026-10-01' WHERE id = ?", [$id]);
+    // Una programacion con otra fecha tampoco cubre la escrita a mano.
+    $otra = bajaDeOtraFechaParaLaTarea('2026-10-03', '2026-10-01');
+
+    FrozenTime::at('2026-10-05 09:00:00');
+    $informe = app(ApplyDueOffboardings::class)->handle();
+
+    expect($informe->failed)->toBe(2)
+        ->and($informe->applied)->toBe(0)
+        ->and($informe->overdue)->toBe(2)
+        ->and($metricas->processed)->toBe(['failed', 'failed'])
+        ->and(estadoTrasLaTareaDeBajas($escenario['employee']))->toBe('active')
+        ->and(estadoTrasLaTareaDeBajas($otra))->toBe('active')
+        ->and(DB::table('credentials')->where('employee_id', $id)->whereNull('revoked_at')->count())->toBe(1)
+        ->and(asientosDeLaTareaDeBajas())->toBe([]);
+})->group('RN-14', 'RL-04', 'RS-14');
+
+/**
+ * Una persona con la baja programada para `$programada` por el producto y la
+ * fecha cambiada despues por fuera a `$escrita`.
+ */
+function bajaDeOtraFechaParaLaTarea(string $programada, string $escrita): string
+{
+    $persona = WorkforceFixtures::employee(WorkforceFixtures::onlySiteId());
+    app(OffboardEmployeeHandler::class)->handle(new OffboardEmployeeCommand($persona, $programada));
+    DB::table('employees')->where('uuid', $persona)->update(['terminated_at' => $escrita]);
+
+    return $persona;
+}
+
+it('marca como aplazada la baja cuya jornada del cese siguio despues de su dia', function (): void {
+    metricasDeLaTareaDeBajas();
+    FrozenTime::at('2026-10-30 21:05:00');
+    $baja = bajaProgramadaParaLaTarea('2026-10-30');
+    // El turno de noche del ultimo dia: de las 22:00 del 30 a las 06:00 del 31.
+    ficharParaLaTareaDeBajas($baja['device_token'], $baja['card'], '2026-10-30T21:00:00Z');
+    FrozenTime::at('2026-10-31 05:30:00');
+    ficharParaLaTareaDeBajas($baja['device_token'], $baja['card'], '2026-10-31T05:00:00Z');
+
+    expect(app(ApplyDueOffboardings::class)->handle()->applied)->toBe(1)
+        ->and(asientosDeLaTareaDeBajas()[0]['payload'])->toMatchArray(['days_late' => 0, 'deferred' => true]);
+})->group('RN-14', 'RN-05');
+
+it('no marca como aplazada la baja cuyo ultimo dia termino en su dia', function (): void {
+    metricasDeLaTareaDeBajas();
+    FrozenTime::at('2026-10-30 16:00:00');
+    $baja = bajaProgramadaParaLaTarea('2026-10-30');
+    ficharParaLaTareaDeBajas($baja['device_token'], $baja['card'], '2026-10-30T07:00:00Z');
+    ficharParaLaTareaDeBajas($baja['device_token'], $baja['card'], '2026-10-30T15:00:00Z');
+    FrozenTime::at('2026-10-30 23:30:00');
+
+    app(ApplyDueOffboardings::class)->handle();
+
+    expect(asientosDeLaTareaDeBajas()[0]['payload'])->not->toHaveKey('deferred');
+})->group('RN-14', 'RN-05');
+
+it('publica su latido al terminar cada pasada, tambien sin centro y sin nada que aplicar', function (): void {
+    $metricas = metricasDeLaTareaDeBajas();
+    FrozenTime::at('2026-10-02 09:00:00');
+
+    app(ApplyDueOffboardings::class)->handle();
+
+    WorkforceFixtures::site('Hotel del latido');
+    FrozenTime::at('2026-10-02 10:07:00');
+    app(ApplyDueOffboardings::class)->handle();
+
+    expect($metricas->lastRuns)->toBe([
+        CarbonImmutable::parse('2026-10-02 09:00:00', 'UTC')->getTimestamp(),
+        CarbonImmutable::parse('2026-10-02 10:07:00', 'UTC')->getTimestamp(),
+    ]);
+})->group('RN-14', 'RF-PR-04');

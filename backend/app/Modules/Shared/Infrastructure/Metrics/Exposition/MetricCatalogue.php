@@ -360,6 +360,13 @@ final class MetricCatalogue
                 [],
                 ['value'],
             ),
+            new MetricDefinition(
+                'kronoqr_scheduled_offboardings_last_run_timestamp_seconds',
+                MetricType::Gauge,
+                MetricStorage::LabelledHash,
+                'Momento en que termino la ultima pasada de la tarea de las bajas programadas, en segundos desde epoch. Corre cada hora: mas de dos horas sin moverse es que no corre.',
+                [],
+            ),
 
             // ---------------------------------------------------------------
             // Credenciales.

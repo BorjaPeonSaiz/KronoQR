@@ -7,8 +7,10 @@ namespace App\Modules\Workforce\Application\UseCase;
 use App\Modules\Shared\Application\Port\CaughtFailureReporter;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\FinalWorkDayActivity;
+use App\Modules\Shared\Application\Port\ScheduledOffboardingRecord;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
+use App\Modules\Shared\Domain\Support\CivilDate;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
 use App\Modules\Workforce\Application\Port\OffboardingMetrics;
 use App\Modules\Workforce\Application\Port\SiteRepository;
@@ -68,6 +70,7 @@ final readonly class ApplyDueOffboardings
         private Clock $clock,
         private SerializedLedgerWrite $serialized,
         private FinalWorkDayActivity $activity,
+        private ScheduledOffboardingRecord $record,
         private OffboardingMetrics $metrics,
         private LoggerInterface $logger,
         private CaughtFailureReporter $caughtFailures,
@@ -75,7 +78,15 @@ final readonly class ApplyDueOffboardings
 
     public function handle(): DueOffboardingsReport
     {
-        return UseCaseInstrumentation::run('workforce.apply_scheduled_offboardings', fn (): DueOffboardingsReport => $this->doHandle());
+        return UseCaseInstrumentation::run('workforce.apply_scheduled_offboardings', function (): DueOffboardingsReport {
+            $report = $this->doHandle();
+
+            // El latido de la tarea, tambien sin centro: lo que vigila la alerta
+            // de vida es que la pasada corra, no que encuentre algo.
+            $this->metrics->passCompleted($this->clock->now());
+
+            return $report;
+        });
     }
 
     private function doHandle(): DueOffboardingsReport
@@ -156,13 +167,23 @@ final readonly class ApplyDueOffboardings
         }
 
         $terminatedOn = $employee->terminatedAt->format('Y-m-d');
+
+        // La fecha la puso alguien por el producto, con su asiento: si no, la
+        // tarea no revoca ni asienta en nombre de `system` una baja que nadie
+        // pidio (RL-04). Se queda pendiente, y la ve la alerta del retraso.
+        if ($this->record->lastScheduledTerminationOf($uuid) !== $terminatedOn) {
+            $this->logger->warning('workforce.scheduled_offboarding_without_audit', ['employee_uuid' => $uuid]);
+
+            return ScheduledOffboardingOutcome::Failed;
+        }
+
         $todayDate = $today->format('Y-m-d');
         $dueOn = self::shift($terminatedOn, 1);
+        $mayStillGrow = $this->activity->mayStillGrow($uuid, $employee->siteId, $terminatedOn, $now);
 
         // Hasta el tope —el segundo dia civil despues del cese— se espera a que
         // la jornada del cese deje de poder crecer.
-        if ($todayDate < self::shift($terminatedOn, 2)
-            && $this->activity->mayStillGrow($uuid, $employee->siteId, $terminatedOn, $now)) {
+        if ($mayStillGrow && $todayDate < self::shift($terminatedOn, 2)) {
             return ScheduledOffboardingOutcome::Deferred;
         }
 
@@ -177,6 +198,13 @@ final readonly class ApplyDueOffboardings
             scheduled: true,
             dueOn: $dueOn,
             daysLate: self::daysBetween($dueOn, $todayDate),
+            // Los dias de retraso por el turno o la pausa del ultimo dia no son
+            // una tarea parada: la jornada del cese siguio despues de su dia.
+            deferred: $mayStillGrow || $this->activity->extendedPast(
+                $uuid,
+                $terminatedOn,
+                CivilDate::midnight($dueOn, $today->getTimezone()),
+            ),
         ));
 
         return ScheduledOffboardingOutcome::Applied;
@@ -188,22 +216,13 @@ final readonly class ApplyDueOffboardings
      */
     private static function shift(string $date, int $days): string
     {
-        return self::civil($date)->modify(\sprintf('%+d days', $days))->format('Y-m-d');
+        return CivilDate::midnight($date, new DateTimeZone('UTC'))->modify(\sprintf('%+d days', $days))->format('Y-m-d');
     }
 
     private static function daysBetween(string $from, string $to): int
     {
-        return max(0, (int) self::civil($from)->diff(self::civil($to))->format('%r%a'));
-    }
+        $utc = new DateTimeZone('UTC');
 
-    private static function civil(string $date): DateTimeImmutable
-    {
-        $civil = DateTimeImmutable::createFromFormat('!Y-m-d', $date, new DateTimeZone('UTC'));
-
-        if (! $civil instanceof DateTimeImmutable) {
-            throw new \InvalidArgumentException('Fecha civil no valida: '.$date);
-        }
-
-        return $civil;
+        return max(0, (int) CivilDate::midnight($from, $utc)->diff(CivilDate::midnight($to, $utc))->format('%r%a'));
     }
 }

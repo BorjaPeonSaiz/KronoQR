@@ -104,6 +104,7 @@ use App\Modules\Compliance\Infrastructure\Persistence\DatabaseIncidentNotices;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseLegalExportEmployeeDirectory;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseLegalExportSource;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabasePurgeReviewLedger;
+use App\Modules\Compliance\Infrastructure\Persistence\DatabaseScheduledOffboardingRecord;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseSiteTimezoneAuditReader;
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseWorkRecordAuditSource;
 use App\Modules\Identity\Domain\Event\CredentialDelivered;
@@ -150,6 +151,7 @@ use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\LegalRecordFileWriter;
 use App\Modules\Shared\Application\Port\ManagementActor;
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
+use App\Modules\Shared\Application\Port\ScheduledOffboardingRecord;
 use App\Modules\Shared\Infrastructure\GeneratedFiles\GeneratedFileAreas;
 use App\Modules\Workforce\Domain\Event\AbsenceCorrected;
 use App\Modules\Workforce\Domain\Event\AbsenceRegistered;
@@ -200,6 +202,10 @@ final class ComplianceServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
+        // ADR-062 §4: la tarea de las bajas programadas comprueba en la cadena
+        // que la baja la programo alguien por el producto.
+        $this->app->bind(ScheduledOffboardingRecord::class, DatabaseScheduledOffboardingRecord::class);
+
         $this->app->singleton(
             AuditTrail::class,
             static fn (): DatabaseAuditTrail => new DatabaseAuditTrail(DB::connection()),

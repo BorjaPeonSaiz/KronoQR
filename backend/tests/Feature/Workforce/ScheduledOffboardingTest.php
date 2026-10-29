@@ -2,7 +2,9 @@
 
 declare(strict_types=1);
 
+use App\Exceptions\ProblemDetails;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
+use App\Modules\Workforce\Application\UseCase\ApplyDueOffboardings;
 use App\Modules\Workforce\Infrastructure\Persistence\Department;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -146,9 +148,12 @@ it('no cambia la fecha de una baja programada cuyo cese ya paso', function (): v
     Api::as(tokenDeLaBajaProgramada())
         ->post('/api/v1/employees/'.$escenario['employee'].'/offboard', ['terminated_at' => '2026-11-15'])
         ->assertValidResponse(409)
-        ->assertJsonPath('type', 'urn:kronoqr:problem:offboarding-due');
+        ->assertJsonPath('type', ProblemDetails::TYPE_OFFBOARDING_DUE)
+        ->assertJsonPath('detail', 'La fecha de cese (2026-10-30) ya ha pasado (hoy es 2026-10-31) y ya no se puede cambiar. '
+            .'Con esa misma fecha, la baja se aplica en el acto.');
 
-    expect(DB::table('employees')->where('uuid', $escenario['employee'])->value('terminated_at'))->toBe(SCHEDULED_OFFBOARDING_LAST_DAY);
+    expect(ProblemDetails::TYPE_OFFBOARDING_DUE)->toBe('urn:kronoqr:problem:offboarding-due')
+        ->and(DB::table('employees')->where('uuid', $escenario['employee'])->value('terminated_at'))->toBe(SCHEDULED_OFFBOARDING_LAST_DAY);
 })->group('RN-14', 'RF-GP-03');
 
 // --- Anular ------------------------------------------------------------------
@@ -379,3 +384,26 @@ it('rechaza a mano un tramo de una jornada posterior al cese, y admite el del pr
 
     expect(DB::table('shift_entries')->where('work_date', '>', '2026-10-01')->count())->toBe(0);
 })->group('RN-14', 'RF-PA-04');
+
+it('no marca para revision la tarjeta usada despues del cese aunque la tarea la revocara mas tarde', function (): void {
+    // RN-20 con la baja programada: la tarea revoca a las 00:07 del dia
+    // siguiente al cese. Un escaneo offline de las 00:03 (despues del cese,
+    // antes de la retirada) sube despues: rechazo generico sin incidencia. Uno
+    // de las 23:30 del ultimo dia si se marca.
+    FrozenTime::at('2026-10-02 10:00:00');
+    $escenario = escenarioDeLaBajaProgramada();
+    programarLaBaja($escenario['employee']);
+    // 23:07 UTC del 30 son las 00:07 del 31 en Madrid.
+    FrozenTime::at('2026-10-30 23:07:00');
+    expect(app(ApplyDueOffboardings::class)->handle()->applied)->toBe(1);
+    FrozenTime::at('2026-10-31 08:00:00');
+
+    $despues = ficharConLaBajaProgramada($escenario['token'], $escenario['card'], '2026-10-30T23:03:00Z');
+    $antes = ficharConLaBajaProgramada($escenario['token'], $escenario['card'], '2026-10-30T22:30:00Z');
+
+    $despues->assertStatus(422);
+    $antes->assertStatus(422);
+
+    expect(DB::table('scan_events')->where('scan_id', $despues->json('scan_id'))->value('flagged_for_review'))->toBeFalse()
+        ->and(DB::table('scan_events')->where('scan_id', $antes->json('scan_id'))->value('flagged_for_review'))->toBeTrue();
+})->group('RN-20', 'RN-14', 'RS-03');

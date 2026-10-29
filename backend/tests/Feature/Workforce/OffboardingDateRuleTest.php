@@ -155,7 +155,7 @@ it('resuelve hoy con la fecha civil del centro y no con la UTC', function (strin
     'cese el dia anterior al alta' => ['2026-10-02 10:00:00', 'Europe/Madrid', '2025-12-31', false, 422, 'active'],
 ])->group('RN-14', 'RF-GP-03');
 
-it('a una persona que aun no ha empezado la da de baja sin efectos en su fecha de alta, y programa una posterior', function (): void {
+it('a una persona que aun no ha empezado programa el cese en su alta y solo con aplicar ya la da de baja sin efectos', function (): void {
     FrozenTime::at('2026-10-02 10:00:00');
     $persona = personaParaLaBajaConFecha();
     DB::table('employees')->where('uuid', $persona)->update(['hired_at' => '2026-10-15']);
@@ -166,14 +166,22 @@ it('a una persona que aun no ha empezado la da de baja sin efectos en su fecha d
         ->assertValidResponse(422)
         ->assertJsonPath('errors.terminated_at.0', 'La fecha de cese (2026-10-02) es anterior a la de alta (2026-10-15).');
 
+    // El extra de un solo dia: ficha el 15 y la tarea le aplica la baja.
     Api::as($token)
-        ->post('/api/v1/employees/'.$persona.'/offboard', ['terminated_at' => '2026-10-20'])
+        ->post('/api/v1/employees/'.$persona.'/offboard', ['terminated_at' => '2026-10-15'])
         ->assertValidResponse(200)
         ->assertJsonPath('status', 'active')
         ->assertJsonPath('offboarding.state', 'scheduled');
 
+    // «Aplicar ya» con un cese futuro que no es el alta: 422.
     Api::as($token)
-        ->post('/api/v1/employees/'.$persona.'/offboard', ['terminated_at' => '2026-10-15'])
+        ->post('/api/v1/employees/'.$persona.'/offboard', ['terminated_at' => '2026-10-20', 'apply_now' => true])
+        ->assertValidResponse(422)
+        ->assertJsonStructure(['errors' => ['apply_now']]);
+
+    // La contratacion que no llego a empezar: la unica excepcion.
+    Api::as($token)
+        ->post('/api/v1/employees/'.$persona.'/offboard', ['terminated_at' => '2026-10-15', 'apply_now' => true])
         ->assertValidResponse(200)
         ->assertJsonPath('status', 'terminated')
         ->assertJsonPath('terminated_at', '2026-10-15')

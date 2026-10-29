@@ -442,3 +442,21 @@ it('no abre tramo en una jornada posterior al cese, con la baja aplicada o solo 
     'la pausa cierra, no abre' => [fn (): ClockingResolution => ClockingResolution::breakStart(), '2026-10-31', '2026-10-30', false],
     'sin fecha de cese' => [fn (): ClockingResolution => ClockingResolution::clockIn(), '2026-10-31', null, false],
 ])->group('RN-14', 'RN-05', 'RF-AT-02');
+
+it('dice si todavia se puede volver de la pausa con la misma regla con la que decide la vuelta', function (string $at, bool $puede): void {
+    // Pausa a las 12:00 UTC del 14 con 12 h de descanso minimo: hasta las 23:59
+    // del 14 se puede volver; a las 00:00 del 15, no. Antes de la pausa, tampoco.
+    $pausa = lastScan(ClockingAction::BREAK_START, 'shift-entry-1', '2026-03-14 12:00:00');
+
+    expect(intentPolicy()->breakMayStillEnd($pausa, scanAt($at)))->toBe($puede)
+        ->and(intentPolicy()->resolve(DeclaredIntent::AUTO, false, scanAt($at), $pausa)->action === ClockingAction::BREAK_END)->toBe($puede);
+})->with([
+    'dentro de la cota' => ['2026-03-14 20:00:00', true],
+    'un segundo antes de la cota' => ['2026-03-14 23:59:59', true],
+    'en la cota' => ['2026-03-15 00:00:00', false],
+    'antes de la propia pausa' => ['2026-03-14 11:00:00', false],
+])->group('RN-05', 'RN-14', 'RF-AT-12');
+
+it('no hay vuelta posible si lo ultimo no fue una pausa', function (): void {
+    expect(intentPolicy()->breakMayStillEnd(lastScan(ClockingAction::CLOCK_OUT), scanAt()))->toBeFalse();
+})->group('RN-05', 'RN-14');

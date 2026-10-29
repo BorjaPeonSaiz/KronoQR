@@ -7,6 +7,7 @@ namespace App\Modules\Product\Infrastructure\Diagnostics\Probe;
 use App\Modules\Product\Application\Port\DoctorProbe;
 use App\Modules\Product\Domain\ValueObject\DoctorFinding;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use DateTimeZone;
 use Illuminate\Database\ConnectionInterface;
 use Throwable;
@@ -23,7 +24,11 @@ use Throwable;
  * «Hoy» es la fecha civil del centro, con el puerto `Clock` y `sites.timezone`,
  * como en la tarea (regla dura 3). Pendiente pasado el tope es la baja
  * programada —ficha que no esta de baja y tiene fecha de cese— cuyo cese es
- * anterior a ayer.
+ * anterior a ayer. El predicado es el mismo, columna a columna, que el del
+ * repositorio de la plantilla y el del indice parcial `scheduled_offboardings`:
+ * `status <> terminated`, `terminated_at` no nulo y anterior a la fecha. Lee
+ * `employees` desde `Product` como las demas sondas y colectores; un puerto de
+ * lectura de la plantilla es trabajo pendiente.
  *
  * **Aviso y nunca fallo**: nadie puede fichar despues del cese aunque la baja no
  * se haya aplicado, asi que no hay registro en riesgo; lo que queda a medias son
@@ -56,7 +61,7 @@ final readonly class ScheduledOffboardingsProbe implements DoctorProbe
             $yesterday = $this->clock->now()->setTimezone(new DateTimeZone($timezone))->modify('-1 day')->format('Y-m-d');
 
             $overdue = $this->database->table('employees')
-                ->where('status', '<>', 'terminated')
+                ->where('status', '<>', EmploymentStatus::TERMINATED->value)
                 ->whereNotNull('terminated_at')
                 ->where('terminated_at', '<', $yesterday)
                 ->count();

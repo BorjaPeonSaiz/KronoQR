@@ -133,6 +133,10 @@ final readonly class RecordWorkforceChange
             $payload['scheduled'] = true;
             $payload['due_on'] = $event->dueOn;
             $payload['days_late'] = $event->daysLate;
+
+            if ($event->deferred) {
+                $payload['deferred'] = true;
+            }
         }
 
         $this->record(AuditAction::EmployeeOffboarded, AuditSubject::of('employee'), $payload, $event->occurredAt());

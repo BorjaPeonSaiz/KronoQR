@@ -366,6 +366,7 @@ final readonly class RegisterScanHandler implements ScanRegistration
                         $command->occurredAt,
                         $holder->issuedAt,
                         $holder->withdrawnAt ?? $recordedAt,
+                        $this->employmentEndOf($holder->terminatedOn, $holder->siteId),
                     ),
                 // RN-19 (ADR-043): el dueño del codigo de un PIN rechazado, solo
                 // para la fila. Nulo en todo lo demas.
@@ -436,7 +437,29 @@ final readonly class RegisterScanHandler implements ScanRegistration
         // El primer instante de la fecha civil del alta, en la zona del centro.
         $hiredAt = WorkDate::fromIsoDate($employee->hiredOn, $timezone)->startsAt();
 
-        return (new WithdrawnCredentialPolicy)->requiresReview($command->occurredAt, $hiredAt, $recordedAt);
+        return (new WithdrawnCredentialPolicy)->requiresReview(
+            $command->occurredAt,
+            $hiredAt,
+            $recordedAt,
+            $employee->terminatedOn === null ? null : WorkDate::fromIsoDate($employee->terminatedOn, $timezone)->endsAt(),
+        );
+    }
+
+    /**
+     * El final del dia civil del cese en la zona del centro, o `null` sin cese o
+     * sin zona (RN-20, RN-14): despues de ese instante una tarjeta retirada no
+     * pide revision. La zona solo se consulta en este camino, el de una tarjeta
+     * autentica de alguien con fecha de cese.
+     */
+    private function employmentEndOf(?string $terminatedOn, ?int $siteId): ?DateTimeImmutable
+    {
+        if ($terminatedOn === null || $siteId === null) {
+            return null;
+        }
+
+        $timezone = $this->calendar->timezoneOf($siteId);
+
+        return $timezone instanceof DateTimeZone ? WorkDate::fromIsoDate($terminatedOn, $timezone)->endsAt() : null;
     }
 
     /**
