@@ -534,3 +534,17 @@ it('deja escritos los cuatro runbooks que el indice todavia debia a la tarea 3.2
         'El indice de runbooks sigue dando por pendiente algo que la tarea 3.2 ya escribio.'
     );
 })->group('RF-PR-04', 'RNF-D-01');
+
+it('vigila las bajas programadas sin aplicar con la serie de la tarea, dos horas y el runbook de RRHH', function (): void {
+    // ADR-062 §4: `kronoqr_scheduled_offboardings_overdue` pasa de 0 durante 2 h.
+    // Media y al IT: nadie ficha despues del cese, pero la tarea no ha hecho lo
+    // suyo (tarjetas, portal, asiento) y la causa es tecnica.
+    $regla = AlertRules::named('ScheduledOffboardingOverdue');
+
+    expect($regla)->not->toBeNull('No existe la regla ScheduledOffboardingOverdue.');
+    expect($regla['severity'] ?? '')->toBe('warning')
+        ->and($regla['destinatario'] ?? '')->toBe('it-cliente')
+        ->and($regla['for'] ?? '')->toBe('2h')
+        ->and($regla['runbook'] ?? '')->toBe('docs/runbooks/turno-abierto-prolongado.md')
+        ->and(preg_replace('/\s+/', '', $regla['expr'] ?? ''))->toBe('kronoqr_scheduled_offboardings_overdue>0');
+})->group('RN-14', 'RF-PR-04');

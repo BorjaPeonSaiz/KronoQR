@@ -215,3 +215,39 @@ tanto **no se pierden**: la pasada revisa los últimos días y, además, todos l
 **Una incidencia sin responsable no se pierde**: sigue abierta y visible en la
 bandeja, pero **nadie recibe el aviso por correo**. Si aparecen varias, lo que
 falta es asignar el responsable del departamento en el panel.
+
+---
+
+## 7. Una baja programada sin aplicar (`ScheduledOffboardingOverdue`)
+
+**Qué la dispara.** `kronoqr_scheduled_offboardings_overdue > 0` durante 2 h: hay
+bajas programadas cuya fecha de cese pasó hace más de un día y que la tarea
+`workforce:apply-scheduled-offboardings` sigue sin hacer efectivas. Severidad media,
+para el IT del cliente.
+
+**Qué significa, y qué no.** La tarea corre cada hora y aplica cada baja programada
+el día civil siguiente al cese. Si la persona tenía un turno abierto o una pausa del
+último día, espera, como mucho hasta que empieza el segundo día después del cese
+(RN-14). Pasado ese tope, la serie no debería valer más de 0 durante más de una
+pasada. **Nadie ha fichado después del cese**: ningún tramo puede caer en una
+jornada posterior a la fecha de cese, se haya aplicado la baja o no. Lo que queda a
+medias es lo que hace la tarea: las tarjetas de esa persona siguen activas, su
+portal abierto, y falta el asiento `employee.offboarded` con actor `system`.
+
+**Qué hacer.**
+
+```bash
+# ¿Corre el planificador?
+docker compose ps scheduler
+# ¿Por qué falló? Una línea por persona, con employee_uuid y la clase del error
+docker compose logs --since 3h scheduler | grep workforce.scheduled_offboarding_failed
+# Lánzala a mano: repetirla es seguro y no deja asientos dobles
+docker compose exec -T app php artisan workforce:apply-scheduled-offboardings
+```
+
+`./doctor.sh` lo comprueba también (`scheduler.scheduled_offboardings`), sin
+necesidad de Alertmanager. Si la orden a mano falla con la misma persona, el motivo
+queda además en el histórico de errores del panel
+([`errores-en-el-panel.md`](errores-en-el-panel.md) §3). Si tras aplicarla la persona
+sigue con un turno abierto del último día, se cierra con una corrección, como
+cualquier turno abierto (§3 de este documento).

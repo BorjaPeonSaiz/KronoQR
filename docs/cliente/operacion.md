@@ -877,6 +877,7 @@ la alimenta dejó de ejecutarse):
 | `EspacioEnDiscoBajo` | < 20 % libre en `/` | Alta | IT | [`espacio-en-disco.md`](../runbooks/espacio-en-disco.md) | `docker system df`; libera imágenes antiguas antes que nada del registro |
 | `MetricasDelAnfitrionAusentes` | Sin métricas del anfitrión | Media | IT | [`espacio-en-disco.md`](../runbooks/espacio-en-disco.md) | Comprueba que `node-exporter` sigue en pie |
 | `TurnoAbiertoProlongado` | Turno abierto > 12 h | Media | RRHH | [`turno-abierto-prolongado.md`](../runbooks/turno-abierto-prolongado.md) | Pregunta a la persona a qué hora salió; el sistema nunca cierra el turno solo |
+| `ScheduledOffboardingOverdue` | `kronoqr_scheduled_offboardings_overdue > 0` durante 2 h: una baja programada sigue sin aplicar más de un día después de su cese | Media | IT | [`turno-abierto-prolongado.md`](../runbooks/turno-abierto-prolongado.md) §7 | Nadie ha fichado después del cese; lanza `workforce:apply-scheduled-offboardings` a mano y mira por qué falló |
 | `DescansoEntreJornadasInsuficiente` | Descanso por debajo del mínimo legal | Media | RRHH | [`turno-abierto-prolongado.md`](../runbooks/turno-abierto-prolongado.md) | Comprueba que las horas son correctas antes de tratarlo como planificación |
 | `MetricaDeIncidenciasAusente` / `DeteccionDeIncidenciasAusente` | Silencio de la detección nocturna | Media | IT | [`turno-abierto-prolongado.md`](../runbooks/turno-abierto-prolongado.md) | Comprueba que el `scheduler` sigue vivo |
 | `DeteccionDeIncidenciasConFallos` | La pasada de anoche falló | Alta | IT | [`errores-en-el-panel.md`](../runbooks/errores-en-el-panel.md) | `product:doctor`, y si señala a la reconciliación, sigue ese runbook en su lugar |
@@ -2019,6 +2020,24 @@ propio** que se descarga el empleado desde el portal se llama
 `my-time-record-…` en lugar de `mi-registro-horario-…`, y el motivo que pone el
 sistema al revocar la tarjeta de una baja se lee «Employee left (RN-14)»; en la
 base y en la auditoría se sigue guardando igual.
+
+**Al actualizar a la 2.3.0: la baja con fecha de hoy o futura se programa.**
+Hasta la 2.2.x una baja era efectiva al registrarla y una fecha de cese futura se
+rechazaba. Desde la 2.3.0 **una fecha de cese de hoy o posterior programa la
+baja**: la persona sigue de alta, con su tarjeta, su PIN y su portal, y ficha
+hasta su último día, también la salida de su último turno de noche. Una tarea del
+sistema (`workforce:apply-scheduled-offboardings`, cada hora) la hace efectiva el
+día siguiente al cese, con el mismo efecto de siempre: tarjetas revocadas, portal
+cerrado y asiento `employee.offboarded`, aquí con actor `system`. Si la persona
+tiene el turno o una pausa del último día abiertos, espera, como mucho hasta el
+segundo día después del cese. **Para un despido con efecto inmediato** se marca
+«Aplicar ya» con la fecha de hoy. Una baja programada se anula o se cambia de
+fecha mientras el cese no haya pasado. Desde que hay fecha de cese, **nadie puede
+fichar ni anotar horas en una jornada posterior**, aunque la tarea todavía no la
+haya aplicado. Las bajas ya registradas no cambian. Si la tarea no consigue
+aplicar una baja, suena `ScheduledOffboardingOverdue` y `./doctor.sh` lo dice
+(`scheduler.scheduled_offboardings`); qué hacer, en
+[`turno-abierto-prolongado.md`](../runbooks/turno-abierto-prolongado.md) §7.
 
 ### 11.1 La app de la tablet: cuándo cambia de versión
 

@@ -61,7 +61,7 @@ vigila que los documentos no se contradigan.
 
 ## Índice por alerta
 
-Las 76 reglas de `infra/observability/prometheus/rules/` y el runbook al que
+Las 79 reglas de `infra/observability/prometheus/rules/` y el runbook al que
 apunta su `runbook_url`. Si recibes una alerta, esta es la tabla.
 
 **En tu servidor no hay `infra/`.** Los runbooks citan los ficheros con su ruta
@@ -80,7 +80,7 @@ paquete: es de la integración continua del fabricante.
 | [`rotura-cadena-auditoria.md`](rotura-cadena-auditoria.md) | `RoturaDeCadenaDeAuditoria` · `VerificacionDeAuditoriaAusente` · `ParticionDeAuditoriaAusente` · `ParticionDeAuditoriaDelProximoAnoSinPreparar` |
 | [`discrepancia-registro-auditoria.md`](discrepancia-registro-auditoria.md) | `DiscrepanciaEntreRegistroYAuditoria` · `ConciliacionDelRegistroAusente` · `ConciliacionCompletaDelRegistroAusente` · `ConciliacionCompletaSinTramos` · `PurgaFueraDeLimitesRevisada` · `PurgaRevisadaQueExplicaBorrados` · `CambioDeZonaRevisado` · `DiscrepanciaDeZonaRevisada` · `ZonaDelCentroNoVerificable` (informativa, no notifica) |
 | [`divergencia-proyeccion.md`](divergencia-proyeccion.md) | `DivergenciaEnReconciliacionNocturna` · `ReconciliacionDeProyeccionAusente` · `ReconciliacionConFallos` |
-| [`turno-abierto-prolongado.md`](turno-abierto-prolongado.md) | `TurnoAbiertoProlongado` · `DescansoEntreJornadasInsuficiente` · `MetricaDeIncidenciasAusente` · `DeteccionDeIncidenciasAusente` |
+| [`turno-abierto-prolongado.md`](turno-abierto-prolongado.md) | `TurnoAbiertoProlongado` · `DescansoEntreJornadasInsuficiente` · `MetricaDeIncidenciasAusente` · `DeteccionDeIncidenciasAusente` · `ScheduledOffboardingOverdue` (§7) |
 | [`patron-anomalo-credencial.md`](patron-anomalo-credencial.md) | `DeteccionDePatronesConFallos` · `DeteccionDePatronesAusente` |
 | [`ataque-a-credenciales.md`](ataque-a-credenciales.md) | `KronoqrAuthFailureBurst` · `KronoqrAuthLockouts` · `KronoqrAuthFailureSpike` · `KronoqrManagementTwoFactorReset` · `KronoqrManagementAdminAccountCreated` · `RechazoDeFirmaQr` |
 | [`bloqueo-por-origen.md`](bloqueo-por-origen.md) | `KronoqrPortalOriginLockouts` |

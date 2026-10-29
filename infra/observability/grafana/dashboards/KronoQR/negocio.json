@@ -391,6 +391,38 @@
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
         "showUnfilled": true
       }
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "Bajas programadas sin aplicar pasado su tope",
+      "description": "kronoqr_scheduled_offboardings_overdue: bajas programadas cuyo cese pasó hace más de un día y que la tarea horaria no ha aplicado. Debería ser 0. Alerta ScheduledOffboardingOverdue: > 0 durante 2 h, media, IT (docs/runbooks/turno-abierto-prolongado.md §7). Nadie ficha después del cese.",
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 30 },
+      "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "kronoqr-prometheus" },
+          "expr": "max(kronoqr_scheduled_offboardings_overdue) OR vector(0)",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "#EAB839", "value": 1 }] }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
     }
   ]
 }
