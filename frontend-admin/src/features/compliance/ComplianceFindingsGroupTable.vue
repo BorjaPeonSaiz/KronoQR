@@ -116,6 +116,7 @@ const scroller = ref<HTMLElement | null>(null)
 const { visibleRows, totalHeight } = useVirtualRows(findings, {
   rowHeight: ROW_HEIGHT_PX,
   scroller,
+  overscan: 3,
 })
 
 /** Lo que pinta cada fila visible: `rowOf` se invoca solo para ellas. */

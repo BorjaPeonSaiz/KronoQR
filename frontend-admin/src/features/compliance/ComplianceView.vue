@@ -20,11 +20,12 @@ import { announce } from '@kronoqr/web-kit/announcer'
 import EmptyState from '@kronoqr/web-kit/components/EmptyState.vue'
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
-import { formatInstant } from '@kronoqr/web-kit/datetime'
+import { formatInstant, warmInstantFormatting } from '@kronoqr/web-kit/datetime'
 import { durationParts } from '@kronoqr/web-kit/workdayTotals'
 import { useQuery } from '@tanstack/vue-query'
-import { computed, onMounted, ref, shallowRef } from 'vue'
+import { computed, nextTick, onMounted, ref, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { yieldToMain } from '@/shared/scheduling/yieldToMain'
 import AuditNotice from '@/shared/ui/AuditNotice.vue'
 import { listDepartments } from '@/shared/api/organisation.api'
 import type {
@@ -69,6 +70,9 @@ const ruleFilter = ref<ComplianceRuleName | ''>('')
 // `shallowRef`: miles de hallazgos que nadie muta; el proxy profundo solo suma coste.
 const summary = shallowRef<ComplianceSummary | null>(null)
 const loading = ref(true)
+// La tabla se monta un trozo despues que las tarjetas (`yieldToMain`): pintarlo todo en una
+// sola tarea superaba el objetivo de 200 ms de tarea larga con 3 000 hallazgos y CPU ×4.
+const tableReady = ref(false)
 const error = ref<unknown>(null)
 
 function currentQuery(): ComplianceSummaryQuery {
@@ -82,12 +86,27 @@ function currentQuery(): ComplianceSummaryQuery {
   }
 }
 
+let loadGeneration = 0
+
 async function load(): Promise<void> {
+  loadGeneration += 1
+
+  const generation = loadGeneration
+
+  tableReady.value = false
   loading.value = true
   error.value = null
 
   try {
-    const result = await getComplianceSummary(currentQuery())
+    const request = getComplianceSummary(currentQuery())
+
+    // Mientras llega la respuesta, el formateo de fechas se calienta: su primera vez cuesta
+    // decenas de ms que, si no, caerian en la tarea que pinta la tabla.
+    setTimeout(() => {
+      warmInstantFormatting(locale.value, summary.value?.meta.time_zone)
+    }, 0)
+
+    const result = await request
 
     summary.value = result
     // Los filtros de fecha reflejan lo que el servidor ha resuelto de verdad:
@@ -105,6 +124,16 @@ async function load(): Promise<void> {
     error.value = caught
   } finally {
     loading.value = false
+  }
+
+  if (summary.value !== null) {
+    await nextTick()
+    await yieldToMain()
+
+    // Una carga posterior ya ha retirado la tabla: la suya la monta, no esta.
+    if (generation === loadGeneration) {
+      tableReady.value = true
+    }
   }
 }
 
@@ -293,7 +322,11 @@ const selectClass =
 
       <template v-else>
         <h2 class="sr-only">{{ t('complianceSummary.findingsHeading') }}</h2>
-        <ComplianceFindingsTable :groups="groups" :time-zone="summary.meta.time_zone" />
+        <ComplianceFindingsTable
+          v-if="tableReady"
+          :groups="groups"
+          :time-zone="summary.meta.time_zone"
+        />
       </template>
 
       <!-- Los criterios, tal cual los da el servidor: no se reordenan ni se

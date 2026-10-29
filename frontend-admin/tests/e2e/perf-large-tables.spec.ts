@@ -9,14 +9,16 @@
 //
 // UN OBJETIVO INTERNO, NO LA PROMESA (decision del propietario, 28-10-2026).
 // RNF-P-04 promete el panel de presencia en vivo con 500 empleados, y eso lo
-// mide y lo BLOQUEA `perf-live-presence.spec.ts`. Estos volumenes no se han
-// prometido: sus umbrales (1,5 s interactivo; 300 ms de tarea larga al generar
-// el informe, 200 ms en el resto) se siguen midiendo, pero AVISAN —anotacion
-// y `::warning` en el resumen del job— sin poner la nocturna en rojo. Lo que si
-// falla es que la pantalla no llegue a pintar filas. Medido en el anfitrion con
-// CPU ×4 y en frio, la carga de los hallazgos pasa de 200 ms de tarea larga;
-// arreglarlo (paginar, trocear la carga) es trabajo del producto, no de esta
-// prueba.
+// mide `perf-live-presence.spec.ts`. Estos volumenes no se han prometido. Las
+// TAREAS LARGAS (300 ms al generar el informe, 200 ms en el resto) BLOQUEAN: eran
+// de 199-228 ms en la carga de los hallazgos y de 270-380 ms al generar el informe,
+// y desde que el informe se lee en un Worker y en trozos y las tablas se montan por
+// partes cediendo el hilo estan en 70-160 ms, con margen. El TIEMPO HASTA LA PRIMERA
+// FILA (1,5 s) sigue AVISANDO —anotacion y `::warning` en el resumen del job—: mide
+// 0,9-1,15 s en el anfitrion y la CI va ~1,36 veces mas lenta (1 718 ms contra
+// 1 260 ms antes del arreglo), asi que no hay margen para ponerlo a bloquear; casi la
+// mitad de ese tiempo es el propio doble de la API entregando ~12 MB. Lo que si falla
+// es que la pantalla no llegue a pintar filas.
 //
 // COMO. La MEDIANA de tres muestras EN FRIO —un contexto de navegador nuevo
 // por muestra—, como `perf-lcp.spec.ts` del quiosco. El doble de la API sirve
@@ -36,14 +38,14 @@ import {
 } from './support/largeTables'
 import { coldPage, median, SAMPLES, warnAboveTarget } from './support/perf'
 
-/** Objetivo interno: interactiva en menos de 1,5 s. */
+/** Objetivo interno (avisa, no bloquea): interactiva en menos de 1,5 s. */
 const INTERACTIVE_TARGET_MS = 1_500
 const LONG_TASK_TARGET_MS = 200
 /**
- * Solo al GENERAR el informe de 20 000 filas, con CPU ×4: leer y `JSON.parse` de un
- * cuerpo de ~12 MB son ~100 ms medidos con ×4 en una sola tarea que el navegador
- * no puede partir. El resto (desplazar, la tabla de cumplimiento) sigue en 200 ms.
- * Bajarlo exige paginar o transmitir el informe en el servidor, no tocar la tabla.
+ * Solo al GENERAR el informe de 20 000 filas, con CPU ×4: el cuerpo de ~12 MB se lee en
+ * un Worker y llega en trozos, y lo que queda en el hilo principal es la primera pintura
+ * y la deserializacion de cada trozo. El resto (desplazar, la tabla de cumplimiento)
+ * sigue en 200 ms.
  */
 const REPORT_LOAD_LONG_TASK_TARGET_MS = 300
 
@@ -77,9 +79,16 @@ async function reportSample(page: Page): Promise<Sample> {
   const startedAt = Date.now()
 
   await page.getByRole('button', { name: 'Generar informe' }).click()
-  await expect(page.getByTestId('report-row').first()).toBeVisible()
+  // `waitFor` y no `expect(...).toBeVisible()`: el `expect` reintenta en escalera (100, 250, 500,
+  // 1 000 ms) y su resolucion de 100-500 ms es mayor que el margen que se mide.
+  await page.getByTestId('report-row').first().waitFor()
 
   const interactiveMs = Date.now() - startedAt
+
+  // El resto de las filas sigue llegando tras la primera: se espera a que acabe para medir la
+  // tarea larga de TODA la carga y para desplazar sobre las 20 000 filas, no sobre las primeras.
+  await expect(page.getByTestId('report-receiving')).toBeHidden()
+
   const longestLoadTaskMs = await longestTask(page)
   const longestScrollTaskMs = await scrollHalfway(page, 'period-report-table', 'report-row')
 
@@ -92,7 +101,7 @@ async function complianceSample(page: Page): Promise<Sample> {
   const startedAt = Date.now()
 
   await page.goto('/compliance')
-  await expect(page.getByTestId('compliance-finding-row').first()).toBeVisible()
+  await page.getByTestId('compliance-finding-row').first().waitFor()
 
   const interactiveMs = Date.now() - startedAt
   const longestLoadTaskMs = await longestTask(page)
@@ -135,7 +144,7 @@ async function samplesOf(
 }
 
 test(
-  'mide el informe de 20 000 filas frente al objetivo interno de 1,5 s y sin tareas largas, y avisa si lo pasa',
+  'mide el informe de 20 000 filas: sin tareas largas y, si tarda mas de 1,5 s en la primera fila, avisa',
   { tag: ['@RF-IN-01'] },
   async ({ browser }) => {
     const samples = await samplesOf(browser, reportSample)
@@ -145,21 +154,19 @@ test(
       median(samples.map((sample) => sample.interactiveMs)),
       INTERACTIVE_TARGET_MS,
     )
-    warnAboveTarget(
-      'Informe de 20 000 filas, tarea larga al generar',
+    expect(
       median(samples.map((sample) => sample.longestLoadTaskMs)),
-      REPORT_LOAD_LONG_TASK_TARGET_MS,
-    )
-    warnAboveTarget(
-      'Informe de 20 000 filas, tarea larga al desplazar',
+      'Informe de 20 000 filas, tarea larga al generar',
+    ).toBeLessThan(REPORT_LOAD_LONG_TASK_TARGET_MS)
+    expect(
       median(samples.map((sample) => sample.longestScrollTaskMs)),
-      LONG_TASK_TARGET_MS,
-    )
+      'Informe de 20 000 filas, tarea larga al desplazar',
+    ).toBeLessThan(LONG_TASK_TARGET_MS)
   },
 )
 
 test(
-  'mide los 3 000 hallazgos de cumplimiento frente al objetivo interno de 1,5 s y sin tareas largas, y avisa si lo pasa',
+  'mide los 3 000 hallazgos de cumplimiento: sin tareas largas y, si tardan mas de 1,5 s en la primera fila, avisa',
   { tag: ['@RF-PA-06'] },
   async ({ browser }) => {
     const samples = await samplesOf(browser, complianceSample)
@@ -169,15 +176,13 @@ test(
       median(samples.map((sample) => sample.interactiveMs)),
       INTERACTIVE_TARGET_MS,
     )
-    warnAboveTarget(
-      '3 000 hallazgos, tarea larga al cargar',
+    expect(
       median(samples.map((sample) => sample.longestLoadTaskMs)),
-      LONG_TASK_TARGET_MS,
-    )
-    warnAboveTarget(
-      '3 000 hallazgos, tarea larga al desplazar',
+      '3 000 hallazgos, tarea larga al cargar',
+    ).toBeLessThan(LONG_TASK_TARGET_MS)
+    expect(
       median(samples.map((sample) => sample.longestScrollTaskMs)),
-      LONG_TASK_TARGET_MS,
-    )
+      '3 000 hallazgos, tarea larga al desplazar',
+    ).toBeLessThan(LONG_TASK_TARGET_MS)
   },
 )

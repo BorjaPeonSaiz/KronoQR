@@ -965,6 +965,7 @@
       "subtitle": "Hours worked over a period, with department or site aggregates and the comparison against contracted hours. The criteria used to calculate it are shown below the table.",
       "generate": "Generate report",
       "loading": "Generating the report…",
+      "receiving": "Loading the remaining rows ({total} in total)…",
       "contractCoverage": "There are {days} person-days in this period with no contract on record, affecting {employees} person(s). Those days add no contracted hours: the deviation on those rows is incomplete.",
       "contractCoverageLink": "Register contracts from each person's record",
       "filters": {

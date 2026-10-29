@@ -11,7 +11,7 @@
 // LO QUE NO SE MIDE AQUI ES EL TIEMPO. Lo que tarda la pantalla en quedar
 // interactiva y sus tareas largas los mide `perf-large-tables.spec.ts`, en la
 // suite nocturna de rendimiento (`make e2e-performance`, D4 de la 2.3.0), como
-// objetivo interno que avisa y no bloquea: aqui un runner cargado ponia la rama
+// objetivo interno (tareas largas: bloquean; primera fila: avisa) en la nocturna: aqui un runner cargado ponia la rama
 // en rojo sin que el panel hubiera empeorado.
 //
 // La impresion y el «buscar en la pagina» NO funcionan sobre las filas que no

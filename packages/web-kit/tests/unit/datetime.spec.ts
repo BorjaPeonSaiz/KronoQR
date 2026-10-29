@@ -294,3 +294,13 @@ describe('formatInstant: un solo formateador de instantes', () => {
     expect(formatInstant('2026-10-08T05:14:03Z', 'Europe/Madrid', 'es')).not.toContain(':03')
   })
 })
+
+describe('formatCivilDate con el formateador guardado', () => {
+  it('da lo mismo la primera vez y las siguientes, y por idioma', () => {
+    const first = formatCivilDate('2026-08-14', 'es')
+
+    expect(formatCivilDate('2026-08-14', 'es')).toBe(first)
+    expect(formatCivilDate('2026-08-14', 'en')).not.toBe(first)
+    expect(formatCivilDate('2026-12-01', 'es')).not.toBe(first)
+  })
+})

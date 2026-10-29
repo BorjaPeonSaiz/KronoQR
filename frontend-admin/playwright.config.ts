@@ -19,7 +19,8 @@ const BASE_URL = `http://127.0.0.1:${PORT}`
 
 // LA SUITE NOCTURNA DE RENDIMIENTO (D4 de la 2.3.0), como en el quiosco.
 // `perf-*.spec.ts` mide contra el reloj (RNF-P-04, el LCP de la presencia en
-// vivo, que bloquea; y el objetivo interno de las tablas grandes, que avisa) y
+// vivo, que bloquea; y el objetivo interno de las tablas grandes, cuyas tareas largas
+// bloquean y cuyo tiempo de primera fila avisa) y
 // solo existe con `KRONOQR_E2E_PERFORMANCE=1`, que pone
 // `make e2e-performance` (job nocturno `performance-kiosk` de ci.yml); el
 // proyecto `admin` de cada push no los ve.

@@ -43,3 +43,23 @@ describe('requestJsonWithHeaders', () => {
     expect((await requestJsonWithHeaders<{ a: number }>('/api/v1/x')).body.a).toBe(1)
   })
 })
+
+describe('readBody', () => {
+  it('lee el cuerpo con la funcion del llamante en vez de response.json()', async () => {
+    stubFetch(() => jsonResponse({ a: 1 }))
+    const readBody = vi.fn(() => Promise.resolve({ leido: 'aparte' }))
+
+    const { body } = await requestJsonWithHeaders<{ leido: string }>('/api/v1/x', { readBody })
+
+    expect(body).toEqual({ leido: 'aparte' })
+    expect(readBody).toHaveBeenCalledOnce()
+  })
+
+  it('un error de la API no pasa por readBody', async () => {
+    stubFetch(() => problemResponse(403, 'urn:x'))
+    const readBody = vi.fn(() => Promise.resolve({}))
+
+    await expect(requestJsonWithHeaders('/api/v1/x', { readBody })).rejects.toSatisfy(isApiError)
+    expect(readBody).not.toHaveBeenCalled()
+  })
+})

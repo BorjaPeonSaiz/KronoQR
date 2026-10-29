@@ -28,8 +28,9 @@ presupuesto de tiempo (doc 02 §10.1); aquí, lo que significa un rojo en cada u
 | ⑤ Seguridad | `composer audit` y `npm audit` (bloquea solo producción), Semgrep propio y comunitario, gitleaks, Trivy fs/imagen, SBOM | Una dependencia vulnerable, un secreto o un hallazgo de SAST. Los de Semgrep comunitario y Trivy en modo informe se atienden con [`triaje-hallazgos-seguridad.md`](triaje-hallazgos-seguridad.md) |
 | ⑥ Frontend unitarias | Vitest de los cuatro paquetes del workspace | Un componente o un almacén se comporta distinto de su prueba |
 | ⑦ E2E | Playwright con cámara simulada y axe | Un recorrido de usuario roto o una violación de accesibilidad |
-| ⑧ Instalación limpia · ⑧b Actualización | `clean-install` (los cuatro escenarios de RQ-11) y `update` (idempotencia, vuelta atrás con fallo inyectado, restauración de la copia previa). Corren en `main`, en cada etiqueta y a mano, no en cada push | El instalador, el actualizador o el paquete de entrega no hacen lo que dice [`actualizacion-cliente.md`](actualizacion-cliente.md). **Es el que más importa antes de publicar** |
-| Nocturnas | `coverage` (dominio ≥ 90 %, global ≥ 75 %), `mutation` completa con su canario y la parte del dominio que ve (`mutate-scope`), y `secrets-history` | Una regresión que el push no cubre; se ve a la mañana siguiente |
+| ⑧ Instalación limpia · ⑧b Actualización | `clean-install` (los cuatro escenarios de RQ-11) y `update` (idempotencia, vuelta atrás con fallo inyectado, restauración de la copia previa). Viven en `.github/workflows/gates.yml` y corren en **cada pull request a `main`** (checks «⑧ Instalacion limpia» y «⑧b Actualizacion desde la version anterior»), en `main`, en cada etiqueta y a mano; no en cada push a una rama | El instalador, el actualizador o el paquete de entrega no hacen lo que dice [`actualizacion-cliente.md`](actualizacion-cliente.md). **Es el que más importa antes de publicar** |
+| Cobertura (RNF-M-01) | Job `coverage` de `gates.yml`: dominio ≥ 90 % y global ≥ 75 %, **también en cada pull request a `main`** (check «Cobertura (RNF-M-01)»); falla si no se cumplen | La suite deja sin ejecutar código de dominio o global. Se escribe la prueba que falta; no se baja el umbral |
+| Nocturnas | `coverage` (misma puerta, llamada desde `ci.yml`), `mutation` completa con su canario y la parte del dominio que ve (`mutate-scope`), y `secrets-history` | Una regresión que el push no cubre; se ve a la mañana siguiente |
 
 Los presupuestos de ①–③ (menos de 15 min de reloj) y del resto los mide cada job
 con una anotación `::warning`: es un termómetro, no una puerta. Si se pasa, se
@@ -38,6 +39,20 @@ mide y se arregla; no se sube el presupuesto.
 La distinción entre ① y ② es deliberada. Que un `use Illuminate\Support\...`
 dentro de `Modules/*/Domain/` rompa la etapa ② y no la ① es lo que permite leer
 el fallo sin abrir el log: *se ha roto la arquitectura*, no *falta un espacio*.
+
+## Comprobaciones obligatorias de `main` (protección de ramas)
+
+El propietario las configura en GitHub (Settings → Rules/Branches → `main`); el código no puede hacerlo. Los nombres exactos, que son los del job en el run de `pull_request` de `gates.yml`:
+
+- `⑧ Instalacion limpia`
+- `⑧b Actualizacion desde la version anterior`
+- `Cobertura (RNF-M-01)`
+
+Más las de ①–⑦ que el propietario decida exigir, con «Require branches to be up to date before merging» (`strict`) activado. Reglas para que no se rompa:
+
+- **No renombres el `name:` de estos tres jobs** sin cambiar la protección a la vez: un check obligatorio que ya no existe deja el PR esperando para siempre.
+- **`ci.yml` no tiene `pull_request` y no debe tenerlo**: su run del PR crearía todos los jobs con los mismos nombres como «skipped», y GitHub da por buena una comprobación obligatoria omitida (taparía un rojo del run del push).
+- Un check de estos en rojo en un PR se arregla en el PR: lee el log del job, reproduce según la sección siguiente y no relances para ponerlo en verde ([Relanzar un run](#relanzar-un-run)). Un PR desde un fork no recibe secretos; si necesita aprobación para correr, la da quien mantiene el repositorio.
 
 ## Diagnóstico: reproducir el fallo en tu máquina
 
@@ -98,7 +113,7 @@ Playwright no arranca ahí): valídalo en el job ⑦ de la CI o en el anfitrión
 | `la version X no tiene entrada en CHANGELOG.md` | `bash infra/scripts/changelog.sh generate --release X --write`, revisa el resultado, commitea y vuelve a etiquetar |
 | `release.yml` · `etiquetas-libres`: la etiqueta de imagen ya existe | **Una versión publicada no se vuelve a publicar** (ADR-053). Lo que se corrige sale en otra versión (`X.Y.Z+1`). Solo en el primer despliegue sobre un registro nuevo (GHCR responde `403` a un paquete inexistente) se lanza a mano con `first_publication` = true |
 | `release.yml` · `gates`: `VERSION no coincide con la etiqueta`, clave pública sin poner o `SECURITY.md` con marcadores | Corrige el fichero que dice el mensaje y vuelve a etiquetar; ninguna imagen se ha construido todavía |
-| `release.yml` · `esperar-ci`: la etapa ⑧/⑧b de esa etiqueta no está en verde | No se publica. Arregla la causa en `ci.yml` (⑧ y ⑧b corren en la propia etiqueta) y repite con `workflow_dispatch` indicando la etiqueta, sin crear otra |
+| `release.yml` · `esperar-ci`: la etapa ⑧/⑧b de esa etiqueta no está en verde | No se publica. Arregla la causa (⑧ y ⑧b, de `gates.yml`, corren en la propia etiqueta llamadas desde `ci.yml`) y repite con `workflow_dispatch` indicando la etiqueta, sin crear otra |
 | `Presupuesto excedido` (aviso, no error) | La etapa ha tardado más de lo que fija el doc 02 §10.1. No rompe la ejecución, pero se mira: una CI lenta se acaba ignorando |
 
 ## Relanzar un run

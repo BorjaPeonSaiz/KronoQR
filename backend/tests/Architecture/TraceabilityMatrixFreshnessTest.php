@@ -121,8 +121,9 @@ function faseEnCursoDeclarada(): int
 /**
  * La matriz que generaria hoy `qa:traceability`, con las mismas piezas que
  * el comando: el catalogo, el escaner, el orden y la fase de
- * `config/quality.php` y la lista de `quality.skipped_in_ci`, leidos como
- * literales porque esta suite no arranca el framework.
+ * `config/quality.php` y las listas de `quality.skipped_in_ci` y de
+ * `quality.measured_off_ci`, leidas como literales porque esta suite no
+ * arranca el framework.
  */
 function matrizRegenerada(): string
 {
@@ -131,6 +132,10 @@ function matrizRegenerada(): string
     preg_match('/\'phase_execution_order\'\s*=>\s*\[([\d,\s]+)\]/', $config, $orden);
     preg_match('/\'skipped_in_ci\'\s*=>\s*\[(?<entries>[^\]]*)\]/', $config, $omitidas);
     preg_match_all('/\'(?<file>[^\']+)\'\s*=>\s*\d+/', $omitidas['entries'] ?? '', $ficheros);
+    // Los umbrales que la CI no mide (V21-5-QA-02): sin ellos, la matriz
+    // regenerada aqui volveria a contar k6 como cobertura de RNF-P-06.
+    preg_match('/\'measured_off_ci\'\s*=>\s*\[(?<entries>[^\]]*)\]/', $config, $fueraDeLaCi);
+    preg_match_all('/\'(?<id>[^\']+)\'\s*=>\s*\'(?<where>[^\']*)\'/', $fueraDeLaCi['entries'] ?? '', $umbrales);
 
     return (new TraceabilityReport(
         RequirementCatalog::fromFile(Repo::file('docs/requisitos.yaml')),
@@ -138,6 +143,7 @@ function matrizRegenerada(): string
         new PhaseOrder(array_map(intval(...), array_map(trim(...), explode(',', $orden[1] ?? '')))),
         faseEnCursoDeclarada(),
         $ficheros['file'],
+        array_combine($umbrales['id'], $umbrales['where']),
     ))->toMarkdown();
 }
 

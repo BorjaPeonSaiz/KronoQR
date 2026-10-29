@@ -700,25 +700,44 @@ log "Resultados en ${results} (summary.json, edge-limits.json, privacy.json, ins
 # linea base con la misma carga (`not_comparable`, R5-QA-02), la medida es buena
 # y lo que no hay es con que compararla: decir «no fiable» mandaria a repetir
 # una pasada que no hay que repetir. Se lee de summary.json, que es quien lo
-# sabe; si no se puede leer, queda el mensaje generico.
+# sabe; si no se puede leer, queda el mensaje generico. Y si el runner iba mas
+# de `DEGRADED_MACHINE_RATIO` veces mas lento que en la linea base
+# (`unreliable`, V21-5-QA-01), se dice asi: lo que hay que hacer es repetirla.
 verdict_kind=""
 
 if [ "${verdict}" -eq 2 ] && [ "${aggregate_exit}" -eq 2 ] && [ "${own_unreliable}" -eq 0 ]; then
   verdict_kind="$(node -e \
-    "const s = Object.values(JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')).verdicts).map((v) => v.status); process.stdout.write(s.includes('not_comparable') && !s.includes('unmeasurable') ? 'not_comparable' : '')" \
+    "const s = Object.values(JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')).verdicts).map((v) => v.status); process.stdout.write(s.includes('unreliable') ? 'unreliable' : s.includes('not_comparable') && !s.includes('unmeasurable') ? 'not_comparable' : '')" \
     "${results}/summary.json" 2>/dev/null)" || verdict_kind=""
 fi
 
+# EL VEREDICTO TAMBIEN VA A UN FICHERO, `verdict.txt`, con una sola palabra.
+# `make load-test` sale con 2 ante CUALQUIER fallo de la receta, asi que quien
+# lo invoca a traves de make (load-test.yml) no puede distinguir un rojo de un
+# «no fiable» por el codigo de salida: lo lee de aqui (V21-5-QA-01).
 case "${verdict}" in
-0) log "VEREDICTO: verde." ;;
-1) log "VEREDICTO: rojo." ;;
+0)
+  verdict_word=verde
+  log "VEREDICTO: verde."
+  ;;
+1)
+  verdict_word=rojo
+  log "VEREDICTO: rojo."
+  ;;
 *)
-  if [ "${verdict_kind}" = "not_comparable" ]; then
+  if [ "${verdict_kind}" = "unreliable" ]; then
+    verdict_word=no_fiable_runner_degradado
+    log "VEREDICTO: no fiable; el runner iba degradado frente a la linea base (V21-5-QA-01): ni rojo ni verde, repite la pasada."
+  elif [ "${verdict_kind}" = "not_comparable" ]; then
+    verdict_word=no_comparable
     log "VEREDICTO: no comparable; la linea base se tomo con otra carga (el detalle esta arriba y en summary.json)."
   else
+    verdict_word=no_fiable
     log "VEREDICTO: no fiable; hay requisitos sin datos suficientes para juzgarlos."
   fi
   ;;
 esac
+
+printf '%s\n' "${verdict_word}" >"${results}/verdict.txt"
 
 exit "$(normalise_exit "${verdict}")"

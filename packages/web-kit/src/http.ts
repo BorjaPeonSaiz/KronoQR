@@ -187,6 +187,14 @@ export interface RequestOptions {
    * servidor… reintenta») en vez de dejar «Cargando…» para siempre.
    */
   timeoutMs?: number
+  /**
+   * Como leer el cuerpo de una respuesta `2xx` en vez de `response.json()`. Existe para
+   * los cuerpos de varios MB (el informe de 20 000 filas): `JSON.parse` de ~12 MB es una
+   * unica tarea de cientos de ms que el navegador no puede partir, y quien conoce el
+   * endpoint puede leerlo fuera del hilo principal. Lo que devuelva es el resultado de
+   * la peticion; el plazo (`timeoutMs`) sigue cubriendo la lectura.
+   */
+  readBody?: (response: Response) => Promise<unknown>
 }
 
 /** Espera maxima por omision de una lectura JSON. */
@@ -436,15 +444,51 @@ function startDeadline(options: RequestOptions): Deadline | null {
 }
 
 /** Lee el cuerpo JSON dentro del plazo; si el plazo vence a medias, es un `timeout`. */
-async function readJson<T>(response: Response, deadline: Deadline | null): Promise<T> {
+async function readJson<T>(
+  response: Response,
+  deadline: Deadline | null,
+  readBody?: (response: Response) => Promise<unknown>,
+): Promise<T> {
+  // Un `readBody` que cede el cuerpo a otro hilo (un Worker) no se entera del aborto de la
+  // peticion: el plazo se hace valer aqui, compitiendo con la lectura, para que cubra de verdad
+  // la lectura y no solo las cabeceras.
+  let stopWatching = (): void => {}
+
   try {
-    return (await response.json()) as T
+    const reading = readBody === undefined ? response.json() : readBody(response)
+
+    if (deadline === null || readBody === undefined) {
+      return (await reading) as T
+    }
+
+    const expired = new Promise<never>((_, reject) => {
+      const onAbort = (): void => {
+        // Si fue el plazo, el `catch` de abajo lo convierte en `timeout`; si fue el llamante, queda aborto.
+        reject(new DOMException('aborted', 'AbortError'))
+      }
+
+      if (deadline.signal.aborted) {
+        onAbort()
+      } else {
+        deadline.signal.addEventListener('abort', onAbort, { once: true })
+        stopWatching = () => {
+          deadline.signal.removeEventListener('abort', onAbort)
+        }
+      }
+    })
+
+    // La lectura abandonada puede fallar despues: no es un rechazo sin atender.
+    reading.catch(() => {})
+
+    return (await Promise.race([reading, expired])) as T
   } catch (failure) {
     if (deadline?.timedOut === true) {
       throw new ApiError({ kind: 'timeout', status: 0 })
     }
 
     throw failure
+  } finally {
+    stopWatching()
   }
 }
 
@@ -459,7 +503,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
       return null
     }
 
-    return await readJson<T>(response, deadline)
+    return await readJson<T>(response, deadline, options.readBody)
   } finally {
     deadline?.clear()
   }
@@ -483,7 +527,10 @@ export async function requestJsonWithHeaders<T>(
       throw new ApiError({ kind: 'unexpected', status: 204 })
     }
 
-    return { body: await readJson<T>(response, deadline), headers: response.headers }
+    return {
+      body: await readJson<T>(response, deadline, options.readBody),
+      headers: response.headers,
+    }
   } finally {
     deadline?.clear()
   }

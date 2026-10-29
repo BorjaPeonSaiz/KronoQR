@@ -49,7 +49,7 @@ const WALL_CLOCK_ASSERTIONS_SIN_PRESUPUESTO = [
  */
 const WALL_CLOCK_ASSERTIONS_E2E = [
     'frontend-admin/tests/e2e/perf-live-presence.spec.ts' => 'nocturna, bloquea: proyecto admin-perf; RNF-P-04 tal como se promete, LCP de la presencia con 500 personas en la mediana de tres cargas en frio',
-    'frontend-admin/tests/e2e/perf-large-tables.spec.ts' => 'nocturna, avisa: proyecto admin-perf; objetivo interno de los volumenes grandes, que no es promesa (decision del propietario del 28-10-2026)',
+    'frontend-admin/tests/e2e/perf-large-tables.spec.ts' => 'nocturna, bloquea las tareas largas y avisa del tiempo hasta la primera fila: proyecto admin-perf; objetivo interno de los volumenes grandes (tareas largas de 200 y 300 ms, 1,5 s interactivo), que no es promesa (decision del propietario del 28-10-2026); el interactivo no tiene margen en la CI y solo avisa',
     'frontend-kiosk/tests/e2e/perf-scan-latency.spec.ts' => 'nocturna: proyecto kiosk-perf-latency; RNF-P-01 con p95 y p99 de 60 escaneos (KP3)',
     'frontend-kiosk/tests/e2e/kiosk-upgrade.spec.ts' => 'avanza el reloj simulado lo que ha pasado de verdad; no afirma ninguna duracion',
     'frontend-kiosk/tests/e2e/perf-lcp.spec.ts' => 'en cada push por decision de KP1 (2.2.1): mediana de tres cargas en frio, margen medido del 32 % en la CI; caza el orden de magnitud, no un 5 %',
@@ -273,17 +273,21 @@ it('deja fuera de cada push los E2E de rendimiento nocturnos', function (string 
     ],
 ])->group('RQ-14');
 
-it('en la nocturna del panel, la promesa bloquea y el objetivo interno avisa', function (string $fichero, bool $bloquea): void {
+it('en la nocturna del panel, la promesa bloquea entera y el objetivo interno solo en las tareas largas', function (string $fichero, bool $esPromesa): void {
     // Decision del propietario del 28-10-2026: RNF-P-04 es la presencia en
-    // vivo con 500 empleados y bloquea; los volumenes grandes son un objetivo
-    // interno que se mide y avisa sin poner la nocturna en rojo (doc 02 §10.1).
+    // vivo con 500 empleados y es la unica promesa; los volumenes grandes son un
+    // objetivo interno (doc 02 §10.1). Empezo avisando sin bloquear porque el
+    // panel no lo cumplia; desde la 23.4 las tareas largas bloquean (70-160 ms
+    // frente a 200 y 300), pero el tiempo hasta la primera fila (1,5 s) sigue
+    // avisando: el doble de la API tarda casi la mitad y la CI va mas lenta que
+    // el anfitrion, de modo que no hay margen para bloquear.
     $texto = Repo::contents($fichero);
     $motivo = WALL_CLOCK_ASSERTIONS_E2E[$fichero] ?? '';
 
-    expect($motivo)->toStartWith($bloquea ? 'nocturna, bloquea' : 'nocturna, avisa')
-        ->and(str_contains($texto, "'@RNF-P-04'"))->toBe($bloquea)
-        ->and(str_contains($texto, 'expect(median('))->toBe($bloquea)
-        ->and(str_contains($texto, 'warnAboveTarget('))->toBe(! $bloquea);
+    expect($motivo)->toStartWith('nocturna, bloquea')
+        ->and(str_contains($texto, "'@RNF-P-04'"))->toBe($esPromesa)
+        ->and($texto)->toContain('.toBeLessThan(')
+        ->and(str_contains($texto, 'warnAboveTarget('))->toBe(! $esPromesa);
 })->with([
     'LCP de la presencia con 500 personas' => ['frontend-admin/tests/e2e/perf-live-presence.spec.ts', true],
     'informe de 20 000 filas y 3 000 hallazgos' => ['frontend-admin/tests/e2e/perf-large-tables.spec.ts', false],
