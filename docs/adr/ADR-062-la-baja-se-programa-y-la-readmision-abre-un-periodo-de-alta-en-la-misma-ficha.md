@@ -176,7 +176,7 @@ Las dos la leen de `EmployeeSnapshot`, que ya lleva `terminatedOn` (ADR-025). La
   de ADR-043).
 
 **Reprogramar** es volver a llamar a la baja con otra fecha. Si la fecha nueva es futura, se
-reprograma con asiento `employee.offboarding_scheduled` y `previous_terminated_at`. La fecha nueva
+reprograma con asiento `employee.offboarding_scheduled` y `previous_terminated_on`. La fecha nueva
 puede ser hoy, y entonces sigue programada. Si es anterior a hoy, o es hoy con `apply_now`, la baja se
 hace efectiva en el acto. Así «Aplicar ya» sirve también sobre una baja que ya estaba programada.
 
@@ -208,9 +208,11 @@ corregir la fecha (§7) cuando la baja ya sea efectiva.
   cota de continuación (ADR-058). Así el turno de noche y la pausa de madrugada del último día terminan
   fichados y no con una corrección. **Tope:** al empezar el segundo día civil después del cese (hoy ≥
   cese + 2) se aplica igual. El tramo que siga abierto lo detecta RF-PR-01 y se cierra con una
-  corrección (RF-PA-04), como hoy. La pregunta la hace el puerto `Workforce\Application\Port\FinalWorkDayActivity`,
-  que implementa `Attendance` porque la cota es suya, igual que `EmployeeDirectory` va en la dirección
-  contraria (ADR-025).
+  corrección (RF-PA-04), como hoy. La pregunta la hace el puerto `Shared\Application\Port\FinalWorkDayActivity`,
+  que implementa `Attendance` porque la cota es suya. Va en `Shared` y no en `Workforce` porque
+  implementarlo desde `Attendance` obligaría a importar `Workforce`, arista que ADR-025 y Deptrac
+  prohíben; es el mismo patrón que `SerializedLedgerWrite`. El adaptador lee sin bloquear para no
+  invertir el orden de candados de ADR-046.
 - **Cómo aplica.** Una transacción por persona: un fallo no detiene a las demás. Dentro, el orden de
   ADR-046: `withChainLock` → `findForUpdate` → se comprueba otra vez que la baja sigue vencida y sin
   anular → `Employee::applyScheduledOffboarding($today)` → `saveTermination` → `offboarded_at = now`
@@ -347,11 +349,11 @@ fechas e identificadores de la organización, **nunca nombre, documento ni motiv
 
 | Acción | Actor | Cuándo | *Payload* además de `employee_uuid` |
 |---|---|---|---|
-| `employee.offboarding_scheduled` | cuenta de gestión | se programa o se reprograma una baja, también con cese de hoy sin `apply_now` | `terminated_at`, `previous_terminated_at` (al reprogramar) |
-| `employee.offboarding_cancelled` | cuenta de gestión | se anula | `terminated_at` anulada |
-| `employee.offboarded` | cuenta de gestión o `system` | la baja se hace efectiva, en el acto o por la tarea | `terminated_at`; `apply_now: true` si se aplicó ya con cese de hoy; si la aplica la tarea, `scheduled: true`, `due_on` y `days_late` |
+| `employee.offboarding_scheduled` | cuenta de gestión | se programa o se reprograma una baja, también con cese de hoy sin `apply_now` | `terminated_on`, `previous_terminated_on` (al reprogramar) |
+| `employee.offboarding_cancelled` | cuenta de gestión | se anula | `terminated_on` anulada |
+| `employee.offboarded` | cuenta de gestión o `system` | la baja se hace efectiva, en el acto o por la tarea | `terminated_on`; `apply_now: true` si se aplicó ya con cese de hoy; si la aplica la tarea, `scheduled: true`, `due_on` y `days_late` |
 | `employee.rehired` | cuenta de gestión | readmisión, individual, en lote o por importación | `employment_period_uuid`, `hired_at`, `department_id`, `previous_department_id` (si cambia), `pin_reset`, `via_import` |
-| `employee.termination_date_corrected` | cuenta de gestión | corrección de §7 | `employment_period_uuid`, `previous_terminated_at`, `terminated_at`, `correction_id` |
+| `employee.termination_date_corrected` | cuenta de gestión | corrección de §7 | `employment_period_uuid`, `previous_terminated_on`, `terminated_on`, `correction_id` |
 
 **Se mantiene `employee.offboarded` para la baja que aplica la tarea, y no se crea
 `employee.terminated`.** Es el mismo hecho legal, la baja efectiva, y la conciliación, la
@@ -368,7 +370,7 @@ por rol (regla dura 18).
 
 | Operación | Ruta y cuerpo | Respuestas |
 |---|---|---|
-| Baja, en el acto o programada | `POST /api/v1/employees/{uuid}/offboard`, `{ terminated_at, reason?, apply_now?: false }`. **`apply_now` es el único campo nuevo**, opcional y `false` por omisión: con cese de hoy aplica la baja en el acto (despido con efecto inmediato) | `200` `Employee`, que gana `offboarding: { state: "scheduled" | "effective", terminated_at } | null`. `409` `employee-terminated` si ya es efectiva. `422` `terminated_at`, o `apply_now` con un cese posterior a hoy || "effective", terminated_at } \| null`. `409` `employee-terminated` si ya es efectiva. `422` `terminated_at` |
+| Baja, en el acto o programada | `POST /api/v1/employees/{uuid}/offboard`, `{ terminated_at, reason?, apply_now?: false }`. **`apply_now` es el único campo nuevo**, opcional y `false` por omisión: con cese de hoy aplica la baja en el acto (despido con efecto inmediato) | `200` `Employee`, que gana `offboarding: { state: "scheduled" \| "effective", terminated_at } \| null`. `409` `employee-terminated` si ya es efectiva. `422` `terminated_at`, o `apply_now` con un cese posterior a hoy |
 | Anular la baja programada | `POST /api/v1/employees/{uuid}/offboard/cancel`, sin cuerpo | `200` `Employee`. `409` `offboarding-not-scheduled`, `offboarding-due` o `employee-terminated` |
 | Readmisión | `POST /api/v1/employees/{uuid}/rehire`, `{ hired_at, department_id?, locale?, contract?: { weekly_hours, annual_hours, schedule_type } \| null, reset_pin?: false }` | `200` `{ employee, employment_period, credential: { uuid, status: "pending_print" }, pin? }`. `pin` solo con `reset_pin`, una vez. `409` `employee-not-terminated` o `employee-record-minimised`. `422` `hired_at` |
 | Readmisión en lote | `POST /api/v1/employees/rehire`, `{ employee_uuids: [uuid, …], hired_at, reset_pin?: false }` | `200` `{ rehired: [ … como arriba ] }`. `422` con un error por posición y nada escrito |
@@ -400,7 +402,7 @@ por rol (regla dura 18).
   *listener* en su `Infrastructure` y un caso de uso `IssueCredentialForRehiredEmployee`. Es el mismo
   patrón que `RevokeCredentialsOnOffboarding`. `Workforce` no importa `Identity`.
 - **`Attendance`** lee los periodos por `EmployeeDirectory` (`EmployeeSnapshot` gana
-  `employmentPeriods`) e implementa `FinalWorkDayActivity` para la tarea. No importa `Workforce`.
+  `employmentPeriods`) e implementa el puerto `Shared` `FinalWorkDayActivity` para la tarea. No importa `Workforce`.
 - **`Compliance`** escribe los asientos desde `RecordWorkforceChange`.
 - **`Reporting`** cuenta a una persona «de alta» un día si ese día cae en alguno de sus periodos. El
   hueco entre dos periodos no es un día de alta sin actividad, y el prorrateo de RF-IN-03 solo cuenta
