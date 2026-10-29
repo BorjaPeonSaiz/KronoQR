@@ -289,6 +289,23 @@ export function formatInstantWithZone(value: string, timeZone: string, locale: s
 }
 
 /**
+ * Construir un `Intl.DateTimeFormat` cuesta cientos de microsegundos; una tabla de miles de filas
+ * que lo hace por celda lo paga en cada una. Se guarda uno por idioma.
+ */
+const civilDateFormatters = new Map<string, Intl.DateTimeFormat>()
+
+function civilDateFormatter(locale: string): Intl.DateTimeFormat {
+  let formatter = civilDateFormatters.get(locale)
+
+  if (formatter === undefined) {
+    formatter = new Intl.DateTimeFormat(locale, { timeZone: 'UTC', dateStyle: 'medium' })
+    civilDateFormatters.set(locale, formatter)
+  }
+
+  return formatter
+}
+
+/**
  * Una fecha civil `YYYY-MM-DD`. Se formatea en UTC a proposito: asi el dia que
  * se enseña es exactamente el que trae el dato, sin desplazarlo ninguna zona.
  */
@@ -297,9 +314,7 @@ export function formatCivilDate(value: string, locale: string): string {
     return ''
   }
 
-  return new Intl.DateTimeFormat(locale, { timeZone: 'UTC', dateStyle: 'medium' }).format(
-    new Date(`${value}T00:00:00Z`),
-  )
+  return civilDateFormatter(locale).format(new Date(`${value}T00:00:00Z`))
 }
 
 /** La fecha civil de hoy en la zona del centro, para preseleccionar un formulario. */
@@ -420,4 +435,16 @@ export function minutesBetween(from: string, to: string | null): number | null {
 
   // Resta el resto antes de dividir: trunca hacia cero sin el `-0` de `Math.trunc`.
   return (seconds - (seconds % 60)) / 60
+}
+
+/**
+ * Calienta el formateo de instantes: la PRIMERA construccion de un `Intl.DateTimeFormat` con zona
+ * horaria carga los datos del idioma y de la zona y cuesta decenas de ms en un portatil lento. Se
+ * llama mientras se espera una respuesta, para que ese coste no caiga en la tarea que pinta el
+ * resultado. No devuelve nada ni se enseña: la hora que se muestra sigue siendo la de la zona del
+ * centro, resuelta por `formatInstant`.
+ */
+export function warmInstantFormatting(locale: string): void {
+  formatInstant('2026-01-01T00:00:00Z', 'UTC', locale)
+  formatCivilDate('2026-01-01', locale)
 }
