@@ -91,6 +91,17 @@ enum AbsenceImportMessageCode: string
     case DUPLICATE_IN_FILE = 'duplicate_in_file';
 
     /**
+     * La ausencia no cae entera dentro de un periodo de alta de la persona
+     * (RN-27, 2.3.0): empieza antes de un alta, termina despues de un cese o
+     * pisa el hueco entre una baja y una readmision.
+     *
+     * Es la regla de `Absence::fallsWithin()`, la misma que aplica la
+     * escritura. Dicha en la revision para que una linea que no se iba a
+     * escribir no salga como `create`.
+     */
+    case OUTSIDE_EMPLOYMENT = 'outside_employment';
+
+    /**
      * Aviso: el fichero trae una columna que el importador no usa.
      *
      * No rechaza nada, pero se dice, porque el caso que importa es el otro: que

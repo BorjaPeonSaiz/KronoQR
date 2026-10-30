@@ -63,6 +63,10 @@ return [
             'duplicate_in_file' => 'Esta ausencia se pisa con otra línea anterior del mismo fichero. Se '
                 .'carga la primera y esta se descarta: borra la repetida o unifica las dos líneas.',
 
+            'outside_employment' => 'Esa persona no estaba de alta todos esos días: la ausencia empieza '
+                .'antes de su alta, acaba después de su cese o cae entre una baja y una readmisión. Ajusta '
+                .'las fechas a su periodo de alta, que ves en su ficha.',
+
             'unknown_column' => 'La columna «:column» no se usa. Si esperabas que sí, revisa cómo se '
                 .'llama: los nombres que el sistema reconoce están en la guía de configuración, y '
                 .'puedes añadir los tuyos sin tocar nada del programa.',
