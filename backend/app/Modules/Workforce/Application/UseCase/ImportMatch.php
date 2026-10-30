@@ -37,12 +37,18 @@ final readonly class ImportMatch
     private function __construct(
         public ?Employee $employee,
         public array $errors,
+        /**
+         * Se la encontro **por su documento**. Solo asi la linea puede
+         * readmitir a una persona de baja (RN-27): el correo se comparte y
+         * cambia de manos, el documento no.
+         */
+        public bool $byDocument = false,
     ) {}
 
     /** Se encontro a la persona, o no habia ninguna y es un alta. */
-    public static function of(?Employee $employee): self
+    public static function of(?Employee $employee, bool $byDocument = false): self
     {
-        return new self($employee, []);
+        return new self($employee, [], $byDocument);
     }
 
     /** El emparejamiento encontro un impedimento: la linea no se puede aplicar. */

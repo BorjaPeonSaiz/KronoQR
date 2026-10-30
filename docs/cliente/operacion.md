@@ -2047,8 +2047,11 @@ una tarjeta nueva pendiente de imprimir, y las de antes siguen revocadas. El
 alta con el documento de alguien de baja sigue rechazándose, y ahora indica qué
 persona se puede readmitir. **La importación de plantilla ya no rechaza la línea
 de una persona de baja**: si trae una fecha de alta posterior al cese, la
-propone como readmisión en el resumen previo; si trae la fecha de alta de
-siempre, se rechaza como antes. Una **fecha de cese mal puesta** en una baja ya
+propone como readmisión en el resumen previo, siempre que la identifique por su
+documento y con el nombre de su ficha (si solo coincide el correo, se rechaza);
+si trae la fecha de alta de siempre, se rechaza como antes. Si entre el resumen
+y la aplicación cambia a quién se readmitiría, la aplicación no escribe nada y
+pide volver a comprobar el fichero. Una **fecha de cese mal puesta** en una baja ya
 efectiva se corrige con un motivo, que queda guardado con la fecha anterior; los
 días que gana el periodo admiten tramos a mano, y los fichajes rechazados esos
 días no se reprocesan. **La actualización crea la historia de periodos de alta**

@@ -2070,7 +2070,10 @@ they get a new card pending printing, and the old ones stay revoked. Hiring with
 the document of someone who left is still rejected, and now says which person can
 be rehired. **The staff import no longer rejects the row of a person who left**:
 if it brings a start date after the termination, the preview proposes it as a
-rehire; if it brings the usual start date, it is rejected as before. A **wrong
+rehire, provided it identifies the person by their document and with the name on
+their record (a match by email alone is rejected); if it brings the usual start
+date, it is rejected as before. If who would be rehired changes between the
+preview and applying it, nothing is written and the file has to be checked again. A **wrong
 termination date** on an effective offboarding is corrected with a reason, kept
 with the previous date; the days the period gains accept hours entered by hand,
 and clockings rejected on those days are not reprocessed. **The update creates

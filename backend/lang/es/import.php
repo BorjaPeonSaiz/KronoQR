@@ -73,6 +73,13 @@ return [
         'rehire_not_after_termination' => 'Esta persona está de baja y la fecha de alta de esta línea no '
             .'es posterior a su fecha de cese. Para darla de alta de nuevo, pon una fecha posterior al cese.',
 
+        'rehire_identity_mismatch' => 'Esta línea coincide con una persona de baja, pero no con seguridad '
+            .'para darla de alta de nuevo: o solo coincide el correo, o el nombre no es el de su ficha. '
+            .'Escribe su documento y su nombre tal como están en la ficha, o hazlo desde su ficha.',
+
+        'rehire_ignores_identity_changes' => 'El nombre o el correo de esta línea no son los de la ficha, '
+            .'y al darla de alta de nuevo no se cambian. Si hay que cambiarlos, hazlo en su ficha.',
+
         'locale_not_active' => 'El idioma de esta línea no está activo en la instalación, así que se '
             .'ignora: un alta se crea con el idioma de la instalación y una ficha que ya existe conserva el '
             .'suyo. Si quieres ofrecer ese idioma, actívalo en Ajustes operativos > Idiomas y vuelve a importar.',

@@ -308,9 +308,17 @@ tramo de la jornada del cese.
   `rehire_proposed`, y la fecha de alta de la fila es la de la readmisión. Sin fecha de alta en la
   fila, o con una fecha no posterior al cese, la fila da error (`rehire_requires_hired_at`,
   `rehire_not_after_termination`). Al aplicar, la fila pasa por el mismo caso de uso de la
-  readmisión. El resumen gana el contador `rehire`, con el nombre de la acción como los demás. Lo de ADR-046 §5 sobre la baja que confirma entre
-  la comprobación y la aplicación sigue igual. Una readmisión hecha por otra vía en ese hueco da `409`
-  en la aplicación (`employee-not-terminated`), con el mismo criterio.
+  readmisión. El resumen gana el contador `rehire`, con el nombre de la acción como los demás.
+  **Solo se readmite a quien la fila identifica por su documento y con el nombre de su ficha** (sin
+  distinguir mayúsculas, tildes ni espacios); si coincide solo por correo, o el nombre es otro, la fila
+  da error (`rehire_identity_mismatch`): un correo compartido o una errata en el documento
+  readmitirían a otra persona en su ficha. Si la fila trae otro nombre u otro correo y aun así se
+  readmite, el aviso `rehire_ignores_identity_changes` dice que no se aplican. **Las readmisiones que se
+  aplican son las revisadas** (revisión del 30-10-2026): la comprobación devuelve `rehire_digest` y
+  `apply` lo exige en `confirm_rehire_digest`; una baja o una readmisión por otra vía entre las dos
+  peticiones cambia la huella y la aplicación entera responde `409` sin escribir nada (ADR-046 §5,
+  enmendado). La que llega durante la propia aplicación da `409` como hasta ahora
+  (`employee-terminated` o `employee-not-terminated`).
 
 ### 7. La corrección auditada de la fecha de cese
 

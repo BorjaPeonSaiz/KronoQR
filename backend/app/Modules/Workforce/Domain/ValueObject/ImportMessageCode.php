@@ -94,6 +94,23 @@ enum ImportMessageCode: string
     case REHIRE_NOT_AFTER_TERMINATION = 'rehire_not_after_termination';
 
     /**
+     * La fila encontro a una persona de baja, pero no con seguridad bastante
+     * para readmitirla (RN-27): la coincidencia fue **solo por correo**, o el
+     * nombre de la fila no es el de la ficha. Un correo compartido o una errata
+     * en el documento readmitirian a otra persona en su ficha, y su registro
+     * horario seguiria a nombre de quien no es. Se rechaza la linea; la
+     * readmision se hace desde la ficha o con el documento en el fichero.
+     */
+    case REHIRE_IDENTITY_MISMATCH = 'rehire_identity_mismatch';
+
+    /**
+     * Aviso de la fila `rehire`: trae un nombre o un correo distintos de los de
+     * la ficha, y la readmision **no** los aplica (nombre, documento y codigo no
+     * cambian al readmitir). Si hay que cambiarlos, se hace en la ficha.
+     */
+    case REHIRE_IGNORES_IDENTITY_CHANGES = 'rehire_ignores_identity_changes';
+
+    /**
      * Aviso: el fichero trae una columna que el importador no usa.
      *
      * No rechaza nada —una exportacion de nomina trae veinte columnas y a
@@ -117,7 +134,8 @@ enum ImportMessageCode: string
     public function isWarning(): bool
     {
         return match ($this) {
-            self::HIRED_AT_NOT_UPDATED, self::UNKNOWN_COLUMN, self::LOCALE_NOT_ACTIVE, self::REHIRE_PROPOSED => true,
+            self::HIRED_AT_NOT_UPDATED, self::UNKNOWN_COLUMN, self::LOCALE_NOT_ACTIVE, self::REHIRE_PROPOSED,
+            self::REHIRE_IGNORES_IDENTITY_CHANGES => true,
             default => false,
         };
     }

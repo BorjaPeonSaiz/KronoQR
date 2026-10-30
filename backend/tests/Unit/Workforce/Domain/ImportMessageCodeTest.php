@@ -10,7 +10,7 @@ use App\Modules\Workforce\Domain\ValueObject\ImportMessageCode;
  * decidir que es sale aqui como error, que es lo seguro.
  */
 
-it('solo avisan la fecha de alta no aplicada, la readmision propuesta, la columna desconocida y el idioma inactivo; el resto rechaza la linea', function (): void {
+it('solo avisan la fecha de alta no aplicada, la readmision propuesta, la identidad que la readmision no aplica, la columna desconocida y el idioma inactivo; el resto rechaza la linea', function (): void {
     $avisos = array_values(array_filter(
         ImportMessageCode::cases(),
         static fn (ImportMessageCode $code): bool => $code->isWarning(),
@@ -19,6 +19,7 @@ it('solo avisan la fecha de alta no aplicada, la readmision propuesta, la column
     expect($avisos)->toBe([
         ImportMessageCode::HIRED_AT_NOT_UPDATED,
         ImportMessageCode::REHIRE_PROPOSED,
+        ImportMessageCode::REHIRE_IGNORES_IDENTITY_CHANGES,
         ImportMessageCode::UNKNOWN_COLUMN,
         ImportMessageCode::LOCALE_NOT_ACTIVE,
     ]);

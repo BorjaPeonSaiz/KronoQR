@@ -64,6 +64,13 @@ return [
         'rehire_not_after_termination' => 'This person has left and the start date of this row is not after '
             .'their termination date. To rehire them, use a date after the termination.',
 
+        'rehire_identity_mismatch' => 'This row matches a person who has left, but not reliably enough to '
+            .'rehire them: only the email matches, or the name is not the one on their record. Write their '
+            .'ID document and their name as on the record, or rehire them from their record.',
+
+        'rehire_ignores_identity_changes' => 'The name or email in this row is not the one on the record, '
+            .'and rehiring does not change them. If they have to change, do it on the record.',
+
         'locale_not_active' => 'The language in this row is not active on this installation, so it is '
             .'ignored: a new record gets the installation language and an existing one keeps its own. To '
             .'offer that language, turn it on in Operational settings > Languages and import again.',
