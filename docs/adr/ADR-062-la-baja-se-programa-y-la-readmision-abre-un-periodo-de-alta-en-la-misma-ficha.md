@@ -80,8 +80,8 @@ repositorio. Un *constraint trigger* `DEFERRABLE INITIALLY DEFERRED`,
 
 1. Se crea la tabla.
 2. Se rellena con un periodo por ficha: `hired_on = hired_at`, `terminated_on = terminated_at` y
-   `offboarded_at`. Para una baja, `offboarded_at` es el `created_at` del asiento `employee.offboarded`
-   de esa persona y, si no lo hay, el `updated_at` de la ficha.
+   `offboarded_at`. Para una baja, `offboarded_at` es el `occurred_at` del último asiento
+   `employee.offboarded` de esa persona y, si no lo hay, el `updated_at` de la ficha.
 3. Se crea el disparador de §2 y el de la proyección.
 
 Es reversible mientras no exista una segunda fila para ninguna persona. El `down()` lo comprueba y se
@@ -308,7 +308,7 @@ tramo de la jornada del cese.
   `rehire_proposed`, y la fecha de alta de la fila es la de la readmisión. Sin fecha de alta en la
   fila, o con una fecha no posterior al cese, la fila da error (`rehire_requires_hired_at`,
   `rehire_not_after_termination`). Al aplicar, la fila pasa por el mismo caso de uso de la
-  readmisión. El resumen gana el contador `rehired`. Lo de ADR-046 §5 sobre la baja que confirma entre
+  readmisión. El resumen gana el contador `rehire`, con el nombre de la acción como los demás. Lo de ADR-046 §5 sobre la baja que confirma entre
   la comprobación y la aplicación sigue igual. Una readmisión hecha por otra vía en ese hueco da `409`
   en la aplicación (`employee-not-terminated`), con el mismo criterio.
 
@@ -388,8 +388,8 @@ por rol (regla dura 18).
 | Readmisión | `POST /api/v1/employees/{uuid}/rehire`, `{ hired_at, department_id?, locale?, contract?: { weekly_hours, annual_hours, schedule_type } \| null, reset_pin?: false }` | `200` `{ employee, employment_period, credential: { uuid, status: "pending_print" }, pin? }`. `pin` solo con `reset_pin`, una vez. `409` `employee-not-terminated` o `employee-record-minimised`. `422` `hired_at` |
 | Readmisión en lote | `POST /api/v1/employees/rehire`, `{ employee_uuids: [uuid, …], hired_at, reset_pin?: false }` | `200` `{ rehired: [ … como arriba ] }`. `422` con un error por posición y nada escrito |
 | Corrección de la fecha de cese | `POST /api/v1/employees/{uuid}/employment-periods/{periodUuid}/termination-corrections`, `{ terminated_at, reason }` | `201` `EmploymentPeriodCorrection`. `409` `offboarding-not-effective`. `422` `terminated_at` o `reason` |
-| Periodos | `GET /api/v1/employees/{uuid}` gana `employment_periods: [{ uuid, hired_at, terminated_at, state }]` | — |
-| Importación | `POST /api/v1/employees/import`, **sin cambio de cuerpo** | El informe gana la acción `rehire`, el aviso `rehire_proposed`, los errores `rehire_requires_hired_at` y `rehire_not_after_termination`, y el contador `rehired`. `employee_terminated` deja de emitirse |
+| Periodos | `GET /api/v1/employees/{uuid}` gana `employment_periods: [{ uuid, hired_at, terminated_at, state }]`, en la ficha de `rrhh+` (la reducida del responsable no lo lleva) | — |
+| Importación | `POST /api/v1/employees/import`, **sin cambio de cuerpo** | El informe gana la acción `rehire`, el aviso `rehire_proposed`, los errores `rehire_requires_hired_at` y `rehire_not_after_termination`, y el contador `rehire`. `employee_terminated` deja de emitirse |
 | Alta con documento de una baja | `POST /api/v1/employees` | El `409` del documento gana `rehirable_employee_uuid` si procede |
 
 ### 11. Módulos y puertos

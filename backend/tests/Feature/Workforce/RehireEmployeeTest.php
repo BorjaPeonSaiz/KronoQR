@@ -12,7 +12,9 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\Credentials;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Identity\PortalLogins;
 use Tests\Support\Time\FrozenTime;
+use Tests\Support\Workforce\EmployeePins;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -351,3 +353,20 @@ it('en lote, un contrato que pisaria el periodo nuevo responde 409 y no readmite
     expect(asientosDeLaReadmision('employee.rehired'))->toBe([])
         ->and(DB::table('employees')->whereIn('uuid', [$escenario['employee'], $otra])->where('status', 'terminated')->count())->toBe(2);
 })->group('RN-27', 'RF-GP-02');
+
+it('vuelve a entrar al portal con el PIN de siempre y ve el registro de los dos periodos', function (): void {
+    $escenario = personaDeBajaParaReadmitir();
+    EmployeePins::issue($escenario['employee'], PortalLogins::PIN);
+    $codigo = EmployeePins::codeOf($escenario['employee']);
+
+    // De baja, el portal no la admite.
+    Api::guest()->post('/api/v1/me/login', ['employee_code' => $codigo, 'pin' => PortalLogins::PIN])->assertStatus(401);
+
+    Api::as(tokenDeLaReadmision())
+        ->post('/api/v1/employees/'.$escenario['employee'].'/rehire', ['hired_at' => REHIRE_TEST_RETURN])
+        ->assertValidResponse(200);
+
+    $sesion = PortalLogins::tokenFor($codigo);
+
+    Api::as($sesion)->get('/api/v1/me/workdays', ['from' => '2026-10-01', 'to' => '2027-04-01'])->assertStatus(200);
+})->group('RN-27', 'RL-05', 'RF-ID-06');

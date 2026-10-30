@@ -136,6 +136,7 @@
 - { id: RN-12,     fase: 2, titulo: "Descanso en jornada continuada: se alerta si un tramo continuo supera 6 h sin pausa registrada" }
 - { id: RN-13,     fase: 1, titulo: "Ningún registro de fichaje se borra ni se sobrescribe" }
 - { id: RN-14,     fase: 2, titulo: "Un empleado dado de baja conserva su historial; su credencial queda revocada y sus escaneos son rechazados" }
+- { id: RN-27,     fase: 2, titulo: "Una persona de baja puede volver a la plantilla, en la misma ficha, con un periodo de alta nuevo" }
 - { id: RN-15,     fase: 1, titulo: "El horario de un fichaje offline es el occurred_at del dispositivo, marcado con su retraso de sincronización" }
 - { id: RNF-D-02,  fase: 1, titulo: "RPO ≤ 15 min (copias más WAL)" }
 - { id: RNF-D-03,  fase: 2, titulo: "Degradación elegante: si cae el WebSocket, el panel hace fallback a sondeo cada 15 s" }

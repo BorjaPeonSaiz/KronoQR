@@ -13,7 +13,7 @@ use App\Modules\Shared\Domain\Exception\BusinessRejection;
  * Pasado el cese, la baja rige aunque la tarea del sistema no la haya aplicado
  * todavia: desde el dia siguiente nadie pudo anotar ni fichar jornadas de esa
  * persona. Anularla borraria ese hecho. Si la persona sigue trabajando, la via es
- * readmitirla o corregir la fecha cuando la baja sea efectiva (ADR-062 §6 y §7).
+ * readmitirla o corregir la fecha cuando la baja sea efectiva (RN-27).
  *
  * `getMessage()` es tecnico y en ingles, con fechas y nada que identifique a
  * nadie (regla dura 21); lo que ve una persona sale de

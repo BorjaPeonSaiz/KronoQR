@@ -66,6 +66,14 @@ readonly KQ_MINIMISE_TRIGGERS_ACCOUNTS="users:users_guard_anonymized users:users
 readonly KQ_MINIMISE_TRIGGERS_PERSONNEL="employees:employees_guard_anonymized employment_contracts:employment_contracts_guard_anonymized_employee absences:absences_guard_anonymized_employee"
 # Tablas que pierden DELETE para el rol: se minimizan en sitio (RN-13: no se borra la ficha).
 readonly KQ_MINIMISE_NO_DELETE_TABLES="employment_contracts absences employees users"
+# Los periodos de alta (RN-27, ADR-062 §1 y §2, 2.3.0): el disparador de las transiciones de
+# la ficha, la guarda de los periodos y la comprobacion diferida de la proyeccion. Se exigen
+# SOLO si su migracion esta aplicada, como la minimizacion. Las funciones son de trigger:
+# nadie tiene EXECUTE. El rol no borra periodos ni correcciones, ni reescribe correcciones.
+readonly KQ_EMPLOYMENT_PERIODS_MIGRATION="'2026_10_30_100000_create_employment_periods'"
+readonly KQ_EMPLOYMENT_PERIODS_GUARD_FUNCTIONS="employees_guard_employment_transition employment_periods_guard employees_assert_current_period"
+readonly KQ_EMPLOYMENT_PERIODS_TRIGGERS="employees:employees_guard_employment_transition employment_periods:employment_periods_guard employees:employees_current_period_matches employment_periods:employment_periods_match_employee"
+readonly KQ_EMPLOYMENT_PERIODS_NO_DELETE_TABLES="employment_periods employment_period_corrections"
 
 # Triggers del registro (ADR-057 par.2, tarea 7.5), tabla:nombre. Se exige que existan estos y
 # que TODOS los no internos de las dos tablas esten activos (`tgenabled = 'O'`), de modo que
@@ -294,6 +302,42 @@ SQL
   done
 }
 
+# Los periodos de alta (ADR-062 §2): funciones de trigger sin EXECUTE, sus triggers activos y
+# sin DELETE para el rol en las dos tablas ni UPDATE en las correcciones. Solo con su migracion.
+employment_periods_sql() {
+  local role="$1" fn tbl
+  local applied="EXISTS (SELECT 1 FROM migrations WHERE migration = ${KQ_EMPLOYMENT_PERIODS_MIGRATION})"
+
+  for fn in ${KQ_EMPLOYMENT_PERIODS_GUARD_FUNCTIONS}; do
+    minimise_guard_function_sql "${role}" "${fn}" "${applied}"
+  done
+  # to_regclass y no ::regclass: sin la migracion la tabla de los periodos no existe, y el
+  # cast de un literal se resuelve al planificar aunque el WHERE sea falso.
+  for fn in ${KQ_EMPLOYMENT_PERIODS_TRIGGERS}; do
+    cat <<SQL
+  UNION ALL
+  SELECT 'trigger:${fn#*:}:' || CASE WHEN g.tgname IS NULL THEN 'AUSENTE' ELSE 'DESACTIVADO' END
+    FROM (SELECT 1) AS one LEFT JOIN pg_trigger g
+      ON g.tgrelid = to_regclass('public.${fn%%:*}') AND g.tgname = '${fn#*:}' AND NOT g.tgisinternal
+   WHERE (${applied}) AND (g.tgname IS NULL OR g.tgenabled <> 'O')
+SQL
+  done
+  for tbl in ${KQ_EMPLOYMENT_PERIODS_NO_DELETE_TABLES}; do
+    cat <<SQL
+  UNION ALL
+  SELECT '${tbl}:DELETE'
+   WHERE (${applied}) AND to_regclass('public.${tbl}') IS NOT NULL
+     AND has_table_privilege('${role}', to_regclass('public.${tbl}'), 'DELETE')
+SQL
+  done
+  cat <<SQL
+  UNION ALL
+  SELECT 'employment_period_corrections:UPDATE'
+   WHERE (${applied}) AND to_regclass('public.employment_period_corrections') IS NOT NULL
+     AND has_table_privilege('${role}', to_regclass('public.employment_period_corrections'), 'UPDATE')
+SQL
+}
+
 # Tabla:INSERT:UPDATE:DELETE del estado exigible (b7 si aun no se ha decidido: es el
 # estado de la version que se publica).
 work_record_privileges_tables() {
@@ -406,6 +450,8 @@ $(site_timezone_readonly_table_sql "${role}" "${KQ_SITE_TIMEZONE_BASELINE}" "${s
      AND has_sequence_privilege('${role}', to_regclass('public.${KQ_SITE_TIMEZONE_TRACE}_id_seq'), 'USAGE')"
     purge_sql="${purge_sql}
 $(minimise_retention_sql "${role}")"
+    purge_sql="${purge_sql}
+$(employment_periods_sql "${role}")"
 
   fi
 
@@ -471,7 +517,7 @@ work_record_privileges_repair_sql() {
     # DELETE sobre las dos tablas que se minimizan en vez de borrarse. Solo con su
     # migracion aplicada.
     local guards="" guard
-    for guard in ${KQ_MINIMISE_GUARD_FUNCTIONS_ACCOUNTS} ${KQ_MINIMISE_GUARD_FUNCTIONS_PERSONNEL}; do
+    for guard in ${KQ_MINIMISE_GUARD_FUNCTIONS_ACCOUNTS} ${KQ_MINIMISE_GUARD_FUNCTIONS_PERSONNEL} ${KQ_EMPLOYMENT_PERIODS_GUARD_FUNCTIONS}; do
       guards="${guards:+${guards}, }'${guard}'"
     done
     printf '%s\n' "DO \$kq\$ DECLARE f regprocedure; BEGIN FOR f IN SELECT oid::regprocedure FROM pg_proc WHERE proname IN (${guards}) AND pronamespace = 'public'::regnamespace LOOP EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC', f); EXECUTE format('REVOKE ALL ON FUNCTION %s FROM %I', f, '${CFG_DB_USERNAME}'); END LOOP; END \$kq\$;"
@@ -480,5 +526,8 @@ work_record_privileges_repair_sql() {
       no_delete="${no_delete:+${no_delete}, }'${tbl}'"
     done
     printf '%s\n' "DO \$kq\$ DECLARE t text; BEGIN IF EXISTS (SELECT 1 FROM migrations WHERE migration = ${KQ_MINIMISE_MIGRATION_PERSONNEL}) THEN FOREACH t IN ARRAY ARRAY[${no_delete}] LOOP EXECUTE format('REVOKE DELETE ON TABLE public.%I FROM %I', t, '${CFG_DB_USERNAME}'); END LOOP; END IF; END \$kq\$;"
+    # Los periodos de alta (ADR-062 §2): sin DELETE en las dos tablas ni UPDATE en las
+    # correcciones. El UPDATE de columna de los periodos lo deja la migracion y no se toca.
+    printf '%s\n' "DO \$kq\$ BEGIN IF EXISTS (SELECT 1 FROM migrations WHERE migration = ${KQ_EMPLOYMENT_PERIODS_MIGRATION}) THEN EXECUTE format('REVOKE DELETE, TRUNCATE ON TABLE public.employment_periods, public.employment_period_corrections FROM %I', '${CFG_DB_USERNAME}'); EXECUTE format('REVOKE UPDATE ON TABLE public.employment_period_corrections FROM %I', '${CFG_DB_USERNAME}'); END IF; END \$kq\$;"
   fi
 }

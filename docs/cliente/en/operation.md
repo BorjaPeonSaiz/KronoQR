@@ -2063,6 +2063,23 @@ offboarding, `ScheduledOffboardingOverdue` fires and `./doctor.sh` says so
 [`turno-abierto-prolongado.md`](../../runbooks/turno-abierto-prolongado.md) (in
 Spanish) §7.
 
+**When updating to 2.3.0: rehiring and correcting the termination date.**
+Someone who left can come back **in their same record**: they are hired again
+with a date after their termination and keep their name, document, code and PIN;
+they get a new card pending printing, and the old ones stay revoked. Hiring with
+the document of someone who left is still rejected, and now says which person can
+be rehired. **The staff import no longer rejects the row of a person who left**:
+if it brings a start date after the termination, the preview proposes it as a
+rehire; if it brings the usual start date, it is rejected as before. A **wrong
+termination date** on an effective offboarding is corrected with a reason, kept
+with the previous date; the days the period gains accept hours entered by hand,
+and clockings rejected on those days are not reprocessed. **The update creates
+each person's history of employment periods** from their record, without
+changing anything recorded; from then on the database only lets someone out of
+the offboarding through a rehire. The period report counts employed days by
+periods: the gap between an offboarding and a rehire no longer shows as days
+without activity.
+
 ### 11.1 The tablet app: when it changes version
 
 The above is the server. The kiosk app is a separate piece: the tablet
