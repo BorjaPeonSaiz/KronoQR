@@ -61,8 +61,10 @@ it('la importacion declara los dos type de su 409', function (): void {
         'content', 'application/problem+json', 'examples',
     );
 
-    expect(tiposDeLosEjemplosDeBaja($ejemplos))->toBe([ProblemDetails::TYPE_CONFLICT, ProblemDetails::TYPE_EMPLOYEE_TERMINATED]);
-})->group('RN-14', 'RF-GP-05');
+    // Dos conflictos genericos: el fichero distinto y las readmisiones que ya
+    // no son las revisadas (RN-27, `rehire_digest`).
+    expect(tiposDeLosEjemplosDeBaja($ejemplos))->toBe([ProblemDetails::TYPE_CONFLICT, ProblemDetails::TYPE_CONFLICT, ProblemDetails::TYPE_EMPLOYEE_TERMINATED]);
+})->group('RN-14', 'RF-GP-05', 'RN-27');
 
 it('la baja declara en su 409 el de ya de baja, el de la baja programada vencida y el generico', function (): void {
     // Reprogramar una baja cuyo cese ya paso es `offboarding-due` (ADR-062 §3),

@@ -793,7 +793,7 @@ it('no ofrece en el informe de importacion ningun hueco para un PIN', function (
     // seria la invitacion a volver a emitirlo ahi.
     expect(Contract::value('components', 'schemas', 'EmployeeImportReport', 'additionalProperties'))->toBeFalse()
         ->and(Contract::keys('components', 'schemas', 'EmployeeImportReport', 'properties'))
-        ->toBe(['mode', 'file', 'summary', 'rows', 'truncated'])
+        ->toBe(['mode', 'file', 'summary', 'rows', 'rehire_digest', 'truncated'])
         ->and(Contract::value('components', 'schemas', 'EmployeeImportRow', 'additionalProperties'))->toBeFalse()
         ->and(Contract::keys('components', 'schemas', 'EmployeeImportRow', 'properties'))
         ->toBe(['line', 'label', 'outcome', 'employee_uuid', 'changes', 'messages']);
