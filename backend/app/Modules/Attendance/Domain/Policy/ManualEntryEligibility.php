@@ -11,9 +11,9 @@ use App\Modules\Attendance\Domain\ValueObject\FutureMark;
 use App\Modules\Attendance\Domain\ValueObject\ShiftEntryTimes;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Shared\Domain\ValueObject\EmployeeSnapshot;
+use App\Modules\Shared\Domain\ValueObject\EmploymentPeriod;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use DateTimeImmutable;
-use DateTimeZone;
 
 /**
  * **A quien se le puede anotar un tramo a mano, y de que jornadas** (RN-14,
@@ -81,6 +81,12 @@ final readonly class ManualEntryEligibility
      */
     public function assertWorkDateAllowed(WorkDate $workDate): void
     {
+        if (\count($this->employee->employmentPeriods) > 1) {
+            $this->assertWithinHistory($workDate->isoDate, $this->employee->employmentPeriods);
+
+            return;
+        }
+
         $hiredOn = $this->employee->hiredOn;
         $terminatedOn = $this->employee->terminatedOn;
 
@@ -106,6 +112,51 @@ final readonly class ManualEntryEligibility
     }
 
     /**
+     * La jornada de una persona **readmitida** (RN-27): cae en alguno de sus
+     * periodos de alta. Lo que queda fuera se rechaza con el limite que lo deja
+     * fuera:
+     *
+     * - despues del ultimo cese, como con una sola baja: en el periodo de la
+     *   ficha si esta de baja, y despues del cese programado si no;
+     * - en el **hueco** entre una baja y la readmision siguiente;
+     * - antes del primer alta, solo si esta de baja, como hasta ahora.
+     *
+     * @param  non-empty-list<EmploymentPeriod>  $periods
+     *
+     * @throws WorkDateOutsideEmployment
+     */
+    private function assertWithinHistory(string $date, array $periods): void
+    {
+        $previous = null;
+
+        foreach ($periods as $period) {
+            if ($period->covers($date)) {
+                return;
+            }
+
+            if ($previous instanceof EmploymentPeriod && $previous->gapBefore($period, $date)) {
+                throw WorkDateOutsideEmployment::betweenPeriods($date, (string) $previous->terminatedOn, $period->hiredOn);
+            }
+
+            $previous = $period;
+        }
+
+        $first = $periods[0];
+        $last = $periods[\count($periods) - 1];
+        $terminated = $this->employee->status === EmploymentStatus::TERMINATED;
+
+        if ($date < $first->hiredOn && ! $terminated) {
+            return;
+        }
+
+        $lastTermination = (string) $last->terminatedOn;
+
+        throw $terminated
+            ? WorkDateOutsideEmployment::forPeriod($date, $first->hiredOn, $lastTermination)
+            : WorkDateOutsideEmployment::afterTermination($date, $lastTermination);
+    }
+
+    /**
      * Las marcas de un tramo escrito a mano, para una persona con fecha de cese
      * —de baja o con la baja programada—, no pasan de la cota de continuacion
      * contada desde el final de su dia de cese (RN-05, RN-14, RF-PA-04). Para
@@ -123,21 +174,28 @@ final readonly class ManualEntryEligibility
      * las del tramo antes de corregir), igual que la guarda del agregado es
      * local: una marca que ya estaba escrita no impide corregir la otra.
      *
+     * **El cese que cuenta es el del periodo de la jornada** (RN-27): para una
+     * persona readmitida, un tramo del ultimo dia de su periodo anterior se acota
+     * con el cese de ese periodo, no con el del periodo en curso, que puede no
+     * tener cese o tenerlo meses despues. Si ningun periodo cubre la jornada —una
+     * sola baja sin la lista de periodos, o una jornada que
+     * {@see assertWorkDateAllowed()} ya rechaza—, el de la ficha.
+     *
      * @throws ShiftEntryMarkAfterTermination
      */
     public function assertTimesAllowed(
         ShiftEntryTimes $times,
         ContinuationCeiling $continuation,
-        DateTimeZone $timezone,
+        WorkDate $workDate,
         ?ShiftEntryTimes $previous = null,
     ): void {
-        $terminatedOn = $this->employee->terminatedOn;
+        $terminatedOn = $this->terminationBounding($workDate);
 
         if ($terminatedOn === null) {
             return;
         }
 
-        $limit = $continuation->limitAfter(WorkDate::fromIsoDate($terminatedOn, $timezone)->endsAt());
+        $limit = $continuation->limitAfter(WorkDate::fromIsoDate($terminatedOn, $workDate->timezone)->endsAt());
 
         if (! self::sameInstant($times->clockedInAt, $previous?->clockedInAt)) {
             self::assertMark(FutureMark::ClockIn, $times->clockedInAt, $limit, $terminatedOn);
@@ -146,6 +204,21 @@ final readonly class ManualEntryEligibility
         if ($times->clockedOutAt instanceof DateTimeImmutable && ! self::sameInstant($times->clockedOutAt, $previous?->clockedOutAt)) {
             self::assertMark(FutureMark::ClockOut, $times->clockedOutAt, $limit, $terminatedOn);
         }
+    }
+
+    /**
+     * El cese del periodo que cubre la jornada, o el de la ficha si ninguno la
+     * cubre. `null` si ese periodo no tiene cese.
+     */
+    private function terminationBounding(WorkDate $workDate): ?string
+    {
+        foreach ($this->employee->employmentPeriods as $period) {
+            if ($period->covers($workDate->isoDate)) {
+                return $period->terminatedOn;
+            }
+        }
+
+        return $this->employee->terminatedOn;
     }
 
     private static function sameInstant(DateTimeImmutable $mark, ?DateTimeImmutable $previous): bool

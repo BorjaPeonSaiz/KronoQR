@@ -158,9 +158,10 @@ it('el comando genera la exportacion completa con la licencia caducada', functio
     // Los veinticuatro conjuntos del catalogo (`absences` desde la tarea 3.10,
     // `report_exports` desde la 3.9, `weekly_summary_deliveries` desde la 3.12
     // `discarded_scan_reports` desde la 2.2.0, RN-22, y
-    // `scan_processing_failures` desde la 2.3.0, ADR-061), no un subconjunto
+    // `scan_processing_failures` desde la 2.3.0, ADR-061, y `employment_periods`
+    // y `employment_period_corrections` desde la 2.3.0, RN-27), no un subconjunto
     // degradado.
-    expect($recuentos)->toHaveCount(24)
+    expect($recuentos)->toHaveCount(26)
         ->and($recuentos)->toHaveKey('discarded_scan_reports')
         ->and($recuentos)->toHaveKey('employees')
         ->and($recuentos)->toHaveKey('audit_log')

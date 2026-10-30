@@ -112,7 +112,7 @@ final readonly class AddShiftEntryHandler
     {
         $performedAt = $this->clock->now();
 
-        $employee = $this->employees->find($command->employeeUuid);
+        $employee = $this->employees->findWithEmploymentPeriods($command->employeeUuid);
 
         // RN-14 (2.2.0): en alta, o de baja para jornadas de su periodo de
         // empleo, que se comprueban en `add()` cuando ya hay `WorkDate`.

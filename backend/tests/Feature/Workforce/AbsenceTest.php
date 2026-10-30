@@ -161,20 +161,23 @@ it('rechaza con 422 y no con 404 la ausencia de alguien que no existe', function
         ->assertJsonPath('type', 'urn:kronoqr:problem:validation-failed');
 })->group('RF-GP-04');
 
-it('rechaza una ausencia que no toca ningun dia de la relacion laboral', function (): void {
-    // Decision 2 de la ficha: esos dias no eran dias de trabajo. El alta de la
-    // semilla es el 2026-01-01.
+it('rechaza una ausencia que no cae entera en un periodo de alta', function (string $desde, string $hasta): void {
+    // RF-GP-04, RN-27: esos dias no eran dias de trabajo. El alta de la semilla
+    // es el 2026-01-01. Desde la 2.3.0 tampoco se admite el solape parcial.
     $contexto = contextoDeAusencia();
 
     Api::as($contexto['token'])
         ->post('/api/v1/absences', [
             'employee_uuid' => $contexto['employee'],
             'type' => 'vacation',
-            'starts_on' => '2025-06-01',
-            'ends_on' => '2025-06-05',
+            'starts_on' => $desde,
+            'ends_on' => $hasta,
         ])
         ->assertStatus(422);
-})->group('RF-GP-04');
+})->with([
+    'antes del alta' => ['2025-06-01', '2025-06-05'],
+    'empieza antes del alta' => ['2025-12-30', '2026-01-02'],
+])->group('RF-GP-04', 'RN-27');
 
 it('corregir crea una version nueva y conserva la anterior con autor y motivo', function (): void {
     // **RN-13 y regla dura 5.** La respuesta lleva un `uuid` NUEVO, y la fila

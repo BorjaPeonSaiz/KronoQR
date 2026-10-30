@@ -35,7 +35,16 @@ final class InterleavingEmployeeDirectory implements EmployeeDirectory
 
     public function find(string $employeeUuid): ?EmployeeSnapshot
     {
-        $snapshot = $this->inner->find($employeeUuid);
+        return $this->afterFirstRead($employeeUuid, $this->inner->find($employeeUuid));
+    }
+
+    public function findWithEmploymentPeriods(string $employeeUuid): ?EmployeeSnapshot
+    {
+        return $this->afterFirstRead($employeeUuid, $this->inner->findWithEmploymentPeriods($employeeUuid));
+    }
+
+    private function afterFirstRead(string $employeeUuid, ?EmployeeSnapshot $snapshot): ?EmployeeSnapshot
+    {
 
         if (! $this->fired && $employeeUuid === $this->employeeUuid) {
             $this->fired = true;

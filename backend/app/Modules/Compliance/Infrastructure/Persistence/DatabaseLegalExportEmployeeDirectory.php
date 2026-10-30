@@ -7,6 +7,7 @@ namespace App\Modules\Compliance\Infrastructure\Persistence;
 use App\Modules\Compliance\Application\Port\LegalExportEmployeeDirectory;
 use App\Modules\Compliance\Application\Port\LegalExportEmployeeMatch;
 use App\Modules\Compliance\Domain\ValueObject\EmployeeSearch;
+use App\Modules\Shared\Domain\ValueObject\EmploymentPeriod;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Shared\Domain\ValueObject\NationalId;
 use App\Modules\Shared\Infrastructure\Persistence\NationalIdDigest;
@@ -68,7 +69,18 @@ final readonly class DatabaseLegalExportEmployeeDirectory implements LegalExport
                d.name AS department_name,
                e.status,
                e.hired_at,
-               e.terminated_at
+               e.terminated_at,
+               -- Todos sus periodos de alta (RN-27), por el indice de
+               -- `employment_periods_no_overlap`: una persona readmitida no
+               -- aparece como si solo hubiera trabajado el ultimo.
+               (SELECT json_agg(json_build_object(
+                           'uuid', p.uuid,
+                           'hired_on', p.hired_on,
+                           'terminated_on', p.terminated_on,
+                           'offboarded', p.offboarded_at IS NOT NULL
+                       ) ORDER BY p.hired_on)
+                  FROM employment_periods p
+                 WHERE p.employee_id = e.id) AS employment_periods
           FROM employees e
           LEFT JOIN departments d ON d.id = e.department_id
         SQL;
@@ -165,6 +177,40 @@ final readonly class DatabaseLegalExportEmployeeDirectory implements LegalExport
             status: EmploymentStatus::from($row->string('status')),
             hiredAt: $row->string('hired_at'),
             terminatedAt: $row->nullableString('terminated_at'),
+            employmentPeriods: self::periodsOf($row->nullableString('employment_periods')),
+        );
+    }
+
+    /**
+     * @return list<EmploymentPeriod>
+     */
+    private static function periodsOf(?string $json): array
+    {
+        $decoded = $json === null ? null : json_decode($json, true);
+        $periods = [];
+
+        foreach (is_array($decoded) ? $decoded : [] as $period) {
+            if (is_array($period) && is_string($period['hired_on'] ?? null)) {
+                $periods[] = self::periodOf($period['hired_on'], $period);
+            }
+        }
+
+        return $periods;
+    }
+
+    /**
+     * @param  array<mixed>  $period
+     */
+    private static function periodOf(string $hiredOn, array $period): EmploymentPeriod
+    {
+        $terminatedOn = $period['terminated_on'] ?? null;
+        $uuid = $period['uuid'] ?? null;
+
+        return new EmploymentPeriod(
+            hiredOn: $hiredOn,
+            terminatedOn: is_string($terminatedOn) ? $terminatedOn : null,
+            offboarded: ($period['offboarded'] ?? false) === true,
+            uuid: is_string($uuid) ? $uuid : null,
         );
     }
 }

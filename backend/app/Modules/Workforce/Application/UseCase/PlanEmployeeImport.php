@@ -21,6 +21,7 @@ use App\Modules\Workforce\Domain\ValueObject\ImportMessageCode;
 use App\Modules\Workforce\Domain\ValueObject\ImportReport;
 use App\Modules\Workforce\Domain\ValueObject\ImportRow;
 use DateTimeImmutable;
+use Normalizer;
 
 /**
  * Lee el fichero y decide **que se haria con cada linea** (**RF-GP-05**, fase de
@@ -211,12 +212,16 @@ final readonly class PlanEmployeeImport
         $employee = self::employeeFrom($fields);
 
         $match = $this->matchOf($employee);
+        $leaver = $match->employee?->status === EmploymentStatus::TERMINATED ? $match->employee : null;
 
         $errors = [
             ...$this->errorsOf($employee, $departments, $seen, $seenEmails),
             ...$match->errors,
-            ...self::terminationErrors($match),
         ];
+
+        if ($leaver instanceof Employee) {
+            $errors = self::rehireErrors($errors, $leaver, $employee, $match->byDocument);
+        }
 
         if ($errors !== []) {
             return ImportRow::rejected($line, $this->labelOf($employee), $errors);
@@ -238,6 +243,10 @@ final readonly class PlanEmployeeImport
         }
 
         $existing = $match->employee;
+
+        if ($leaver instanceof Employee) {
+            return $this->rehireRow($line, $leaver, $employee, $departments, $localeWarnings);
+        }
 
         return $existing instanceof Employee
             ? ImportRow::matched(
@@ -395,27 +404,105 @@ final readonly class PlanEmployeeImport
     }
 
     /**
-     * **La linea de una persona dada de baja se rechaza** (`employee_terminated`,
-     * RN-14, ADR-046 §5).
+     * **La linea de una persona dada de baja propone su readmision** (RN-27,
+     * ADR-062 §6). Hasta la 2.2.x se rechazaba con `employee_terminated`.
      *
-     * La importacion no modifica la ficha de una baja ni la da de alta otra vez.
-     * Antes esa linea salia como `update`, la aplicacion la mandaba a la
-     * modificacion, el dominio la rechazaba con `EmployeeAlreadyTerminated` y el
-     * lote entero caia con un `409` que no nombraba ninguna linea, despues de que
-     * quien importa hubiera revisado un informe que decia que todo iba bien.
+     * La fecha de alta de la linea es la de la readmision, asi que es
+     * obligatoria (`rehire_requires_hired_at`, que sustituye a
+     * `missing_hired_at` en esta linea) y posterior a la fecha de cese
+     * (`rehire_not_after_termination`). La reimportacion del fichero de
+     * plantilla de siempre, con la fecha de alta original, sigue sin tocar a
+     * nadie: esa fecha no es posterior al cese y la linea se rechaza.
      *
      * Si la baja se registra **entre** esta comprobacion y la aplicacion, la
      * linea llega como `update` y la aplicacion entera responde `409` sin
-     * escribir nada: se aplica exactamente lo que se reviso, y si el estado
-     * cambio hay que volver a comprobar.
+     * escribir nada (ADR-046 §5); si alguien la readmite por otra via en ese
+     * hueco, la linea llega como `rehire` y responde `409` igual.
      *
+     * **Solo se readmite a quien la linea identifica por su documento, y con
+     * el nombre de su ficha** (`rehire_identity_mismatch`). Un correo
+     * compartido —`recepcion@hotel.example`— o una errata en el documento
+     * readmitirian a otra persona en su ficha y le atribuirian el registro
+     * horario de quien no es (RL-04). El nombre se compara sin mayusculas, sin
+     * tildes y sin espacios de sobra: «LUCIA  Perez» es «Lucía Pérez».
+     *
+     * @param  list<ImportMessage>  $errors
      * @return list<ImportMessage>
      */
-    private static function terminationErrors(ImportMatch $match): array
+    private static function rehireErrors(array $errors, Employee $leaver, ImportedEmployee $employee, bool $byDocument): array
     {
-        return $match->employee?->status === EmploymentStatus::TERMINATED
-            ? [ImportMessage::of(ImportMessageCode::EMPLOYEE_TERMINATED)]
+        $errors = array_values(array_filter(
+            $errors,
+            static fn (ImportMessage $error): bool => $error->code !== ImportMessageCode::MISSING_HIRED_AT,
+        ));
+
+        $dateErrors = self::rehireDateErrors($leaver, $employee);
+
+        if ($dateErrors !== []) {
+            // Sin una fecha que admita la readmision la linea ya no toca a nadie:
+            // la identidad solo se discute cuando de verdad se readmitiria.
+            return [...$errors, ...$dateErrors];
+        }
+
+        $nameGiven = $employee->firstName !== '' && $employee->lastName !== '';
+
+        return ! $byDocument || ($nameGiven && ! self::sameName($leaver, $employee))
+            ? [...$errors, ImportMessage::of(ImportMessageCode::REHIRE_IDENTITY_MISMATCH)]
+            : $errors;
+    }
+
+    /**
+     * @return list<ImportMessage>
+     */
+    private static function rehireDateErrors(Employee $leaver, ImportedEmployee $employee): array
+    {
+        if ($employee->hiredAt === null) {
+            return [ImportMessage::of(ImportMessageCode::REHIRE_REQUIRES_HIRED_AT, self::FIELD_HIRED_AT)];
+        }
+
+        $date = self::parseDate($employee->hiredAt);
+        $terminatedOn = $leaver->terminatedAt?->format('Y-m-d');
+
+        return $date instanceof DateTimeImmutable && $terminatedOn !== null && $date->format('Y-m-d') <= $terminatedOn
+            ? [ImportMessage::of(ImportMessageCode::REHIRE_NOT_AFTER_TERMINATION, self::FIELD_HIRED_AT)]
             : [];
+    }
+
+    /**
+     * La fila `rehire`. Solo cambian departamento e idioma; si la fila trae otro
+     * nombre u otro correo, se dice con `rehire_ignores_identity_changes` para
+     * que quien importa no crea que se aplicaron.
+     *
+     * @param  array<string, int>  $departments
+     * @param  list<ImportMessage>  $warnings
+     */
+    private function rehireRow(int $line, Employee $leaver, ImportedEmployee $employee, array $departments, array $warnings): ImportRow
+    {
+        $changes = $this->changesFor($leaver, $employee, $departments);
+        $ignored = array_intersect($changes, [self::FIELD_FIRST_NAME, self::FIELD_LAST_NAME, 'email']);
+
+        return ImportRow::rehire(
+            $line,
+            $employee,
+            $leaver->uuid,
+            array_values(array_intersect($changes, ['department_id', 'locale'])),
+            $ignored === [] ? $warnings : [ImportMessage::of(ImportMessageCode::REHIRE_IGNORES_IDENTITY_CHANGES), ...$warnings],
+        );
+    }
+
+    private static function sameName(Employee $leaver, ImportedEmployee $employee): bool
+    {
+        return self::foldName($leaver->firstName) === self::foldName($employee->firstName)
+            && self::foldName($leaver->lastName) === self::foldName($employee->lastName);
+    }
+
+    /** Sin mayusculas, sin tildes ni diacriticos y con los espacios reducidos a uno. */
+    private static function foldName(string $name): string
+    {
+        $decomposed = Normalizer::normalize($name, Normalizer::FORM_D);
+        $bare = preg_replace('/\p{Mn}+/u', '', $decomposed === false ? $name : $decomposed) ?? $name;
+
+        return mb_strtolower(trim(preg_replace('/\s+/u', ' ', $bare) ?? $bare));
     }
 
     /**
@@ -480,7 +567,9 @@ final readonly class PlanEmployeeImport
                 return ImportMatch::rejected(ImportMessage::of(ImportMessageCode::EMAIL_TAKEN, 'email'));
             }
 
-            return ImportMatch::of($byDocument === null ? null : $this->employees->findByUuid($byDocument));
+            return $byDocument === null
+                ? ImportMatch::of(null)
+                : ImportMatch::of($this->employees->findByUuid($byDocument), byDocument: true);
         }
 
         $byEmail = $employee->email === null

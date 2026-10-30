@@ -211,19 +211,23 @@ final readonly class ApplyAbsenceImport
     }
 
     /**
-     * La ausencia tiene que tocar la relacion laboral, igual que en el alta
-     * individual.
+     * La ausencia tiene que caer entera en un periodo de alta, igual que en el
+     * alta individual (RF-GP-04, RN-27).
      */
     private function fallsWithinEmployment(Absence $absence): bool
     {
+        // Los periodos ANTES que la ficha, las dos lecturas sin candado: una
+        // baja que confirme entre esta lectura y el asiento la detecta
+        // {@see AbsenceEmploymentRecheck} con la cadena tomada y deshace la
+        // importacion entera, en lugar de saltarse la fila en silencio.
+        $history = $this->employees->employmentHistory($absence->employeeUuid);
         $employee = $this->employees->findByUuid($absence->employeeUuid);
 
         // ADR-060: una ficha minimizada no recibe ausencias; la importacion
         // entera se deshace con el 409, como con una baja que llega a medias.
         $employee?->assertAcceptsPersonnelRecords();
 
-        return $employee === null
-            || $absence->fallsWithinEmployment($employee->hiredAt, $employee->terminatedAt);
+        return $employee === null || $absence->fallsWithin($history);
     }
 
     /**

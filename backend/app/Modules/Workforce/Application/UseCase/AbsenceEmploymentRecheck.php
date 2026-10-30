@@ -39,9 +39,8 @@ final readonly class AbsenceEmploymentRecheck
     public function assertStillWithinEmployment(Absence $absence): void
     {
         $this->serialized->withChainLock(function () use ($absence): void {
-            $current = $this->employees->findByUuid($absence->employeeUuid);
-
-            if ($current === null || ! $absence->fallsWithinEmployment($current->hiredAt, $current->terminatedAt)) {
+            // Una persona que ya no existe no tiene periodos: tampoco cabe.
+            if (! $absence->fallsWithin($this->employees->employmentHistory($absence->employeeUuid))) {
                 throw InvalidAbsencePeriod::isOutsideEmployment($absence->isoStartsOn(), $absence->isoEndsOn());
             }
         });

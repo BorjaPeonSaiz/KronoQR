@@ -188,6 +188,32 @@ final class DataExportCatalog
                 'anonymized_at',
             ]),
 
+            /*
+             * Los periodos de alta y las correcciones de su fecha de cese
+             * (RN-27, ADR-062 §1 y §7): la vida laboral de cada persona, que
+             * acota que dias admiten registro. Las correcciones salen con su
+             * motivo, como la nota de una ausencia: este ZIP se queda con el
+             * cliente, que es el responsable del tratamiento (RL-20).
+             */
+            ExportedDataset::csv('employment_periods', [
+                'employment_period_uuid',
+                'employee_uuid',
+                'hired_on',
+                'terminated_on',
+                'offboarded_at',
+                'created_at',
+                'created_by_user_uuid',
+            ]),
+
+            ExportedDataset::csv('employment_period_corrections', [
+                'employment_period_uuid',
+                'previous_terminated_on',
+                'terminated_on',
+                'reason',
+                'corrected_by_user_uuid',
+                'corrected_at',
+            ]),
+
             ExportedDataset::csv('employment_contracts', [
                 'employee_uuid',
                 'weekly_hours',

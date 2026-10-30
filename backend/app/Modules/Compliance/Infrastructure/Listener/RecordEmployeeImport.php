@@ -66,6 +66,9 @@ final readonly class RecordEmployeeImport
                 'updated' => $event->updated,
                 'unchanged' => $event->unchanged,
                 'rejected' => $event->rejected,
+                // Readmisiones de personas de baja (RN-27); cada una deja ademas
+                // su `employee.rehired` con `via_import`.
+                'rehired' => $event->rehired,
             ]),
             occurredAt: $event->occurredAt(),
         ));

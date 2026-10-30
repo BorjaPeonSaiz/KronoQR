@@ -88,6 +88,7 @@ use App\Modules\Identity\Infrastructure\Console\RevokeCredentialCommand;
 use App\Modules\Identity\Infrastructure\Console\RevokeOffboardedCredentialsCommand;
 use App\Modules\Identity\Infrastructure\Console\RotateSigningKeyCommand;
 use App\Modules\Identity\Infrastructure\Console\UnlockPortalOriginCommand;
+use App\Modules\Identity\Infrastructure\Listener\IssueCredentialOnRehire;
 use App\Modules\Identity\Infrastructure\Listener\RevokeCredentialsOnOffboarding;
 use App\Modules\Identity\Infrastructure\Metrics\RedisManagementAccountMetrics;
 use App\Modules\Identity\Infrastructure\Metrics\TextfileCredentialMetrics;
@@ -124,6 +125,7 @@ use App\Modules\Shared\Application\Support\ConstantTimeFloor;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use App\Modules\Workforce\Domain\Event\EmployeeOffboarded;
+use App\Modules\Workforce\Domain\Event\EmployeeRehired;
 use DateTimeInterface;
 use Illuminate\Cache\RateLimiter;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -253,6 +255,10 @@ final class IdentityServiceProvider extends ServiceProvider
         // el portal, en la misma transaccion y con su asiento. Sincrono a
         // proposito (ADR-010): ver el listener.
         Event::listen(EmployeeOffboarded::class, [RevokeCredentialsOnOffboarding::class, 'handle']);
+
+        // RN-27: la readmision emite la tarjeta nueva pendiente de imprimir, en
+        // la misma transaccion y con su asiento. Sincrono por lo mismo.
+        Event::listen(EmployeeRehired::class, [IssueCredentialOnRehire::class, 'handle']);
 
         if ($this->app->runningInConsole()) {
             // Los del Anexo C del doc 02, completos: tambien

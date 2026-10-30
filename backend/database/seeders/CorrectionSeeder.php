@@ -11,6 +11,7 @@ use App\Modules\Attendance\Application\UseCase\AddShiftEntryHandler;
 use App\Modules\Attendance\Application\UseCase\CorrectShiftEntryHandler;
 use App\Modules\Attendance\Application\UseCase\VoidShiftEntryHandler;
 use App\Modules\Attendance\Domain\ValueObject\CorrectionReason;
+use Database\Seeders\Support\EmploymentPeriods;
 use Database\Seeders\Support\KioskClocking;
 use Database\Seeders\Support\KioskClockingAudit;
 use DateTimeImmutable;
@@ -276,7 +277,7 @@ final class CorrectionSeeder extends DevelopmentSeeder
     {
         $code = 'E'.mb_strtoupper(mb_substr(hash('sha256', 'kronoqr-seed-correction-'.$index), 0, 9));
 
-        DB::table('employees')->insertOrIgnore([
+        EmploymentPeriods::insertEmployees([[
             'uuid' => Str::uuid7()->toString(),
             'site_id' => $siteId,
             'department_id' => $departmentId,
@@ -291,7 +292,7 @@ final class CorrectionSeeder extends DevelopmentSeeder
             'locale' => 'es',
             'created_at' => now(),
             'updated_at' => now(),
-        ]);
+        ]]);
 
         $row = DB::table('employees')->where('employee_code', $code)->first(['id', 'uuid']);
 

@@ -129,7 +129,7 @@ function volumenDelCuadro(): array
     }
 
     foreach (array_chunk($empleados, 500) as $lote) {
-        DB::table('employees')->insert($lote);
+        WorkforceFixtures::insertEmployees($lote);
     }
 
     DB::statement(<<<'SQL'

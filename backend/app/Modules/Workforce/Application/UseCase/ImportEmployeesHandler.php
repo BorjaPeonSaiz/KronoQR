@@ -7,6 +7,7 @@ namespace App\Modules\Workforce\Application\UseCase;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Workforce\Application\Command\ImportEmployeesCommand;
 use App\Modules\Workforce\Domain\Exception\ImportFileChanged;
+use App\Modules\Workforce\Domain\Exception\ImportRehiresChanged;
 use App\Modules\Workforce\Domain\Exception\ImportTooLarge;
 use App\Modules\Workforce\Domain\Exception\UnreadableImportFile;
 use App\Modules\Workforce\Domain\ValueObject\ImportReport;
@@ -48,6 +49,7 @@ final readonly class ImportEmployeesHandler
      * @throws UnreadableImportFile si el fichero no se puede leer
      * @throws ImportFileChanged si se manda aplicar otro fichero distinto del validado
      * @throws ImportTooLarge si el fichero venia truncado: se parte y se importa por trozos
+     * @throws ImportRehiresChanged si las readmisiones ya no son las de la validacion (RN-27)
      */
     public function handle(ImportEmployeesCommand $command, int $maxRows, array $columnAliases): ImportReport
     {
@@ -81,6 +83,18 @@ final readonly class ImportEmployeesHandler
             throw new ImportTooLarge($maxRows);
         }
 
-        return $this->apply->handle($report);
+        // Las readmisiones, ademas del fichero, tienen que ser las revisadas
+        // (RN-27): esta peticion vuelve a comprobar con la plantilla de ahora, y
+        // una baja registrada entre las dos fases convertiria un `update`
+        // revisado en una readmision que nadie ha visto. `null` en los dos lados
+        // es «ninguna readmision», y tambien coincide.
+        $rehires = $report->rehireDigest();
+        $confirmed = $command->confirmRehireDigest;
+
+        if ($rehires === null ? $confirmed !== null : ($confirmed === null || ! hash_equals($rehires, $confirmed))) {
+            throw ImportRehiresChanged::make();
+        }
+
+        return $this->apply->handle($report, $command->importedByUserId);
     }
 }

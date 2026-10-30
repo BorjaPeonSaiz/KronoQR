@@ -142,6 +142,9 @@ final class AuthorizationMatrix
             'PATCH api/v1/employees/{uuid}' => [$admin, $rrhh],
             'POST api/v1/employees/{uuid}/offboard' => [$admin, $rrhh],
             'POST api/v1/employees/{uuid}/offboard/cancel' => [$admin, $rrhh],
+            'POST api/v1/employees/rehire' => [$admin, $rrhh],
+            'POST api/v1/employees/{uuid}/rehire' => [$admin, $rrhh],
+            'POST api/v1/employees/{uuid}/employment-periods/{periodUuid}/termination-corrections' => [$admin, $rrhh],
             'POST api/v1/employees/{uuid}/pin/reset' => [$admin, $rrhh],
             'POST api/v1/employees/{uuid}/pin/deliver' => [$admin, $rrhh],
             'GET api/v1/employees/{uuid}/contracts' => [$admin, $rrhh],
@@ -346,8 +349,8 @@ final class AuthorizationMatrix
         $employeeUri = str_starts_with($uri, 'api/v1/employees/{uuid}');
 
         $concrete = str_replace(
-            ['{uuid}', '{id}', '{step}'],
-            [$employeeUri ? $installation['employee'] : self::UUID, '1', 'site'],
+            ['{uuid}', '{periodUuid}', '{id}', '{step}'],
+            [$employeeUri ? $installation['employee'] : self::UUID, self::UUID, '1', 'site'],
             $uri,
         );
 

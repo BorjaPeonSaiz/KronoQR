@@ -51,6 +51,25 @@ final class WorkDateOutsideEmployment extends AttendanceDomainException implemen
     }
 
     /**
+     * La jornada cae en el **hueco entre dos periodos de alta** de una persona
+     * readmitida (RN-27): despues del cese de uno y antes del alta del
+     * siguiente. Ese dia no trabajaba en el hotel.
+     */
+    public static function betweenPeriods(string $workDate, string $terminatedOn, string $rehiredOn): self
+    {
+        return new self(
+            'attendance.errors.work_date_between_periods',
+            ['terminated_on' => $terminatedOn, 'rehired_on' => $rehiredOn],
+            sprintf(
+                'The work date %s falls between the termination on %s and the rehiring on %s (RN-27).',
+                $workDate,
+                $terminatedOn,
+                $rehiredOn,
+            ),
+        );
+    }
+
+    /**
      * Una persona con la **baja programada** (en alta, con fecha de cese): la
      * jornada es posterior a su cese (RN-14, 2.3.0). Desde que hay fecha de cese
      * ningun tramo nuevo cae despues, aunque la baja aun no se haya aplicado.

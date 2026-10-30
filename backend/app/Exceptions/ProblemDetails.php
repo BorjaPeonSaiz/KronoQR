@@ -267,6 +267,25 @@ final class ProblemDetails
     public const string TYPE_OFFBOARDING_NOT_SCHEDULED = 'urn:kronoqr:problem:offboarding-not-scheduled';
 
     /**
+     * Se pide readmitir a quien no esta de baja (RN-27, ADR-062 §6): sigue en
+     * alta, suspendida o con una baja solo programada. Se recarga la ficha.
+     */
+    public const string TYPE_EMPLOYEE_NOT_TERMINATED = 'urn:kronoqr:problem:employee-not-terminated';
+
+    /**
+     * La ficha esta minimizada por retencion (ADR-060): no admite contratos ni
+     * ausencias nuevos, y su vida laboral ya no cambia: ni readmision ni
+     * correccion de la fecha de cese (RN-27). Quien vuelve es un alta nueva.
+     */
+    public const string TYPE_EMPLOYEE_RECORD_MINIMISED = 'urn:kronoqr:problem:employee-record-minimised';
+
+    /**
+     * Se pide corregir la fecha de cese de un periodo sin baja efectiva (RN-27,
+     * ADR-062 §7): una baja programada se reprograma desde la baja.
+     */
+    public const string TYPE_OFFBOARDING_NOT_EFFECTIVE = 'urn:kronoqr:problem:offboarding-not-effective';
+
+    /**
      * Las horas pisarian a **otro tramo vigente** de la misma persona (RN-02).
      *
      * Mismo acotamiento que {@see self::TYPE_SHIFT_ALREADY_OPEN}: rutas de
@@ -683,6 +702,53 @@ final class ProblemDetails
             JsonResponse::HTTP_CONFLICT,
             $detail,
         );
+    }
+
+    /** `409` de una readmision de quien no esta de baja (RN-27). {@see self::TYPE_EMPLOYEE_NOT_TERMINATED} */
+    public static function employeeNotTerminated(string $detail): JsonResponse
+    {
+        return self::response(
+            self::TYPE_EMPLOYEE_NOT_TERMINATED,
+            'La persona no esta de baja',
+            JsonResponse::HTTP_CONFLICT,
+            $detail,
+        );
+    }
+
+    /** `409` de una ficha minimizada (RN-27, ADR-060). {@see self::TYPE_EMPLOYEE_RECORD_MINIMISED} */
+    public static function employeeRecordMinimised(string $detail): JsonResponse
+    {
+        return self::response(
+            self::TYPE_EMPLOYEE_RECORD_MINIMISED,
+            'La ficha esta minimizada',
+            JsonResponse::HTTP_CONFLICT,
+            $detail,
+        );
+    }
+
+    /** `409` de una correccion sin baja efectiva (RN-27). {@see self::TYPE_OFFBOARDING_NOT_EFFECTIVE} */
+    public static function offboardingNotEffective(string $detail): JsonResponse
+    {
+        return self::response(
+            self::TYPE_OFFBOARDING_NOT_EFFECTIVE,
+            'La baja no es efectiva',
+            JsonResponse::HTTP_CONFLICT,
+            $detail,
+        );
+    }
+
+    /**
+     * `409` del documento ya usado en el alta, con la persona de baja que lo
+     * tiene para ofrecer su readmision (RN-27, ADR-062 §6).
+     */
+    public static function rehirableConflict(string $detail, string $employeeUuid): JsonResponse
+    {
+        $response = self::conflict($detail);
+        /** @var array<string, mixed> $body */
+        $body = $response->getData(true);
+        $body['rehirable_employee_uuid'] = $employeeUuid;
+
+        return $response->setData($body);
     }
 
     /** `409` de la zona horaria ya fija (RN-23). {@see self::TYPE_SITE_TIME_ZONE_LOCKED} */

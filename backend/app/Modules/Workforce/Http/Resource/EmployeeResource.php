@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Workforce\Http\Resource;
 
 use App\Modules\Shared\Domain\Support\UtcInstant;
+use App\Modules\Shared\Domain\ValueObject\EmploymentPeriod;
 use App\Modules\Workforce\Application\Port\PinStatus;
 use App\Modules\Workforce\Domain\Model\Employee;
 use Illuminate\Http\Request;
@@ -36,12 +37,32 @@ final class EmployeeResource extends JsonResource
 {
     public static $wrap = null;
 
+    /**
+     * @param  list<EmploymentPeriod>|null  $employmentPeriods  solo la ficha (`GET /employees/{uuid}`)
+     *                                                          para `rrhh+`; `null` en las demas respuestas
+     */
     public function __construct(
         Employee $employee,
         private readonly PinStatus $pinStatus,
         private readonly bool $includesContactAndPin = true,
+        private readonly ?array $employmentPeriods = null,
     ) {
         parent::__construct($employee);
+    }
+
+    /**
+     * Un periodo de alta, en la forma del esquema `EmploymentPeriod` (RN-27).
+     *
+     * @return array{uuid: string|null, hired_at: string, terminated_at: string|null, state: string}
+     */
+    public static function period(EmploymentPeriod $period): array
+    {
+        return [
+            'uuid' => $period->uuid,
+            'hired_at' => $period->hiredOn,
+            'terminated_at' => $period->terminatedOn,
+            'state' => $period->state(),
+        ];
     }
 
     /**
@@ -80,6 +101,10 @@ final class EmployeeResource extends JsonResource
             // reciben los dos esquemas: no dice nada que `status` y
             // `terminated_at` no digan ya.
             'offboarding' => self::offboarding($employee),
+            // RN-27: los periodos de alta, solo en la ficha de `rrhh+`.
+            ...($full && $this->employmentPeriods !== null
+                ? ['employment_periods' => array_map(self::period(...), $this->employmentPeriods)]
+                : []),
         ];
     }
 

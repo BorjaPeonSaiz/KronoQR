@@ -443,6 +443,23 @@ it('no abre tramo en una jornada posterior al cese, con la baja aplicada o solo 
     'sin fecha de cese' => [fn (): ClockingResolution => ClockingResolution::clockIn(), '2026-10-31', null, false],
 ])->group('RN-14', 'RN-05', 'RF-AT-02');
 
+// --- RN-27 (ADR-062 §6): ningun tramo nuevo antes del alta --------------------
+
+it('no abre tramo en una jornada anterior al alta del periodo en curso', function (ClockingResolution $resolution, string $jornada, ?string $alta, bool $rechaza): void {
+    $workDate = WorkDate::fromIsoDate($jornada, new DateTimeZone('Europe/Madrid'));
+
+    expect(ScanIntentPolicy::opensBeforeHire($resolution, $workDate, $alta))->toBe($rechaza);
+})->with([
+    'la entrada de la vispera del alta' => [fn (): ClockingResolution => ClockingResolution::clockIn(), '2027-03-31', '2027-04-01', true],
+    'la entrada del propio dia del alta' => [fn (): ClockingResolution => ClockingResolution::clockIn(), '2027-04-01', '2027-04-01', false],
+    'la entrada despues del alta' => [fn (): ClockingResolution => ClockingResolution::clockIn(), '2027-04-02', '2027-04-01', false],
+    // La vuelta de una pausa abre tramo en la jornada que la pausa cerro.
+    'la vuelta de una pausa de antes del alta' => [fn (): ClockingResolution => ClockingResolution::breakEnd('shift-entry-1'), '2027-03-31', '2027-04-01', true],
+    'una salida cierra, no abre' => [fn (): ClockingResolution => ClockingResolution::clockOut(), '2027-03-31', '2027-04-01', false],
+    'la pausa cierra, no abre' => [fn (): ClockingResolution => ClockingResolution::breakStart(), '2027-03-31', '2027-04-01', false],
+    'sin fecha de alta' => [fn (): ClockingResolution => ClockingResolution::clockIn(), '2027-03-31', null, false],
+])->group('RN-27', 'RF-AT-02');
+
 it('dice si todavia se puede volver de la pausa con la misma regla con la que decide la vuelta', function (string $at, bool $puede): void {
     // Pausa a las 12:00 UTC del 14 con 12 h de descanso minimo: hasta las 23:59
     // del 14 se puede volver; a las 00:00 del 15, no. Antes de la pausa, tampoco.

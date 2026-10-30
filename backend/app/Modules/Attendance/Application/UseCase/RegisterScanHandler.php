@@ -664,7 +664,13 @@ final readonly class RegisterScanHandler implements ScanRegistration
         // Rechazo generico (regla dura 17), sin marca de revision: la tarjeta
         // queda atribuida a su titular, como una tarjeta posterior a su retirada
         // (RN-20); el PIN, sin persona.
-        if (ScanIntentPolicy::opensAfterTermination($resolution, $workDay->workDate(), $employee->terminatedOn)) {
+        //
+        // Y su simetrico (RN-27, ADR-062 §6): ningun tramo en una jornada
+        // anterior al alta del periodo en curso, por el mismo camino y con el
+        // mismo rechazo. Un alta futura, o el hueco entre una baja y una
+        // readmision, que no se puede corregir desde el panel.
+        if (ScanIntentPolicy::opensAfterTermination($resolution, $workDay->workDate(), $employee->terminatedOn)
+            || ScanIntentPolicy::opensBeforeHire($resolution, $workDay->workDate(), $employee->hiredOn)) {
             return $this->reject(
                 $command,
                 $recordedAt,

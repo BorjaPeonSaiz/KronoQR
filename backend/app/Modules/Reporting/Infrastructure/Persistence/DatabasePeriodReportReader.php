@@ -176,9 +176,7 @@ final readonly class DatabasePeriodReportReader implements PeriodReportReader
 
         $rows = $this->withStatementTimeout(fn (): array => $this->select(<<<SQL
             WITH subjects AS (
-                SELECT e.id            AS employee_id,
-                       e.hired_at::date AS hired_on,
-                       e.terminated_at::date AS terminated_on
+                SELECT e.id AS employee_id
                   FROM employees e
                  WHERE TRUE{$filters}
             ), calendar AS (
@@ -201,9 +199,12 @@ final readonly class DatabasePeriodReportReader implements PeriodReportReader
                     AND (ec.valid_to IS NULL OR ec.valid_to >= ?::date)
              WHERE ec.id IS NULL
                -- Solo dias de relacion laboral: un dia anterior al alta no es un
-               -- dia «sin contrato», es un dia en el que no trabajaba aqui.
-               AND c.work_date >= s.hired_on
-               AND (s.terminated_on IS NULL OR c.work_date <= s.terminated_on)
+               -- dia «sin contrato», es un dia en el que no trabajaba aqui. Y
+               -- desde la 2.3.0 (RN-27), un dia de algun periodo de alta: el
+               -- hueco entre una baja y una readmision tampoco.
+               AND EXISTS (SELECT 1 FROM employment_periods ep
+                            WHERE ep.employee_id = s.employee_id
+                              AND daterange(ep.hired_on, ep.terminated_on, '[]') @> c.work_date)
             SQL, [
             ...$bindings,
             // `calendar`: el primer dia, y el ultimo menos el primero.
@@ -254,8 +255,6 @@ final readonly class DatabasePeriodReportReader implements PeriodReportReader
                        e.employee_code::text AS employee_code,
                        e.first_name,
                        e.last_name,
-                       e.hired_at::date      AS hired_on,
-                       e.terminated_at::date AS terminated_on,
                        dep.id                AS department_id,
                        dep.name              AS department_name
                   FROM employees e
@@ -278,8 +277,13 @@ final readonly class DatabasePeriodReportReader implements PeriodReportReader
                        COALESCE(dt.has_open_shift, FALSE) AS has_open_shift,
                        COALESCE(dt.has_incident, FALSE)   AS has_incident,
                        ec.weekly_hours,
-                       (g.work_date >= g.hired_on
-                        AND (g.terminated_on IS NULL OR g.work_date <= g.terminated_on)) AS employed,
+                       -- De alta ese dia si cae en alguno de sus periodos (RN-27):
+                       -- el hueco entre una baja y una readmision no es un dia de
+                       -- alta sin actividad. La expresion es la de
+                       -- `employment_periods_no_overlap`, cuyo indice la sirve.
+                       EXISTS (SELECT 1 FROM employment_periods ep
+                                WHERE ep.employee_id = g.employee_id
+                                  AND daterange(ep.hired_on, ep.terminated_on, '[]') @> g.work_date) AS employed,
                        -- RF-GP-04. El calendario del perfil viaja como literal de
                        -- `date[]` y no como una lista de `?`: asi el texto de la
                        -- consulta no depende de cuantos festivos tenga cargados

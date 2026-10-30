@@ -110,7 +110,7 @@ describe('EmployeesImportStep', () => {
       const validated = employeeImportReport()
       const applied = employeeImportReport({
         mode: 'apply',
-        summary: { create, update: 0, unchanged: 0, reject: 0 },
+        summary: { create, update: 0, unchanged: 0, reject: 0, rehire: 0 },
       })
 
       stubFetch(async (_url, init) =>
@@ -200,6 +200,40 @@ describe('EmployeesImportStep', () => {
     await settle()
 
     expect(useSetupStore(pinia).stepState('employees')).toBe('completed')
+  })
+
+  it('aplica con el rehire_digest de la validacion si la hubo, y sin el si no', async () => {
+    // RN-27: el servidor no readmite a nadie que no estuviera en el resumen
+    // revisado, y para comprobarlo necesita la huella de vuelta.
+    const digest = 'b'.repeat(64)
+    const sent: Array<FormDataEntryValue | null> = []
+
+    for (const validated of [
+      employeeImportReport({ rehire_digest: digest }),
+      employeeImportReport(),
+    ]) {
+      stubFetch(async (_url, init) => {
+        const body = init?.body as FormData
+
+        if (body.get('mode') === 'apply') {
+          sent.push(body.get('confirm_rehire_digest'))
+
+          return jsonResponse(employeeImportReport({ mode: 'apply' }))
+        }
+
+        return jsonResponse(validated)
+      })
+
+      const wrapper = await mountView(EmployeesImportStep, { pinia: createTestPinia() })
+
+      await selectFile(wrapper)
+      await wrapper.find('[data-test="validate"]').trigger('click')
+      await settle()
+      await wrapper.find('[data-test="apply"]').trigger('click')
+      await settle()
+    }
+
+    expect(sent).toEqual([digest, null])
   })
 
   it('seleccionar otro fichero invalida el informe anterior', async () => {

@@ -305,7 +305,9 @@ ajústalo en el perfil antes de la primera purga que lo aplique.
 - **Qué queda.** La ficha conserva su identificador interno, las fechas de alta
   y de baja, el centro, el departamento, el idioma y si teletrabajaba. La
   credencial revocada se queda, pero su motivo de revocación se sustituye por un
-  texto fijo.
+  texto fijo. Lo mismo con las **correcciones de su fecha de cese** (desde la
+  2.3.0): se conservan las dos fechas, quién la corrigió y cuándo, y el motivo,
+  que es texto libre, se sustituye por un texto fijo.
 - **Cómo se autoriza.** Como toda purga, no es automática: la autoriza una
   persona y queda anotada, persona a persona, sin nombres.
 - **Lo que tiene que validar tu DPO.** Si en tu hotel esas fechas, ese

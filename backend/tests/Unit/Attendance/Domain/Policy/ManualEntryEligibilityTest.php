@@ -176,7 +176,7 @@ it('admite marcas de una persona de baja hasta un segundo antes de la cota de su
             ? ShiftEntryTimes::open(Instants::utc($entrada))
             : ShiftEntryTimes::closed(Instants::utc($entrada), Instants::utc($salida)),
         ContinuationCeilingFactory::standard(),
-        Instants::madrid(),
+        jornadaParaElAltaManual('2026-10-10'),
     )))->toBeTrue();
 })->with([
     'cese el 10' => ['2026-10-10', '2026-10-11 08:00', '2026-10-11 09:59:59'],
@@ -193,7 +193,7 @@ it('rechaza a una persona de baja la marca que llega a la cota de su dia de cese
             ? ShiftEntryTimes::open(Instants::utc($entrada))
             : ShiftEntryTimes::closed(Instants::utc($entrada), Instants::utc($salida)),
         ContinuationCeilingFactory::standard(),
-        Instants::madrid(),
+        jornadaParaElAltaManual('2026-10-10'),
     ));
 
     expect($rechazo->mark)->toBe($marca)
@@ -213,7 +213,7 @@ it('dice en el mensaje tecnico cual es el limite, sin datos de la persona', func
     $rechazo = rechazoPorElCese(fn () => $baja->assertTimesAllowed(
         ShiftEntryTimes::open(Instants::utc('2026-10-11 10:00')),
         ContinuationCeilingFactory::standard(),
-        Instants::madrid(),
+        jornadaParaElAltaManual('2026-10-10'),
     ));
 
     expect($rechazo->getMessage())->toBe(
@@ -228,7 +228,7 @@ it('no acota las marcas de quien no tiene fecha de cese', function (EmploymentSt
     expect(sinRechazoDelAltaManual(fn () => $persona->assertTimesAllowed(
         ShiftEntryTimes::closed(Instants::utc('2026-10-20 08:00'), Instants::utc('2026-10-20 15:00')),
         ContinuationCeilingFactory::standard(),
-        Instants::madrid(),
+        jornadaParaElAltaManual('2026-10-10'),
     )))->toBeTrue();
 })->with([
     'en alta' => [EmploymentStatus::ACTIVE],
@@ -242,12 +242,12 @@ it('con la baja programada acota las marcas igual que con la baja efectiva', fun
     expect(sinRechazoDelAltaManual(fn () => $programada->assertTimesAllowed(
         ShiftEntryTimes::closed(Instants::utc('2026-10-10 20:00'), Instants::utc('2026-10-11 04:00')),
         ContinuationCeilingFactory::standard(),
-        Instants::madrid(),
+        jornadaParaElAltaManual('2026-10-10'),
     )))->toBeTrue()
         ->and(rechazoPorElCese(fn () => $programada->assertTimesAllowed(
             ShiftEntryTimes::closed(Instants::utc('2026-10-13 06:00'), Instants::utc('2026-10-13 13:00')),
             ContinuationCeilingFactory::standard(),
-            Instants::madrid(),
+            jornadaParaElAltaManual('2026-10-10'),
         ))->mark)->toBe(FutureMark::ClockIn);
 })->with([
     'en alta' => [EmploymentStatus::ACTIVE],
@@ -263,14 +263,14 @@ it('en una correccion solo mira las marcas que cambian', function (): void {
     expect(sinRechazoDelAltaManual(fn () => $baja->assertTimesAllowed(
         ShiftEntryTimes::closed(Instants::utc('2026-10-10 07:00'), Instants::utc('2026-10-11 11:00')),
         ContinuationCeilingFactory::standard(),
-        Instants::madrid(),
+        jornadaParaElAltaManual('2026-10-10'),
         $antes,
     )))->toBeTrue();
 
     $rechazo = rechazoPorElCese(fn () => $baja->assertTimesAllowed(
         ShiftEntryTimes::closed(Instants::utc('2026-10-10 06:00'), Instants::utc('2026-10-11 12:00')),
         ContinuationCeilingFactory::standard(),
-        Instants::madrid(),
+        jornadaParaElAltaManual('2026-10-10'),
         $antes,
     ));
 

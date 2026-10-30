@@ -500,7 +500,7 @@ export function employeeImportReport(
       rows: 2,
       warnings: [],
     },
-    summary: { create: 1, update: 1, unchanged: 0, reject: 0 },
+    summary: { create: 1, update: 1, unchanged: 0, reject: 0, rehire: 0 },
     truncated: false,
     rows: [
       {

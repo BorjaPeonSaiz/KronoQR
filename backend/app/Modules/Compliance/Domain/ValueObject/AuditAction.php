@@ -280,6 +280,24 @@ enum AuditAction: string
     case EmployeeOffboardingCancelled = 'employee.offboarding_cancelled';
 
     /**
+     * La readmision y la correccion de la fecha de cese (**RN-27**, RL-04,
+     * ADR-062 §9).
+     *
+     * La readmision abre un periodo de alta nuevo en la misma ficha: desde ese
+     * dia la persona vuelve a tener jornadas. La correccion cambia hasta que dia
+     * las tuvo en un periodo con baja efectiva. Las dos fijan que dias admiten
+     * registro horario, y las dos dejan quien lo hizo y cuando.
+     *
+     * Payload: `employee_uuid`, `employment_period_uuid`, fechas e
+     * identificadores de la organizacion (`department_id`,
+     * `previous_department_id`), `pin_reset`, `via_import` y `correction_id`.
+     * **Nunca el motivo de la correccion**, que vive en
+     * `employment_period_corrections` (regla dura 21).
+     */
+    case EmployeeRehired = 'employee.rehired';
+    case EmployeeTerminationDateCorrected = 'employee.termination_date_corrected';
+
+    /**
      * Alta y cambio de un departamento (**RF-GP-02**, **RF-ID-03**, AUD-2).
      *
      * Familia «cambia roles, permisos o parametros del calculo»: un departamento

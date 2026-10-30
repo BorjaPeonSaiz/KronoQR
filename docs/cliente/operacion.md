@@ -2040,6 +2040,26 @@ aplicar una baja, suena `ScheduledOffboardingOverdue` y `./doctor.sh` lo dice
 (`scheduler.scheduled_offboardings`); qué hacer, en
 [`turno-abierto-prolongado.md`](../runbooks/turno-abierto-prolongado.md) §7.
 
+**Al actualizar a la 2.3.0: readmisión y corrección de la fecha de cese.** Quien
+estuvo de baja puede volver **en su misma ficha**: se le da de alta de nuevo con
+una fecha posterior a su cese y conserva nombre, documento, código y PIN; recibe
+una tarjeta nueva pendiente de imprimir, y las de antes siguen revocadas. El
+alta con el documento de alguien de baja sigue rechazándose, y ahora indica qué
+persona se puede readmitir. **La importación de plantilla ya no rechaza la línea
+de una persona de baja**: si trae una fecha de alta posterior al cese, la
+propone como readmisión en el resumen previo, siempre que la identifique por su
+documento y con el nombre de su ficha (si solo coincide el correo, se rechaza);
+si trae la fecha de alta de siempre, se rechaza como antes. Si entre el resumen
+y la aplicación cambia a quién se readmitiría, la aplicación no escribe nada y
+pide volver a comprobar el fichero. Una **fecha de cese mal puesta** en una baja ya
+efectiva se corrige con un motivo, que queda guardado con la fecha anterior; los
+días que gana el periodo admiten tramos a mano, y los fichajes rechazados esos
+días no se reprocesan. **La actualización crea la historia de periodos de alta**
+de cada persona a partir de su ficha, sin cambiar nada de lo registrado; desde
+ese momento la base de datos solo deja sacar a alguien de la baja por la
+readmisión. El informe por periodo cuenta los días de alta por periodos: el
+hueco entre una baja y una readmisión ya no sale como días sin actividad.
+
 ### 11.1 La app de la tablet: cuándo cambia de versión
 
 Lo de arriba es el servidor. La app del quiosco es otra pieza: la tablet la

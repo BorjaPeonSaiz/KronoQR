@@ -38,7 +38,7 @@
 
 Del **Anexo A del doc 01** («Trazabilidad requisito → fase»), literal tras ADR-032:
 
-> **Fase 2 — Gestión y cumplimiento** | RF-PA-01..02, RF-PA-05, RF-IN-01..04, RF-GP-02, RF-PR-01..03, RF-QR-07, RF-ID-01..03 (**completos: 2FA y ámbito por departamento**), RN-10..12, RN-14, RL-02, RL-07..08, RL-10..11, RL-13..15, RS-05..06, **RNF-P-04..05**, **RNF-D-03**
+> **Fase 2 — Gestión y cumplimiento** | RF-PA-01..02, RF-PA-05, RF-IN-01..04, RF-GP-02, RF-PR-01..03, RF-QR-07, RF-ID-01..03 (**completos: 2FA y ámbito por departamento**), RN-10..12, RN-14, **RN-27**, RL-02, RL-07..08, RL-10..11, RL-13..15, RS-05..06, **RNF-P-04..05**, **RNF-D-03**
 
 **Aviso de alcance.** RN-10, RN-11 y RN-12 entran en esta fase como reglas del dominio (Anexo A), pero su **vista de cumplimiento** en el panel es la tarea 3.4 (doc 02 §11, Fase 3: «Vista de cumplimiento: descansos, jornada máxima, exceso semanal | RF-PA-06, RN-10..12»). Y sus umbrales son parámetros del perfil de cumplimiento (doc 01 §4, nota introductoria; RF-PD-07), que se construye en la tarea 5.2 — tensión detallada en la [tarea 2.10](#tarea-210--retención-con-confirmación-y-purga-documentada).
 
@@ -399,7 +399,7 @@ Esperado: sin divergencias, código de salida 0, métrica en 0 y ninguna alerta.
 |---|---|
 | **Horas** | 10–12 |
 | **Agente / Skill** | `backend-laravel` + `/informe-nuevo` |
-| **Requisitos** | RF-IN-01..03, RF-GP-02 (doc 02 §11 y Anexo A). Presupuesto RNF-P-05 (informe mensual de 500 empleados < 5 s síncrono; asíncrono si supera 10 s) |
+| **Requisitos** | RF-IN-01..03, RF-GP-02 (doc 02 §11 y Anexo A). Presupuesto RNF-P-05 (informe mensual de 500 empleados < 5 s síncrono; asíncrono si supera 10 s). Derivada: `RN-27` «Una persona de baja puede volver a la plantilla, en la misma ficha, con un periodo de alta nuevo» (2.3.0, bloque 25, tareas 25.3 y 25.4, [ADR-062](../docs/adr/ADR-062-la-baja-se-programa-y-la-readmision-abre-un-periodo-de-alta-en-la-misma-ficha.md)): el informe cuenta a la persona de alta por sus periodos, el hueco entre una baja y una readmisión no es día de alta ni día contratado, y el contrato abierto se cierra en el cese del periodo |
 | **Precondiciones** | **1.15** (correcciones trazadas), de la que este informe lee la trazabilidad |
 | **Bloquea a** | **2.9** (§11.3: `2.8→2.9`) y, tras ella, **5.1→5.2** (§11.3 encadena la rama de productización bajo `2.8→2.9`) |
 

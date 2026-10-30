@@ -46,16 +46,19 @@ final readonly class DatabaseAbsenceCensusReader implements AbsenceCensusReader
             SELECT a.type                        AS type,
                    count(DISTINCT a.employee_id) AS people
               FROM absences a
-              JOIN employees e ON e.id = a.employee_id
              WHERE a.status = 'active'
                AND ?::date BETWEEN a.starts_on AND a.ends_on
-               -- De alta ese dia, igual que en el informe por periodo: una
-               -- ausencia de quien ya causo baja no describe a nadie ausente hoy.
-               AND e.hired_at::date <= ?::date
-               AND (e.terminated_at IS NULL OR e.terminated_at::date >= ?::date)
+               -- De alta ese dia en alguno de sus periodos (RN-27), igual que en
+               -- el informe por periodo: una ausencia de quien ya causo baja, o
+               -- del hueco entre una baja y una readmision, no describe a nadie
+               -- ausente hoy. La expresion es la de `employment_periods_no_overlap`,
+               -- cuyo indice la sirve.
+               AND EXISTS (SELECT 1 FROM employment_periods ep
+                            WHERE ep.employee_id = a.employee_id
+                              AND daterange(ep.hired_on, ep.terminated_on, '[]') @> ?::date)
              GROUP BY a.type
              ORDER BY a.type
-            SQL, [$isoDate, $isoDate, $isoDate]);
+            SQL, [$isoDate, $isoDate]);
 
         $counts = [];
 

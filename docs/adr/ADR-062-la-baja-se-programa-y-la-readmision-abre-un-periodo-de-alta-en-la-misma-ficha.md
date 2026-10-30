@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Estado** | **Aceptada**: el propietario aprobó D16 y D17 el 18-10-2026 (plan de la 2.3.0, bloque 25), y este texto las concreta. El 29-10-2026 decidió además que la baja con cese de hoy también se programa, con «Aplicar ya» (`apply_now`) para el efecto inmediato (§3). Revisión de `seguridad-cumplimiento` pendiente sobre §2, §3.3, §4 y §8. Lo implementan las tareas 25.2 (baja programada), 25.3 y 25.7 (readmisión), 25.4 (corrección de la fecha de cese) y 25.6 (panel) |
+| **Estado** | **Aceptada**: el propietario aprobó D16 y D17 el 18-10-2026 (plan de la 2.3.0, bloque 25), y este texto las concreta. El 29-10-2026 decidió además que la baja con cese de hoy también se programa, con «Aplicar ya» (`apply_now`) para el efecto inmediato (§3). Revisión de `seguridad-cumplimiento`: §2 revisado (30-10-2026, con las tareas 25.3 y 25.4); quedan §3.3, §4 y §8 (25.5). Lo implementan las tareas 25.2 (baja programada), 25.3 y 25.7 (readmisión), 25.4 (corrección de la fecha de cese) y 25.6 (panel) |
 | **Fecha** | 29 de octubre de 2026 |
 | **Decide** | `arquitecto-dominio` (bloque 25 de la 2.3.0, tarea 25.1; V3-AR-6 y R4-SC-01 en seguimiento) |
 | **Afecta a** | **Enmienda** [ADR-046](ADR-046-la-ficha-del-empleado-se-escribe-bajo-candado-y-por-columnas.md): «`terminated` es final», el disparador descartado y la fila de una persona de baja en la importación. Precisa [ADR-043](ADR-043-el-pin-rechazado-conserva-a-quien-correspondia-el-codigo.md) por su enmienda del 29-10-2026 (D15) · Respeta [ADR-006](ADR-006-los-turnos-no-se-parten-a-medianoche.md), [ADR-010](ADR-010-auditoria-solo-append-encadenada.md), [ADR-025](ADR-025-frontera-de-dependencias-del-nucleo.md), [ADR-028](ADR-028-limites-del-plan-no-bloquean.md), [ADR-034](ADR-034-el-token-nace-al-imprimir-no-al-emitir.md), [ADR-040](ADR-040-un-centro-por-instalacion-y-por-licencia.md), [ADR-047](ADR-047-ningun-fichaje-sale-de-la-cola-sin-desenlace-del-servidor.md), [ADR-057](ADR-057-el-registro-horario-no-se-borra-ni-se-reescribe-con-la-credencial-del-runtime.md), [ADR-058](ADR-058-como-termino-un-tramo-es-un-hecho-del-registro.md) y [ADR-060](ADR-060-al-vencer-su-plazo-la-ficha-y-la-cuenta-de-gestion-se-minimizan-en-sitio-con-asiento.md) · `Workforce`: `Employee`, `EmployeeRepository`, `OffboardEmployeeHandler`, `PlanEmployeeImport`, `ApplyEmployeeImport` y los casos de uso nuevos de §10 · `Identity`: la revocación de la baja y la emisión de la readmisión · `Attendance`: `EmployeeDirectory`, `ScanIntentPolicy`, `ManualEntryEligibility` · tablas nuevas `employment_periods` y `employment_period_corrections` |
@@ -80,8 +80,8 @@ repositorio. Un *constraint trigger* `DEFERRABLE INITIALLY DEFERRED`,
 
 1. Se crea la tabla.
 2. Se rellena con un periodo por ficha: `hired_on = hired_at`, `terminated_on = terminated_at` y
-   `offboarded_at`. Para una baja, `offboarded_at` es el `created_at` del asiento `employee.offboarded`
-   de esa persona y, si no lo hay, el `updated_at` de la ficha.
+   `offboarded_at`. Para una baja, `offboarded_at` es el `occurred_at` del último asiento
+   `employee.offboarded` de esa persona y, si no lo hay, el `updated_at` de la ficha.
 3. Se crea el disparador de §2 y el de la proyección.
 
 Es reversible mientras no exista una segunda fila para ninguna persona. El `down()` lo comprueba y se
@@ -308,9 +308,17 @@ tramo de la jornada del cese.
   `rehire_proposed`, y la fecha de alta de la fila es la de la readmisión. Sin fecha de alta en la
   fila, o con una fecha no posterior al cese, la fila da error (`rehire_requires_hired_at`,
   `rehire_not_after_termination`). Al aplicar, la fila pasa por el mismo caso de uso de la
-  readmisión. El resumen gana el contador `rehired`. Lo de ADR-046 §5 sobre la baja que confirma entre
-  la comprobación y la aplicación sigue igual. Una readmisión hecha por otra vía en ese hueco da `409`
-  en la aplicación (`employee-not-terminated`), con el mismo criterio.
+  readmisión. El resumen gana el contador `rehire`, con el nombre de la acción como los demás.
+  **Solo se readmite a quien la fila identifica por su documento y con el nombre de su ficha** (sin
+  distinguir mayúsculas, tildes ni espacios); si coincide solo por correo, o el nombre es otro, la fila
+  da error (`rehire_identity_mismatch`): un correo compartido o una errata en el documento
+  readmitirían a otra persona en su ficha. Si la fila trae otro nombre u otro correo y aun así se
+  readmite, el aviso `rehire_ignores_identity_changes` dice que no se aplican. **Las readmisiones que se
+  aplican son las revisadas** (revisión del 30-10-2026): la comprobación devuelve `rehire_digest` y
+  `apply` lo exige en `confirm_rehire_digest`; una baja o una readmisión por otra vía entre las dos
+  peticiones cambia la huella y la aplicación entera responde `409` sin escribir nada (ADR-046 §5,
+  enmendado). La que llega durante la propia aplicación da `409` como hasta ahora
+  (`employee-terminated` o `employee-not-terminated`).
 
 ### 7. La corrección auditada de la fecha de cese
 
@@ -365,7 +373,7 @@ fechas e identificadores de la organización, **nunca nombre, documento ni motiv
 | `employee.offboarding_scheduled` | cuenta de gestión | se programa o se reprograma una baja, también con cese de hoy sin `apply_now` | `terminated_on`, `previous_terminated_on` (al reprogramar) |
 | `employee.offboarding_cancelled` | cuenta de gestión | se anula | `terminated_on` anulada |
 | `employee.offboarded` | cuenta de gestión o `system` | la baja se hace efectiva, en el acto o por la tarea | `terminated_on`; `apply_now: true` si se aplicó ya con cese de hoy; si la aplica la tarea, `scheduled: true`, `due_on`, `days_late` y, si la jornada del cese siguió después de su día (un turno de noche o una pausa que la hizo esperar), `deferred: true`: explica unos `days_late` que no son una tarea parada |
-| `employee.rehired` | cuenta de gestión | readmisión, individual, en lote o por importación | `employment_period_uuid`, `hired_at`, `department_id`, `previous_department_id` (si cambia), `pin_reset`, `via_import` |
+| `employee.rehired` | cuenta de gestión | readmisión, individual, en lote o por importación | `employment_period_uuid`, `hired_at`, `department_id`, `previous_department_id` (si cambia), `pin_reset`, `via_import`; si cerró un contrato abierto, `previous_contract_valid_from`, `previous_contract_valid_to`, `previous_contract_weekly_hours`, `previous_contract_annual_hours` y `previous_contract_schedule_type`, también con `contract: null`, para que ese cierre no quede sin asiento |
 | `employee.termination_date_corrected` | cuenta de gestión | corrección de §7 | `employment_period_uuid`, `previous_terminated_on`, `terminated_on`, `correction_id` |
 
 **Se mantiene `employee.offboarded` para la baja que aplica la tarea, y no se crea
@@ -388,8 +396,8 @@ por rol (regla dura 18).
 | Readmisión | `POST /api/v1/employees/{uuid}/rehire`, `{ hired_at, department_id?, locale?, contract?: { weekly_hours, annual_hours, schedule_type } \| null, reset_pin?: false }` | `200` `{ employee, employment_period, credential: { uuid, status: "pending_print" }, pin? }`. `pin` solo con `reset_pin`, una vez. `409` `employee-not-terminated` o `employee-record-minimised`. `422` `hired_at` |
 | Readmisión en lote | `POST /api/v1/employees/rehire`, `{ employee_uuids: [uuid, …], hired_at, reset_pin?: false }` | `200` `{ rehired: [ … como arriba ] }`. `422` con un error por posición y nada escrito |
 | Corrección de la fecha de cese | `POST /api/v1/employees/{uuid}/employment-periods/{periodUuid}/termination-corrections`, `{ terminated_at, reason }` | `201` `EmploymentPeriodCorrection`. `409` `offboarding-not-effective`. `422` `terminated_at` o `reason` |
-| Periodos | `GET /api/v1/employees/{uuid}` gana `employment_periods: [{ uuid, hired_at, terminated_at, state }]` | — |
-| Importación | `POST /api/v1/employees/import`, **sin cambio de cuerpo** | El informe gana la acción `rehire`, el aviso `rehire_proposed`, los errores `rehire_requires_hired_at` y `rehire_not_after_termination`, y el contador `rehired`. `employee_terminated` deja de emitirse |
+| Periodos | `GET /api/v1/employees/{uuid}` gana `employment_periods: [{ uuid, hired_at, terminated_at, state }]`, en la ficha de `rrhh+` (la reducida del responsable no lo lleva) | — |
+| Importación | `POST /api/v1/employees/import`, **sin cambio de cuerpo** | El informe gana la acción `rehire`, el aviso `rehire_proposed`, los errores `rehire_requires_hired_at` y `rehire_not_after_termination`, y el contador `rehire`. `employee_terminated` deja de emitirse |
 | Alta con documento de una baja | `POST /api/v1/employees` | El `409` del documento gana `rehirable_employee_uuid` si procede |
 
 ### 11. Módulos y puertos
@@ -461,6 +469,13 @@ por rol (regla dura 18).
   DPO del cliente, igual que el plazo de `absences` (33.11). Está en la lista de validación jurídica
   del plan de la 2.3.0 (decisión del propietario del 29-10-2026: el diseño no cambia).
 - **Hay una tarea programada más**, con su métrica, su alerta y su comprobación en `product:doctor`.
+- **Un fichaje cuya jornada cae antes del alta del periodo en curso se trata como el posterior al
+  cese** (decisión del 30-10-2026, revisión de la 25.3): `ScanIntentPolicy::opensBeforeHire()`,
+  simétrico de `opensAfterTermination()`, con el mismo rechazo genérico y por el mismo camino,
+  también desde la cola del quiosco. Vale para cualquier alta futura, no solo para la readmisión. El
+  motivo: un tramo en el hueco entre dos periodos no se podría corregir desde el panel
+  (`work_date_between_periods`), y sería registro legal de días en los que la persona no estaba de
+  alta.
 - **El riesgo de doc 07 §6 «días trabajados después de la fecha de cese»** queda cubierto por §7 y
   por la enmienda de ADR-043 cuando se implementen las tareas 25.4 y 25.5. No antes.
 
@@ -477,6 +492,8 @@ por rol (regla dura 18).
 - La regla «ningún tramo después del cese» en `ScanIntentPolicy` y `ManualEntryEligibility`: la
   salida a las 06:00 del turno de noche del cese y la vuelta de una pausa admitidas, y la entrada del
   día siguiente rechazada.
+- Su simétrica, «ningún tramo antes del alta» (`ScanIntentPolicy::opensBeforeHire()`): la entrada de
+  la víspera del alta rechazada, la del propio día admitida y la salida, que no abre, admitida.
 
 **Integración** (`qa-testing`, `CommittedDatabase`):
 

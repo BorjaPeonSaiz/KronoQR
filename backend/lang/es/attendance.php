@@ -19,6 +19,8 @@ return [
             .'registrar horas de jornadas entre su alta (:hired_on) y su cese (:terminated_on).',
         'work_date_after_termination' => 'Esta persona tiene la baja programada con cese el :terminated_on: no se le '
             .'pueden registrar horas de jornadas posteriores a esa fecha.',
+        'work_date_between_periods' => 'Esta persona estuvo de baja entre su cese del :terminated_on y su vuelta '
+            .'el :rehired_on: no se le pueden registrar horas de esos días.',
         'entry_does_not_continue_work_day' => 'Las horas de este tramo son de otra jornada: empieza otro día y no '
             .'continúa la jornada del :work_date, porque entre la salida anterior y su entrada median :hours h o más '
             .'(el descanso mínimo entre jornadas) o hay un tramo de otra jornada. Dalo de alta en la jornada en que '

@@ -7,6 +7,7 @@ namespace App\Modules\Workforce\Application\Query;
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\AccessScope;
+use App\Modules\Shared\Domain\ValueObject\EmploymentPeriod;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Workforce\Application\Port\EmployeePinRepository;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
@@ -143,6 +144,17 @@ final readonly class EmployeeQueries
     private function doFind(string $uuid): ?Employee
     {
         return $this->employees->findByUuid($uuid);
+    }
+
+    /**
+     * Los periodos de alta de la persona, del mas antiguo al mas reciente
+     * (RN-27). Los pide la ficha; el listado no.
+     *
+     * @return list<EmploymentPeriod>
+     */
+    public function employmentPeriods(string $uuid): array
+    {
+        return UseCaseInstrumentation::run('workforce.read_employment_periods', fn (): array => $this->employees->employmentHistory($uuid)->periods);
     }
 
     /**

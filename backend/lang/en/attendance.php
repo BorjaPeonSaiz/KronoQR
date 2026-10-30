@@ -20,6 +20,8 @@ return [
             .'(:terminated_on).',
         'work_date_after_termination' => 'This person has a scheduled offboarding with termination date '
             .':terminated_on: hours cannot be recorded for working days after that date.',
+        'work_date_between_periods' => 'This person was away between their termination on :terminated_on and '
+            .'their return on :rehired_on: hours cannot be recorded for those days.',
         'entry_does_not_continue_work_day' => 'The hours of this shift belong to another working day: it starts on '
             .'another day and does not continue the working day of :work_date, because :hours h or more (the minimum '
             .'rest between working days) pass between the previous clock-out and its clock-in, or a shift of another '

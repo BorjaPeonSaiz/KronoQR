@@ -60,7 +60,7 @@ final readonly class ManualEntryRecheck
         ?ShiftEntryTimes $previous = null,
     ): void {
         $this->serialized->withChainLock(function () use ($employeeUuid, $workDate, $times, $continuation, $mustAdmitEntries, $previous): void {
-            $current = $this->employees->find($employeeUuid);
+            $current = $this->employees->findWithEmploymentPeriods($employeeUuid);
 
             if (! $current instanceof EmployeeSnapshot) {
                 if ($mustAdmitEntries) {
@@ -97,6 +97,6 @@ final readonly class ManualEntryRecheck
         }
 
         $eligibility->assertWorkDateAllowed($workDate);
-        $eligibility->assertTimesAllowed($times, $continuation, $workDate->timezone, $previous);
+        $eligibility->assertTimesAllowed($times, $continuation, $workDate, $previous);
     }
 }

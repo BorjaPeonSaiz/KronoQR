@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Infrastructure\Persistence;
 
+use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\UuidGenerator;
 use App\Modules\Shared\Domain\ValueObject\AccessScope;
+use App\Modules\Shared\Domain\ValueObject\EmploymentPeriod;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Shared\Domain\ValueObject\NationalId;
 use App\Modules\Shared\Infrastructure\Persistence\NationalIdDigest;
@@ -15,12 +18,16 @@ use App\Modules\Workforce\Domain\Exception\EmployeeAlreadyTerminated;
 use App\Modules\Workforce\Domain\Exception\EmployeeCodeAlreadyTaken;
 use App\Modules\Workforce\Domain\Exception\EmployeeEmailAlreadyTaken;
 use App\Modules\Workforce\Domain\Exception\EmployeeNationalIdAlreadyTaken;
+use App\Modules\Workforce\Domain\Exception\EmployeeNotTerminated;
 use App\Modules\Workforce\Domain\Model\Employee as EmployeeEntity;
+use App\Modules\Workforce\Domain\Model\EmploymentHistory;
+use App\Modules\Workforce\Domain\Model\TerminationDateCorrection;
 use App\Modules\Workforce\Domain\ValueObject\EmployeeCode;
 use DateTimeImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use RuntimeException;
 
 /**
  * La plantilla sobre Eloquent y PostgreSQL.
@@ -42,6 +49,17 @@ use Illuminate\Support\Facades\DB;
  */
 final readonly class EloquentEmployeeRepository implements EmployeeRepository
 {
+    /**
+     * El reloj y el generador de identificadores de la aplicacion, no los de la
+     * base: `offboarded_at` es el instante del Clock (regla dura 2, el mismo que
+     * lleva el asiento) y el `uuid` de un periodo sale del mismo puerto que el
+     * del resto de entidades.
+     */
+    public function __construct(
+        private Clock $clock,
+        private UuidGenerator $uuids,
+    ) {}
+
     public function add(EmployeeEntity $employee, ?string $nationalId = null): void
     {
         // Las dos sentencias son un solo hecho: un empleado con ficha pero sin
@@ -52,6 +70,8 @@ final readonly class EloquentEmployeeRepository implements EmployeeRepository
             } catch (QueryException $exception) {
                 throw $this->translate($exception);
             }
+
+            $this->openFirstPeriod($employee);
 
             if ($nationalId !== null) {
                 $this->storeNationalIdDigest($employee->uuid, $nationalId);
@@ -111,6 +131,187 @@ final readonly class EloquentEmployeeRepository implements EmployeeRepository
         ]);
 
         $this->refuseIfNothingWritten($affected, $employee);
+        $this->saveCurrentPeriodTermination($employee);
+    }
+
+    public function findManyForUpdate(array $uuids): array
+    {
+        if ($uuids === []) {
+            return [];
+        }
+
+        $rows = Employee::query()->whereIn('uuid', $uuids)->orderBy('id')->lock('for no key update')->get();
+
+        $employees = [];
+
+        foreach ($rows as $row) {
+            $employees[$row->uuid] = $this->toEntity($row);
+        }
+
+        return $employees;
+    }
+
+    public function employmentHistory(string $uuid): EmploymentHistory
+    {
+        /** @var list<object{uuid: string, hired_on: string, terminated_on: string|null, offboarded: bool}> $rows */
+        $rows = DB::select(<<<'SQL'
+            SELECT p.uuid::text AS uuid,
+                   p.hired_on::text AS hired_on,
+                   p.terminated_on::text AS terminated_on,
+                   (p.offboarded_at IS NOT NULL) AS offboarded
+              FROM employment_periods p
+              JOIN employees e ON e.id = p.employee_id
+             WHERE e.uuid = ?
+             ORDER BY p.hired_on
+        SQL, [$uuid]);
+
+        return new EmploymentHistory(array_map(
+            static fn (object $row): EmploymentPeriod => new EmploymentPeriod(
+                hiredOn: $row->hired_on,
+                terminatedOn: $row->terminated_on,
+                offboarded: $row->offboarded,
+                uuid: $row->uuid,
+            ),
+            $rows,
+        ));
+    }
+
+    /**
+     * La ficha vuelve a estar en alta y el periodo nuevo se abre en la misma
+     * transaccion (ADR-062 §1): el disparador diferido
+     * `employees_current_period_matches` comprueba al confirmar que coinciden, y
+     * `employees_guard_employment_transition` que la fecha de alta es posterior
+     * al cese.
+     */
+    public function saveRehire(EmployeeEntity $employee, string $periodUuid, ?int $createdByUserId): void
+    {
+        $affected = Employee::query()
+            ->where('uuid', $employee->uuid)
+            ->where('status', EmploymentStatus::TERMINATED->value)
+            ->whereNull('anonymized_at')
+            ->update([
+                'status' => $employee->status->value,
+                'hired_at' => $employee->hiredAt->format('Y-m-d'),
+                'terminated_at' => null,
+                'department_id' => $employee->departmentId,
+                'locale' => $employee->locale,
+            ]);
+
+        if ($affected === 0) {
+            throw EmployeeNotTerminated::withUuid($employee->uuid);
+        }
+
+        DB::table('employment_periods')->insert([
+            'uuid' => $periodUuid,
+            'employee_id' => $this->idOf($employee->uuid),
+            'hired_on' => $employee->hiredAt->format('Y-m-d'),
+            'terminated_on' => null,
+            'offboarded_at' => null,
+            'created_by_user_id' => $createdByUserId,
+        ]);
+    }
+
+    /**
+     * La traza primero y el cambio despues, en la misma transaccion (RN-13): no
+     * hay un instante en que la fecha nueva exista sin la anterior guardada.
+     */
+    public function saveTerminationCorrection(
+        EmployeeEntity $employee,
+        TerminationDateCorrection $correction,
+        int $correctedByUserId,
+        DateTimeImmutable $correctedAt,
+    ): int {
+        $periodId = DB::table('employment_periods')->where('uuid', $correction->period->uuid)->value('id');
+
+        if (! is_numeric($periodId)) {
+            throw new RuntimeException('El periodo de alta '.$correction->period->uuid.' no existe.');
+        }
+
+        $id = DB::table('employment_period_corrections')->insertGetId([
+            'employment_period_id' => (int) $periodId,
+            'previous_terminated_on' => $correction->previousTerminatedOn,
+            'terminated_on' => $correction->terminatedOn,
+            'reason' => $correction->reason,
+            'corrected_by_user_id' => $correctedByUserId,
+            'corrected_at' => $correctedAt->format('Y-m-d H:i:s.uP'),
+        ]);
+
+        DB::table('employment_periods')->where('id', (int) $periodId)->update(['terminated_on' => $correction->terminatedOn]);
+
+        if ($correction->ofCurrentPeriod) {
+            Employee::query()
+                ->where('uuid', $employee->uuid)
+                ->where('status', EmploymentStatus::TERMINATED->value)
+                ->update(['terminated_at' => $correction->terminatedOn]);
+        }
+
+        return (int) $id;
+    }
+
+    public function rehirableUuidByNationalId(string $nationalId): ?string
+    {
+        $normalised = NationalId::fromInput($nationalId);
+
+        if (! $normalised instanceof NationalId) {
+            return null;
+        }
+
+        $uuid = Employee::query()
+            ->whereRaw(NationalIdDigest::matches(), NationalIdDigest::bindings($normalised))
+            ->where('status', EmploymentStatus::TERMINATED->value)
+            ->whereNull('anonymized_at')
+            ->value('uuid');
+
+        return \is_string($uuid) ? $uuid : null;
+    }
+
+    /**
+     * El periodo en curso sigue a la ficha (ADR-062 §1): la misma fecha de cese
+     * y, si la baja se hace efectiva, el instante en que lo hizo. Solo el
+     * periodo sin baja efectiva: `offboarded_at` no se reescribe.
+     */
+    private function saveCurrentPeriodTermination(EmployeeEntity $employee): void
+    {
+        $effective = $employee->status === EmploymentStatus::TERMINATED;
+
+        DB::table('employment_periods')
+            ->where('employee_id', $this->idOf($employee->uuid))
+            ->whereNull('offboarded_at')
+            ->update([
+                'terminated_on' => $employee->terminatedAt?->format('Y-m-d'),
+                'offboarded_at' => $effective ? $this->now() : null,
+            ]);
+    }
+
+    /**
+     * El periodo con el que nace la ficha (RN-27): el alta, sin cese.
+     */
+    private function openFirstPeriod(EmployeeEntity $employee): void
+    {
+        DB::table('employment_periods')->insert([
+            'uuid' => $this->uuids->next(),
+            'employee_id' => $this->idOf($employee->uuid),
+            'hired_on' => $employee->hiredAt->format('Y-m-d'),
+            'terminated_on' => $employee->terminatedAt?->format('Y-m-d'),
+            'offboarded_at' => $employee->status === EmploymentStatus::TERMINATED ? $this->now() : null,
+        ]);
+    }
+
+    /** El instante del Clock, en el formato de `timestamptz(6)`. */
+    private function now(): string
+    {
+        return $this->clock->now()->format('Y-m-d H:i:s.uP');
+    }
+
+    private function idOf(string $uuid): int
+    {
+        $id = Employee::query()->where('uuid', $uuid)->value('id');
+
+        if (! is_numeric($id)) {
+            throw new RuntimeException('El empleado '.$uuid.' no existe.');
+        }
+
+        return (int) $id;
     }
 
     public function dueScheduledOffboardings(string $today): array

@@ -1850,8 +1850,50 @@ export interface paths {
          *     —una modificacion o una importacion— llega a la vez: el servidor
          *     reintenta una vez la que PostgreSQL deshace y responde el `409` del
          *     dato duplicado, nunca un `500` ([ADR-046](../adr/ADR-046-la-ficha-del-empleado-se-escribe-bajo-candado-y-por-columnas.md) §1.3).
+         *
+         *     **El documento de una persona de baja** (RN-27, desde la 2.3.0): el
+         *     alta sigue respondiendo `409`, porque el documento es unico, y si esa
+         *     persona tiene la ficha sin minimizar el problema lleva
+         *     `rehirable_employee_uuid` para ofrecer la readmision
+         *     (`POST /employees/{uuid}/rehire`). Lo recibe solo `rrhh+`, que ya ve la
+         *     plantilla entera.
          */
         post: operations["createEmployee"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/employees/rehire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Readmision de varias personas a la vez (RN-27)
+         * @description Readmite a varias personas de baja con **una fecha de alta comun**
+         *     (RN-27, [ADR-062](../adr/ADR-062-la-baja-se-programa-y-la-readmision-abre-un-periodo-de-alta-en-la-misma-ficha.md) §6). Es
+         *     la vuelta de la temporada: cada una, como en
+         *     `POST /employees/{uuid}/rehire` sin cambios —su departamento, su idioma
+         *     y un contrato con los terminos del ultimo—, con su asiento
+         *     `employee.rehired` y su credencial nueva pendiente de imprimir, que se
+         *     imprimen despues con el lote de impresion.
+         *
+         *     **Todo o nada.** Si alguna no se puede readmitir —no existe, no esta de
+         *     baja, su ficha esta minimizada o la fecha no es posterior a su cese—, la
+         *     respuesta es `422` con **un error por posicion** (`employee_uuids.N`) y
+         *     no se escribe nada. Como mucho tantas personas como filas admite la
+         *     importacion; una persona repetida en la lista es un `422`.
+         *
+         *     Con `reset_pin: true`, cada persona recibe un PIN nuevo, que viaja una
+         *     sola vez en su elemento de `rehired`.
+         */
+        post: operations["rehireEmployees"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2068,7 +2110,7 @@ export interface paths {
          *     ya rige aunque la tarea del sistema no la haya aplicado todavia, y la
          *     anulacion responde `409` con `urn:kronoqr:problem:offboarding-due`. Si
          *     la persona sigue trabajando, la via es readmitirla o corregir la fecha
-         *     de cese cuando la baja sea efectiva (ADR-062 §6 y §7).
+         *     de cese cuando la baja sea efectiva (RN-27, ADR-062 §6 y §7).
          *
          *     **Una baja efectiva no se anula** (`409`,
          *     `urn:kronoqr:problem:employee-terminated`), y sin baja programada no hay
@@ -2079,6 +2121,119 @@ export interface paths {
          *     Sin cuerpo: un cuerpo con campos responde `422`.
          */
         post: operations["cancelScheduledOffboarding"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/employees/{uuid}/rehire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** del empleado (`employees.uuid`, UUID v7). En la
+                 *     API nunca viaja la clave interna: un identificador secuencial en una URL
+                 *     es un mapa de cuanta gente hay y en que orden entro.
+                 * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                 */
+                uuid: components["parameters"]["EmployeeUuid"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Readmision de una persona de baja (RN-27)
+         * @description Una persona **de baja** vuelve a la plantilla **en su misma ficha**, con
+         *     un periodo de alta nuevo (RN-27, [ADR-062](../adr/ADR-062-la-baja-se-programa-y-la-readmision-abre-un-periodo-de-alta-en-la-misma-ficha.md) §6).
+         *     Nombre, documento y codigo de empleado no cambian: es la misma persona.
+         *
+         *     **Un solo dato obligatorio**, `hired_at`, la fecha de alta del periodo
+         *     nuevo. Tiene que ser **posterior a la fecha de cese** del periodo
+         *     anterior, sin compartir dia (`422` en `hired_at`). El resto se toma de la
+         *     ficha y se puede cambiar:
+         *
+         *     - `department_id` y `locale`, si cambian;
+         *     - `contract`: sin el campo, se registra un contrato nuevo con los
+         *       terminos del ultimo y `valid_from` = la fecha de alta; con
+         *       `contract: null`, ninguno. El ultimo contrato, si seguia abierto, se
+         *       cierra en el **cese del periodo anterior** (RF-IN-03);
+         *     - `reset_pin`: el PIN **se conserva**. Con `reset_pin: true` se emite
+         *       uno nuevo, que viaja una sola vez en `pin` y queda pendiente de
+         *       entregar (RF-ID-09). Quien nunca tuvo PIN lo sigue teniendo pendiente.
+         *
+         *     **Lo que pasa al confirmar**, en una transaccion: `status` vuelve a
+         *     `active` con la fecha de alta nueva y sin fecha de cese, se abre el
+         *     periodo, y la persona recibe una **credencial nueva pendiente de
+         *     imprimir** (ADR-034). Las tarjetas revocadas siguen revocadas. El portal
+         *     vuelve a admitirla con su PIN. Asiento `employee.rehired`, mas los de la
+         *     credencial, el contrato y el PIN si los hay.
+         *
+         *     `409` con `urn:kronoqr:problem:employee-not-terminated` si la persona no
+         *     esta de baja (tambien con una baja solo programada), y con
+         *     `urn:kronoqr:problem:employee-record-minimised` si su ficha ya se
+         *     minimizo por retencion (RL-11, ADR-060): quien vuelve despues es un alta
+         *     nueva. Una readmision que llega a la vez que otra, o que la purga de
+         *     retencion de la misma ficha, se aplica una detras de otra: la segunda
+         *     responde `409`. Ningun `409` ni `422` escribe nada.
+         */
+        post: operations["rehireEmployee"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/employees/{uuid}/employment-periods/{periodUuid}/termination-corrections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** del empleado (`employees.uuid`, UUID v7). En la
+                 *     API nunca viaja la clave interna: un identificador secuencial en una URL
+                 *     es un mapa de cuanta gente hay y en que orden entro.
+                 * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                 */
+                uuid: components["parameters"]["EmployeeUuid"];
+                /** @description UUID publico del periodo de alta (`Employee.employment_periods[].uuid`). */
+                periodUuid: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Correccion auditada de la fecha de cese de un periodo (RN-27)
+         * @description Corrige la fecha de cese de un **periodo con baja efectiva**, con
+         *     motivo (RN-27, RL-04, [ADR-062](../adr/ADR-062-la-baja-se-programa-y-la-readmision-abre-un-periodo-de-alta-en-la-misma-ficha.md) §7).
+         *     Es el camino cuando RRHH puso un cese anterior al ultimo dia trabajado de
+         *     verdad, o posterior al real.
+         *
+         *     **Fechas admitidas** (en la zona del centro): no posterior a hoy, no
+         *     anterior a la fecha de alta del periodo, y anterior a la fecha de alta
+         *     del periodo siguiente si lo hay. Cualquier otra da `422` en
+         *     `terminated_at` con el limite. Como la baja, **no se compara con el
+         *     ultimo tramo ni con las ausencias**: adelantar la fecha no borra nada.
+         *
+         *     **Nada se sobrescribe sin rastro** (RN-13, regla dura 5): la correccion
+         *     queda con la fecha anterior, la nueva, el motivo, quien y cuando, y el
+         *     asiento `employee.termination_date_corrected` lleva las fechas, nunca el
+         *     motivo. Si es el periodo en curso, cambia tambien
+         *     `Employee.terminated_at`.
+         *
+         *     **Efectos.** Los dias que gana el periodo admiten tramos a mano
+         *     (RF-PA-04); los fichajes que se rechazaron esos dias no se reprocesan.
+         *     Las tarjetas siguen revocadas. El plazo de minimizacion de la ficha
+         *     (ADR-060) cuenta desde la fecha corregida.
+         *
+         *     Una baja **programada** no se corrige: se reprograma con
+         *     `POST /employees/{uuid}/offboard` (`409`,
+         *     `urn:kronoqr:problem:offboarding-not-effective`).
+         */
+        post: operations["correctTerminationDate"];
         delete?: never;
         options?: never;
         head?: never;
@@ -8291,14 +8446,22 @@ export interface components {
             status: components["schemas"]["EmploymentStatus"];
             /**
              * Format: date
-             * @description Fecha de alta, civil y sin zona.
+             * @description Fecha de alta **del periodo en curso**, civil y sin zona. Una persona
+             *     readmitida tuvo otros antes: estan en `employment_periods`.
              */
             hired_at: string;
             /**
              * Format: date
-             * @description Fecha de cese, o `null` si sigue de alta.
+             * @description Fecha de cese **del periodo en curso**, o `null` si sigue de alta.
              */
             terminated_at: string | null;
+            /**
+             * @description Todos sus periodos de alta, del mas antiguo al mas reciente (RN-27,
+             *     ADR-062). El rango de la exportacion legal puede caer en
+             *     cualquiera de ellos: `hired_at` y `terminated_at` solos harian creer
+             *     que la persona solo trabajo en el ultimo.
+             */
+            employment_periods: components["schemas"]["EmploymentPeriod"][];
         };
         /**
          * EmploymentStatus
@@ -8396,6 +8559,13 @@ export interface components {
              *     diciendo lo mismo que antes.
              */
             offboarding: components["schemas"]["EmployeeOffboarding"] | null;
+            /**
+             * @description **Solo en `GET /employees/{uuid}`** (RN-27, desde la 2.3.0): los
+             *     periodos de alta de la persona, del mas antiguo al mas reciente. El
+             *     ultimo es el que reflejan `hired_at`, `terminated_at` y `status`. Las
+             *     demas respuestas con `Employee` no lo llevan.
+             */
+            employment_periods?: components["schemas"]["EmploymentPeriod"][];
         };
         /**
          * EmployeeOffboarding
@@ -8413,6 +8583,131 @@ export interface components {
              * @description Fecha de cese, la misma que `Employee.terminated_at`.
              */
             terminated_at: string;
+        };
+        /**
+         * EmploymentPeriod
+         * @description Un periodo de alta de la persona (RN-27, ADR-062 §1): de su fecha de alta
+         *     a su fecha de cese, si la hay. Una persona readmitida tiene varios, que
+         *     no se solapan. El hueco entre dos no admite tramos ni ausencias.
+         *
+         *     `state`: `active` sin fecha de cese; `scheduled` con una baja
+         *     programada; `terminated` con la baja efectiva.
+         */
+        EmploymentPeriod: {
+            /** Format: uuid */
+            uuid: string;
+            /**
+             * Format: date
+             * @description Fecha de alta del periodo. No cambia nunca.
+             */
+            hired_at: string;
+            /**
+             * Format: date
+             * @description Fecha de cese, o `null` sin baja.
+             */
+            terminated_at: string | null;
+            /** @enum {string} */
+            state: "active" | "scheduled" | "terminated";
+        };
+        /**
+         * RehireContract
+         * @description Los terminos del contrato del periodo nuevo (RF-GP-02), con
+         *     `valid_from` = la fecha de alta de la readmision.
+         */
+        RehireContract: {
+            weekly_hours: number;
+            annual_hours?: number | null;
+            schedule_type: components["schemas"]["ScheduleType"];
+        };
+        /**
+         * RehireEmployeeRequest
+         * @description La readmision (RN-27). Solo `hired_at` es obligatorio; lo demas se toma
+         *     de la ficha si no se envia.
+         */
+        RehireEmployeeRequest: {
+            /**
+             * Format: date
+             * @description Fecha de alta del periodo nuevo, posterior a la fecha de cese del anterior.
+             */
+            hired_at: string;
+            /**
+             * Format: int64
+             * @description Sin el campo, el de la ficha. Con `null`, sin departamento.
+             */
+            department_id?: number | null;
+            /** @description Uno de los idiomas activos. Sin el campo, el de la ficha. */
+            locale?: string;
+            /**
+             * @description Sin el campo, un contrato nuevo con los terminos del ultimo (si
+             *     hubo alguno). Con `null`, ninguno.
+             */
+            contract?: components["schemas"]["RehireContract"] | null;
+            /**
+             * @description Emite un PIN nuevo en lugar de conservar el que tenia.
+             * @default false
+             */
+            reset_pin: boolean;
+        };
+        /**
+         * RehireEmployeesRequest
+         * @description Readmision en lote con una fecha de alta comun (RN-27).
+         */
+        RehireEmployeesRequest: {
+            employee_uuids: string[];
+            /** Format: date */
+            hired_at: string;
+            /** @default false */
+            reset_pin: boolean;
+        };
+        /**
+         * RehiredEmployee
+         * @description La persona readmitida, su periodo nuevo y su credencial nueva pendiente
+         *     de imprimir (ADR-034). `pin` solo con `reset_pin`, y una sola vez.
+         */
+        RehiredEmployee: {
+            employee: components["schemas"]["Employee"];
+            employment_period: components["schemas"]["EmploymentPeriod"];
+            credential: {
+                /** Format: uuid */
+                uuid: string;
+                /** @enum {string} */
+                status: "pending_print";
+            };
+            pin?: components["schemas"]["IssuedPin"];
+        };
+        /** RehiredEmployees */
+        RehiredEmployees: {
+            rehired: components["schemas"]["RehiredEmployee"][];
+        };
+        /**
+         * TerminationDateCorrectionRequest
+         * @description Correccion de la fecha de cese de un periodo con baja efectiva (RN-27).
+         */
+        TerminationDateCorrectionRequest: {
+            /** Format: date */
+            terminated_at: string;
+            /**
+             * @description Por que se corrige. Se guarda con la correccion y **no** entra en el
+             *     asiento (regla dura 21): puede llevar texto libre.
+             */
+            reason: string;
+        };
+        /**
+         * EmploymentPeriodCorrection
+         * @description Una correccion de la fecha de cese (RN-27, RL-04). Conserva la fecha
+         *     anterior; el motivo no se devuelve.
+         */
+        EmploymentPeriodCorrection: {
+            /** Format: int64 */
+            id: number;
+            /** Format: uuid */
+            employment_period_uuid: string;
+            /** Format: date */
+            previous_terminated_at: string;
+            /** Format: date */
+            terminated_at: string;
+            /** Format: date-time */
+            corrected_at: string;
         };
         /**
          * Teleworking
@@ -13801,9 +14096,17 @@ export interface components {
          *     **Un solo enum para los dos modos, en presente y no en pasado.** Con
          *     `create`/`created` el panel tendria que pintar dos tablas distintas para
          *     el mismo informe; lo que dice si ocurrio o no es `mode`.
+         *
+         *     **`rehire`** (RN-27, desde la 2.3.0): la fila identifica por su documento,
+         *     y con el nombre de su ficha, a una persona de baja, y se propone su
+         *     readmision en su ficha, con la fecha de alta de la fila;
+         *     lleva el aviso `rehire_proposed`. Al aplicar, la persona vuelve a estar
+         *     de alta como con `POST /employees/{uuid}/rehire`, con su departamento e
+         *     idioma si la fila los cambia y su asiento `employee.rehired` con
+         *     `via_import`.
          * @enum {string}
          */
-        EmployeeImportOutcome: "create" | "update" | "unchanged" | "reject";
+        EmployeeImportOutcome: "create" | "update" | "unchanged" | "reject" | "rehire";
         /**
          * EmployeeImportMessage
          * @description Por que se rechaza una linea, o que conviene saber de ella.
@@ -13823,6 +14126,24 @@ export interface components {
              *     importa igual: un alta toma `LOCALE_DEFAULT` y una ficha que ya
              *     existe conserva su idioma, asi que `locale` no aparece en `changes`.
              *
+             *     **`rehire_proposed`** (RN-27, 2.3.0) es un aviso de la fila `rehire`:
+             *     la persona esta de baja y se readmitira al aplicar. Sin fecha de alta
+             *     en la fila es `rehire_requires_hired_at`, y con una fecha no
+             *     posterior a su fecha de cese, `rehire_not_after_termination`: las dos
+             *     rechazan la fila. **Desde la 2.3.0 `employee_terminated` ya no se
+             *     emite**; se conserva en el enum por los clientes anteriores.
+             *
+             *     **`rehire_identity_mismatch`** (RN-27, 2.3.0): la fila coincide con una
+             *     persona de baja, pero solo por correo o con un nombre que no es el de
+             *     su ficha. Rechaza la fila: solo se readmite a quien la fila identifica
+             *     por su documento y con su nombre (sin distinguir mayusculas, tildes ni
+             *     espacios), para que un correo compartido o una errata en el documento
+             *     no readmitan a otra persona en su ficha.
+             *
+             *     **`rehire_ignores_identity_changes`** (RN-27, 2.3.0) es un aviso de la
+             *     fila `rehire`: trae un nombre o un correo distintos de los de la ficha
+             *     y la readmision no los aplica.
+             *
              *     **`employee_terminated`** (2.2.0): la fila corresponde a una persona
              *     dada de baja. La importacion no modifica su ficha ni la da de alta
              *     otra vez (RN-14); el resto del fichero se aplica. `apply` vuelve a
@@ -13840,7 +14161,7 @@ export interface components {
              *     comprobacion, antes de escribir nada.
              * @enum {string}
              */
-            code: "missing_identity" | "missing_first_name" | "missing_last_name" | "missing_hired_at" | "invalid_email" | "invalid_hired_at" | "invalid_national_id" | "unknown_department" | "duplicate_in_file" | "email_taken" | "hired_at_not_updated" | "employee_terminated" | "unknown_column" | "locale_not_active";
+            code: "missing_identity" | "missing_first_name" | "missing_last_name" | "missing_hired_at" | "invalid_email" | "invalid_hired_at" | "invalid_national_id" | "unknown_department" | "duplicate_in_file" | "email_taken" | "hired_at_not_updated" | "employee_terminated" | "rehire_proposed" | "rehire_requires_hired_at" | "rehire_not_after_termination" | "rehire_identity_mismatch" | "rehire_ignores_identity_changes" | "unknown_column" | "locale_not_active";
             /** @enum {string} */
             severity: "error" | "warning";
             /** @description Columna del fichero a la que se refiere, si es a una. */
@@ -13908,6 +14229,17 @@ export interface components {
              *     fases.
              */
             confirm_checksum?: string;
+            /**
+             * @description **Obligatorio con `mode: apply` cuando la validacion devolvio
+             *     `rehire_digest`** (RN-27, 2.3.0): ese mismo valor. `apply` vuelve a
+             *     comprobar el fichero, y si las personas que se readmitirian ya no son
+             *     las que se revisaron —alguien se ha dado de baja o de alta entre la
+             *     validacion y esta peticion—, responde `409` sin escribir nada. Sin
+             *     readmisiones en la validacion no se manda; si se manda y al aplicar
+             *     no hay ninguna, tambien es `409`. Una readmision no ocurre sin que
+             *     quien importa la haya visto en el resumen.
+             */
+            confirm_rehire_digest?: string;
         };
         /**
          * EmployeeImportReport
@@ -13950,8 +14282,17 @@ export interface components {
                 update: number;
                 unchanged: number;
                 reject: number;
+                /** @description Filas `rehire`, readmisiones propuestas o aplicadas (RN-27). */
+                rehire: number;
             };
             rows: components["schemas"]["EmployeeImportRow"][];
+            /**
+             * @description **Solo si alguna fila es `rehire`** (RN-27, 2.3.0): `sha256` estable
+             *     de los `employee_uuid` de esas filas, ordenados. Se devuelve en
+             *     `confirm_rehire_digest` al aplicar, para que la aplicacion no readmita
+             *     a nadie que no estuviera en el resumen revisado.
+             */
+            rehire_digest?: string;
             /**
              * @description `true` si el fichero traia mas lineas que el maximo admitido y se
              *     dejaron de leer. **Con `truncated: true` no se aplica nada**: se parte
@@ -14210,13 +14551,77 @@ export interface components {
             };
         };
         /**
+         * @description El alta choca con la plantilla: un correo o un documento que ya son de
+         *     otra persona (`urn:kronoqr:problem:conflict`). Si el documento es de una
+         *     persona **de baja** con la ficha sin minimizar, el problema lleva
+         *     `rehirable_employee_uuid` (RN-27, ADR-062 §6): la via es readmitirla en
+         *     su ficha, no darla de alta otra vez.
+         */
+        CreateEmployeeConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"] & {
+                    /**
+                     * Format: uuid
+                     * @description La persona de baja con ese documento, para ofrecer «Dar de alta de nuevo».
+                     */
+                    rehirable_employee_uuid?: string;
+                };
+            };
+        };
+        /**
+         * @description La readmision no se puede hacer en el estado actual de la ficha (RN-27,
+         *     ADR-062 §6). **`type` distingue las causas**:
+         *
+         *     - `urn:kronoqr:problem:employee-not-terminated` — la persona no esta de
+         *       baja: sigue en alta, suspendida o con una baja solo programada. Se
+         *       recarga la ficha.
+         *     - `urn:kronoqr:problem:employee-record-minimised` — la ficha ya se
+         *       minimizo por retencion (RL-11, ADR-060): no conserva el documento con
+         *       el que reconocer a la persona, y quien vuelve es un alta nueva.
+         *     - `urn:kronoqr:problem:conflict` — otro choque, como un contrato que
+         *       pisaria a uno existente.
+         *
+         *     Ninguno escribe nada.
+         */
+        RehireConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description La fecha de cese no se puede corregir en el estado actual del periodo
+         *     (RN-27, ADR-062 §7). **`type` distingue las causas**:
+         *
+         *     - `urn:kronoqr:problem:offboarding-not-effective` — el periodo no tiene
+         *       baja efectiva: sin baja no hay fecha que corregir, y una baja
+         *       programada se reprograma con `POST /employees/{uuid}/offboard`.
+         *     - `urn:kronoqr:problem:employee-record-minimised` — la ficha esta
+         *       minimizada por retencion y no se modifica (ADR-060).
+         *
+         *     Ninguno escribe nada.
+         */
+        TerminationCorrectionConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
          * @description La baja programada no se puede anular en el estado actual de la ficha
          *     (RN-14, ADR-062 §3). **`type` distingue las causas**:
          *
          *     - `urn:kronoqr:problem:offboarding-due` — **la fecha de cese ya ha
          *       pasado** en la zona del centro: la baja rige aunque la tarea del
          *       sistema no la haya aplicado todavia. Si la persona sigue trabajando,
-         *       se readmite o se corrige la fecha cuando la baja sea efectiva (ADR-062 §6 y §7).
+         *       se readmite o se corrige la fecha cuando la baja sea efectiva (RN-27, ADR-062 §6 y §7).
          *     - `urn:kronoqr:problem:offboarding-not-scheduled` — la ficha no tiene
          *       baja programada: nada que anular. Se recarga la ficha.
          *     - `urn:kronoqr:problem:employee-terminated` — la baja ya es efectiva y
@@ -16540,9 +16945,52 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
+            409: components["responses"]["CreateEmployeeConflict"];
             415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    rehireEmployees: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RehireEmployeesRequest"];
+            };
+        };
+        responses: {
+            /** @description Todas readmitidas, en el orden de la peticion. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RehiredEmployees"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            415: components["responses"]["UnsupportedMediaType"];
+            /**
+             * @description Al menos una persona no se puede readmitir. `errors` lleva un
+             *     mensaje por posicion de `employee_uuids` (`employee_uuids.0`,
+             *     `employee_uuids.3`…). No se ha escrito nada.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ValidationProblem"];
+                };
+            };
             429: components["responses"]["TooManyRequests"];
             503: components["responses"]["DependencyUnavailable"];
         };
@@ -16716,6 +17164,112 @@ export interface operations {
             503: components["responses"]["DependencyUnavailable"];
         };
     };
+    rehireEmployee: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** del empleado (`employees.uuid`, UUID v7). En la
+                 *     API nunca viaja la clave interna: un identificador secuencial en una URL
+                 *     es un mapa de cuanta gente hay y en que orden entro.
+                 * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                 */
+                uuid: components["parameters"]["EmployeeUuid"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RehireEmployeeRequest"];
+            };
+        };
+        responses: {
+            /** @description Persona readmitida. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RehiredEmployee"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["RehireConflict"];
+            415: components["responses"]["UnsupportedMediaType"];
+            /**
+             * @description La peticion no cumple el contrato. Ademas de los errores de forma,
+             *     `errors.hired_at` señala una fecha de alta **no posterior a la fecha
+             *     de cese** del periodo anterior. No se ha escrito nada.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ValidationProblem"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
+    correctTerminationDate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Identificador **publico** del empleado (`employees.uuid`, UUID v7). En la
+                 *     API nunca viaja la clave interna: un identificador secuencial en una URL
+                 *     es un mapa de cuanta gente hay y en que orden entro.
+                 * @example 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+                 */
+                uuid: components["parameters"]["EmployeeUuid"];
+                /** @description UUID publico del periodo de alta (`Employee.employment_periods[].uuid`). */
+                periodUuid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TerminationDateCorrectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Correccion registrada. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmploymentPeriodCorrection"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["TerminationCorrectionConflict"];
+            415: components["responses"]["UnsupportedMediaType"];
+            /**
+             * @description `errors.terminated_at` señala una fecha fuera de los limites, y
+             *     `errors.reason` un motivo de menos de 10 o mas de 1 000 caracteres.
+             *     No se ha escrito nada.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ValidationProblem"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["DependencyUnavailable"];
+        };
+    };
     resetEmployeePin: {
         parameters: {
             query?: never;
@@ -16870,7 +17424,9 @@ export interface operations {
              *     Tambien `409` si la ficha esta **minimizada por retencion**
              *     (`anonymized_at` no nulo, ADR-060): ya no admite contratos. El
              *     `detail` lo dice en el idioma negociado, con la fecha de la
-             *     minimizacion.
+             *     minimizacion. Su `type` es
+             *     `urn:kronoqr:problem:employee-record-minimised`, el mismo que en la
+             *     readmision y en la correccion de la fecha de cese.
              */
             409: {
                 headers: {
@@ -20218,14 +20774,27 @@ export interface operations {
              *     Tambien, y sin escribir nada, si una persona del fichero se da de
              *     baja **durante** esta misma peticion de aplicar, entre su
              *     comprobacion y su escritura (ADR-046). Al repetirla, esa fila sale
-             *     rechazada con `employee_terminated`. Una baja registrada antes,
-             *     entre la peticion de validar y esta, no da `409`: esta peticion
-             *     vuelve a comprobar el fichero y la fila sale rechazada en el
-             *     informe.
+             *     rechazada con `employee_terminated` (hasta la 2.2.x) o propuesta como
+             *     `rehire` (desde la 2.3.0).
              *
-             *     **`type` distingue las dos causas**: el fichero distinto es
+             *     **Las readmisiones son las revisadas o no se aplica nada** (RN-27,
+             *     2.3.0). Esta peticion vuelve a comprobar el fichero; si las filas
+             *     `rehire` que salen ahora no son las de la validacion
+             *     (`confirm_rehire_digest` distinto de su `rehire_digest`, o ausente
+             *     cuando ahora hay alguna) responde `409` sin escribir nada. Es el caso
+             *     de una baja registrada entre la peticion de validar y esta, que
+             *     convertiria un `update` revisado en una readmision que nadie ha visto,
+             *     y el de una readmision hecha por otra via en ese hueco. Se vuelve a
+             *     validar y se aplica con el resumen nuevo. Una readmision hecha por
+             *     otra via **durante** esta peticion da `409`
+             *     (`urn:kronoqr:problem:employee-not-terminated`).
+             *
+             *     **`type` distingue las causas**: el fichero distinto y las
+             *     readmisiones distintas de las revisadas son
              *     `urn:kronoqr:problem:conflict`; la baja durante la aplicacion es
-             *     `urn:kronoqr:problem:employee-terminated`.
+             *     `urn:kronoqr:problem:employee-terminated`; la readmision por otra
+             *     via durante la aplicacion,
+             *     `urn:kronoqr:problem:employee-not-terminated`.
              */
             409: {
                 headers: {
@@ -20368,7 +20937,9 @@ export interface operations {
              *     Tambien `409` si la ficha esta **minimizada por retencion**
              *     (`anonymized_at` no nulo, ADR-060): ya no admite ausencias. El
              *     `detail` lo dice en el idioma negociado, con la fecha de la
-             *     minimizacion.
+             *     minimizacion. Su `type` es
+             *     `urn:kronoqr:problem:employee-record-minimised`, el mismo que en la
+             *     readmision y en la correccion de la fecha de cese.
              */
             409: {
                 headers: {

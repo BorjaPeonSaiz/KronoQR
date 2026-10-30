@@ -275,6 +275,8 @@ final readonly class DatabaseDataExportSource implements DataExportSource
         'site' => self::SITE,
         'departments' => self::DEPARTMENTS,
         'employees' => self::EMPLOYEES,
+        'employment_periods' => self::EMPLOYMENT_PERIODS,
+        'employment_period_corrections' => self::EMPLOYMENT_PERIOD_CORRECTIONS,
         'employment_contracts' => self::EMPLOYMENT_CONTRACTS,
         'absences' => self::ABSENCES,
         'credentials' => self::CREDENTIALS,
@@ -350,6 +352,37 @@ final readonly class DatabaseDataExportSource implements DataExportSource
           LEFT JOIN departments d ON d.id = e.department_id
           LEFT JOIN users pu      ON pu.id = e.pin_delivered_by_user_id
          ORDER BY e.id
+        SQL;
+
+    /*
+     * Periodos de alta y correcciones de su fecha de cese (RN-27). Sin claves
+     * internas: los periodos salen por su `uuid` (doc 01 §5.5).
+     */
+    private const string EMPLOYMENT_PERIODS = <<<'SQL'
+        SELECT p.uuid::text AS employment_period_uuid,
+               e.uuid::text AS employee_uuid,
+               to_char(p.hired_on, 'YYYY-MM-DD')      AS hired_on,
+               to_char(p.terminated_on, 'YYYY-MM-DD') AS terminated_on,
+               to_char(p.offboarded_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS offboarded_at,
+               to_char(p.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at,
+               u.uuid::text AS created_by_user_uuid
+          FROM employment_periods p
+          JOIN employees e  ON e.id = p.employee_id
+          LEFT JOIN users u ON u.id = p.created_by_user_id
+         ORDER BY p.id
+        SQL;
+
+    private const string EMPLOYMENT_PERIOD_CORRECTIONS = <<<'SQL'
+        SELECT p.uuid::text AS employment_period_uuid,
+               to_char(c.previous_terminated_on, 'YYYY-MM-DD') AS previous_terminated_on,
+               to_char(c.terminated_on, 'YYYY-MM-DD')          AS terminated_on,
+               c.reason,
+               u.uuid::text AS corrected_by_user_uuid,
+               to_char(c.corrected_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS corrected_at
+          FROM employment_period_corrections c
+          JOIN employment_periods p ON p.id = c.employment_period_id
+          JOIN users u ON u.id = c.corrected_by_user_id
+         ORDER BY c.id
         SQL;
 
     private const string EMPLOYMENT_CONTRACTS = <<<'SQL'

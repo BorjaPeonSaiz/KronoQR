@@ -37,6 +37,8 @@ final readonly class EmployeesImported implements DomainEvent
         public int $unchanged,
         public int $rejected,
         private DateTimeImmutable $occurredAt,
+        /** Filas `rehire`: personas de baja readmitidas por la importacion (RN-27). */
+        public int $rehired = 0,
     ) {}
 
     public function eventName(): string

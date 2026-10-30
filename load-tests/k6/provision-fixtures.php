@@ -295,7 +295,22 @@ $created = 0;
 
 $flushEmployees = static function (array &$buffer) use (&$created): void {
     if ($buffer !== []) {
-        DB::table('employees')->insert($buffer);
+        // Cada ficha nace con su periodo de alta en la misma transaccion (RN-27,
+        // ADR-062 §1): sin el, `employees_current_period_matches` rechaza el
+        // COMMIT. Inline y no con `Database\Seeders\Support\EmploymentPeriods`,
+        // porque este script corre tambien contra la imagen del cliente.
+        $uuids = array_column($buffer, 'uuid');
+
+        DB::transaction(static function () use ($buffer, $uuids): void {
+            DB::table('employees')->insert($buffer);
+            DB::insert(
+                'INSERT INTO employment_periods (uuid, employee_id, hired_on, terminated_on, offboarded_at, created_at)'
+                .' SELECT gen_random_uuid(), e.id, e.hired_at, e.terminated_at, NULL, now()'
+                .' FROM employees e WHERE e.uuid = ANY (?::uuid[])'
+                .' AND NOT EXISTS (SELECT 1 FROM employment_periods p WHERE p.employee_id = e.id)',
+                ['{'.implode(',', $uuids).'}'],
+            );
+        });
         $created += count($buffer);
         $buffer = [];
     }

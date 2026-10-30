@@ -112,10 +112,15 @@ it('describe solo los endpoints cuya tarea existe, y todos bajo /api/v1', functi
         '/api/v1/me/workdays',
         '/api/v1/me/export',
         '/api/v1/employees',
+        // RN-27, ADR-062 §6: la readmision en lote.
+        '/api/v1/employees/rehire',
         '/api/v1/employees/{uuid}',
         '/api/v1/employees/{uuid}/offboard',
         // ADR-062 §3: la anulacion de una baja programada.
         '/api/v1/employees/{uuid}/offboard/cancel',
+        // RN-27, ADR-062 §6 y §7: la readmision y la correccion de la fecha de cese.
+        '/api/v1/employees/{uuid}/rehire',
+        '/api/v1/employees/{uuid}/employment-periods/{periodUuid}/termination-corrections',
         // Tarea 1.13: provision, entrega y restablecimiento del PIN (RF-ID-09).
         '/api/v1/employees/{uuid}/pin/reset',
         '/api/v1/employees/{uuid}/pin/deliver',
@@ -587,8 +592,9 @@ it('declara la ficha reducida del responsable sin correo, idioma ni estado del P
 
     expect(Contract::value('components', 'schemas', 'ScopedEmployee', 'additionalProperties'))->toBeFalse()
         ->and($scoped)->not->toContain('email', 'locale', 'pin_status')
-        // Todo lo demas de la ficha, y nada que no este en ella.
-        ->and($scoped)->toEqualCanonicalizing(array_values(array_diff($full, ['email', 'locale', 'pin_status'])))
+        // Todo lo demas de la ficha, y nada que no este en ella. Los periodos de
+        // alta (RN-27) solo viajan en la ficha de `rrhh+`.
+        ->and($scoped)->toEqualCanonicalizing(array_values(array_diff($full, ['email', 'locale', 'pin_status', 'employment_periods'])))
         ->and(Contract::value('paths', '/api/v1/employees', 'get', 'responses', '200', 'content', 'application/json', 'schema', 'anyOf'))
         ->toBe([
             ['$ref' => '#/components/schemas/EmployeeCollection'],
@@ -653,6 +659,9 @@ it('exige el ambito employees:* en todo endpoint que ESCRIBE plantilla', functio
     $paths = [
         '/api/v1/employees/{uuid}/offboard',
         '/api/v1/employees/{uuid}/offboard/cancel',
+        '/api/v1/employees/rehire',
+        '/api/v1/employees/{uuid}/rehire',
+        '/api/v1/employees/{uuid}/employment-periods/{periodUuid}/termination-corrections',
         '/api/v1/employees/{uuid}/pin/reset',
         '/api/v1/employees/{uuid}/pin/deliver',
         '/api/v1/departments',
@@ -784,7 +793,7 @@ it('no ofrece en el informe de importacion ningun hueco para un PIN', function (
     // seria la invitacion a volver a emitirlo ahi.
     expect(Contract::value('components', 'schemas', 'EmployeeImportReport', 'additionalProperties'))->toBeFalse()
         ->and(Contract::keys('components', 'schemas', 'EmployeeImportReport', 'properties'))
-        ->toBe(['mode', 'file', 'summary', 'rows', 'truncated'])
+        ->toBe(['mode', 'file', 'summary', 'rows', 'rehire_digest', 'truncated'])
         ->and(Contract::value('components', 'schemas', 'EmployeeImportRow', 'additionalProperties'))->toBeFalse()
         ->and(Contract::keys('components', 'schemas', 'EmployeeImportRow', 'properties'))
         ->toBe(['line', 'label', 'outcome', 'employee_uuid', 'changes', 'messages']);
@@ -1552,7 +1561,7 @@ it('devuelve como mucho diez personas con los campos minimos, ni codigo ni docum
 
     $properties = Contract::keys('components', 'schemas', 'LegalExportEmployeeMatch', 'properties');
 
-    expect($properties)->toBe(['uuid', 'first_name', 'last_name', 'department', 'status', 'hired_at', 'terminated_at'])
+    expect($properties)->toBe(['uuid', 'first_name', 'last_name', 'department', 'status', 'hired_at', 'terminated_at', 'employment_periods'])
         ->and($properties)->not->toContain('employee_code')
         ->and($properties)->not->toContain('email')
         ->and($properties)->not->toContain('national_id')

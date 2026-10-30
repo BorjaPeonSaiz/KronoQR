@@ -112,10 +112,14 @@ final class EmployeeController extends Controller
             $employee->uuid,
         );
 
+        $full = Gate::allows('viewContactAndPin', Employee::class);
+
         return (new EmployeeResource(
             $employee,
             $queries->pinStatus($uuid),
-            Gate::allows('viewContactAndPin', Employee::class),
+            $full,
+            // RN-27: los periodos de alta, en la ficha de `rrhh+`.
+            $full ? $queries->employmentPeriods($uuid) : null,
         ))->response();
     }
 

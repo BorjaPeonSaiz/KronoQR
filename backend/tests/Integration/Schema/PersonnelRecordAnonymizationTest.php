@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Modules\Compliance\Infrastructure\Persistence\DatabasePersonnelRecordArchive;
+use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
@@ -10,6 +11,7 @@ use Illuminate\Support\Str;
 use PHPUnit\Framework\Assert;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Database\SchemaOwner;
+use Tests\Support\Identity\ManagementUsers;
 
 /*
  * La barrera de la minimizacion de fichas en el motor (ADR-060, tarea 11.3 A;
@@ -365,3 +367,73 @@ it('su down() se niega con fichas ya minimizadas y no toca nada', function (): v
     expect(DB::table('employees')->whereNotNull('anonymized_at')->count())->toBe(1)
         ->and(fichaTexto(DB::table('employees')->whereNotNull('anonymized_at')->value('first_name')))->toBe('');
 })->group('RL-11');
+
+it('sustituye el motivo de corregir la fecha de cese de sus periodos y conserva las fechas', function (): void {
+    // ADR-060, ADR-062 §7: el motivo es texto libre de RRHH y pudo nombrar a la
+    // persona; las fechas de la correccion, quien y cuando son registro (RN-13).
+    $ficha = fichaDeBaja();
+    $rrhh = ManagementUsers::withRole(UserRole::RRHH);
+
+    $periodo = (int) DB::table('employment_periods')->insertGetId([
+        'uuid' => Str::uuid7()->toString(),
+        'employee_id' => $ficha['id'],
+        'hired_on' => '2010-01-01',
+        'terminated_on' => '2015-06-30',
+        'offboarded_at' => '2015-07-01 00:00:00+00',
+    ]);
+
+    DB::table('employment_period_corrections')->insert([
+        'employment_period_id' => $periodo,
+        'previous_terminated_on' => '2015-06-15',
+        'terminated_on' => '2015-06-30',
+        'reason' => 'Lucia Ferrer trabajo hasta el 30, lo dice su jefa de recepcion',
+        'corrected_by_user_id' => $rrhh->id,
+        'corrected_at' => '2015-07-02 09:00:00+00',
+    ]);
+
+    $migration = require database_path('migrations/2026_10_30_110000_minimise_termination_correction_reasons.php');
+
+    fichaMinimizar(fichaCorte());
+
+    /** @var object{reason: string, previous_terminated_on: string, terminated_on: string, corrected_by_user_id: int} $correccion */
+    $correccion = DB::table('employment_period_corrections')->where('employment_period_id', $periodo)->first();
+
+    expect($correccion->reason)->toBe($migration::CORRECTION_REASON)
+        ->and($correccion->previous_terminated_on)->toBe('2015-06-15')
+        ->and($correccion->terminated_on)->toBe('2015-06-30')
+        ->and($correccion->corrected_by_user_id)->toBe($rrhh->id)
+        ->and(DB::table('employees')->where('id', $ficha['id'])->value('anonymized_at'))->not->toBeNull();
+})->group('RL-11', 'RL-08', 'RN-27');
+
+it('una ficha minimizada no recibe periodos, ni cambia los suyos, ni admite correcciones de su cese', function (): void {
+    // ADR-060, ADR-062 §6 y §7: la misma regla que el dominio, en el motor.
+    $ficha = fichaDeBaja();
+    $rrhh = ManagementUsers::withRole(UserRole::RRHH);
+
+    $periodo = (int) DB::table('employment_periods')->insertGetId([
+        'uuid' => Str::uuid7()->toString(),
+        'employee_id' => $ficha['id'],
+        'hired_on' => '2010-01-01',
+        'terminated_on' => '2015-06-30',
+        'offboarded_at' => '2015-07-01 00:00:00+00',
+    ]);
+
+    fichaMinimizar(fichaCorte());
+
+    expect(fichaRechazo(static fn () => DB::table('employment_periods')->insert([
+        'uuid' => Str::uuid7()->toString(),
+        'employee_id' => $ficha['id'],
+        'hired_on' => '2026-01-01',
+    ])))->toBe('42501')
+        ->and(fichaRechazo(static fn () => DB::table('employment_periods')->where('id', $periodo)->update(['terminated_on' => '2015-06-20'])))->toBe('42501')
+        ->and(fichaRechazo(static fn () => DB::table('employment_period_corrections')->insert([
+            'employment_period_id' => $periodo,
+            'previous_terminated_on' => '2015-06-30',
+            'terminated_on' => '2015-06-20',
+            'reason' => 'Correccion de una ficha ya minimizada',
+            'corrected_by_user_id' => $rrhh->id,
+            'corrected_at' => '2026-10-30 09:00:00+00',
+        ])))->toBe('42501')
+        ->and(DB::table('employment_periods')->where('employee_id', $ficha['id'])->pluck('terminated_on')->all())->toBe(['2015-06-30'])
+        ->and(DB::table('employment_period_corrections')->where('employment_period_id', $periodo)->count())->toBe(0);
+})->group('RL-11', 'RS-07', 'RN-27');

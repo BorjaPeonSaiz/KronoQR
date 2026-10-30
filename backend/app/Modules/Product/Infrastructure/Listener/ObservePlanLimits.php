@@ -8,7 +8,9 @@ use App\Modules\Identity\Domain\Event\DeviceTokenIssued;
 use App\Modules\Product\Application\UseCase\RecordPlanUsageHandler;
 use App\Modules\Product\Domain\ValueObject\PlanLimit;
 use App\Modules\Workforce\Domain\Event\EmployeeHired;
+use App\Modules\Workforce\Domain\Event\EmployeeRehired;
 use App\Modules\Workforce\Domain\Event\EmployeesImported;
+use App\Modules\Workforce\Domain\Event\EmployeesRehired;
 use Closure;
 use Illuminate\Database\Connection;
 use Psr\Log\LoggerInterface;
@@ -131,7 +133,8 @@ final readonly class ObservePlanLimits
      */
     public function onEmployeesImported(EmployeesImported $event): void
     {
-        $created = $event->created;
+        // Las readmisiones de la importacion ocupan plaza como un alta (RN-27).
+        $created = $event->created + $event->rehired;
 
         if ($created < 1) {
             return;
@@ -140,6 +143,37 @@ final readonly class ObservePlanLimits
         $this->deferred(
             PlanLimit::Employees,
             fn () => $this->usage->handleBatch(PlanLimit::Employees, $created, null),
+        );
+    }
+
+    /**
+     * La readmision ocupa plaza del plan como un alta (RN-27, ADR-062 §6), y el
+     * limite no bloquea (ADR-028). La de un lote o una importacion se cuenta una
+     * vez con su evento de lote, por lo mismo que el alta importada.
+     */
+    public function onEmployeeRehired(EmployeeRehired $event): void
+    {
+        if ($event->countedByBatch) {
+            return;
+        }
+
+        $this->observe(PlanLimit::Employees, $event->actorUserId);
+    }
+
+    /**
+     * La readmision en lote, contada **una vez** con las personas readmitidas.
+     */
+    public function onEmployeesRehired(EmployeesRehired $event): void
+    {
+        if ($event->rehired < 1) {
+            return;
+        }
+
+        $rehired = $event->rehired;
+
+        $this->deferred(
+            PlanLimit::Employees,
+            fn () => $this->usage->handleBatch(PlanLimit::Employees, $rehired, null),
         );
     }
 

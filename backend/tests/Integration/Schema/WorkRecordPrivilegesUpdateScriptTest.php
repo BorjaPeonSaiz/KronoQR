@@ -379,3 +379,72 @@ it('la reparacion de update.sh concede UPDATE (context) solo con la migracion de
         ->and(array_values((array) $after)[0])->toBe('ok')
         ->and($granted->granted)->toBeFalse();
 })->group('RS-07', 'RL-04', 'RN-19');
+
+it('vigila la matriz completa de los periodos de alta y sus guardas, y la reparacion devuelve los privilegios', function (): void {
+    // RN-27, ADR-062 §2: de tabla, de columna, las funciones de trigger y los
+    // triggers de las tres migraciones de los periodos.
+    $migrator = DB::connection(config()->string('database.migrations.connection'));
+    $application = Config::string('database.roles.application');
+    $sql = privilegiosActualizadorSql($application);
+
+    $process = Process::fromShellCommandline(
+        'bash -c '.escapeshellarg(
+            'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/update.sh')).'; '
+            .'CFG_DB_USERNAME='.escapeshellarg($application).'; KQ_WORK_RECORD_STAGE=b7; work_record_privileges_repair_sql'
+        ),
+        timeout: 60.0,
+    );
+    $process->run();
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput());
+
+    $migrator->beginTransaction();
+
+    try {
+        foreach ([
+            'GRANT TRUNCATE, REFERENCES, TRIGGER, MAINTAIN ON TABLE employment_periods TO "'.$application.'"',
+            'GRANT UPDATE (hired_on) ON TABLE employment_periods TO "'.$application.'"',
+            'REVOKE UPDATE (offboarded_at) ON TABLE employment_periods FROM "'.$application.'"',
+            'GRANT UPDATE (reason) ON TABLE employment_period_corrections TO "'.$application.'"',
+            'GRANT DELETE ON TABLE employment_period_corrections TO "'.$application.'"',
+            'GRANT EXECUTE ON FUNCTION public.employment_periods_assert_termination_corrected() TO "'.$application.'"',
+        ] as $statement) {
+            $migrator->statement($statement);
+        }
+
+        $before = privilegiosDeriva($migrator->selectOne($sql));
+        $migrator->getPdo()->exec($process->getOutput());
+        $after = privilegiosDeriva($migrator->selectOne($sql));
+
+        $migrator->statement('ALTER TABLE employment_periods DISABLE TRIGGER employment_periods_termination_corrected');
+        $migrator->statement('DROP TRIGGER employment_period_corrections_guard_anonymized ON employment_period_corrections');
+        $tampered = privilegiosDeriva($migrator->selectOne($sql));
+    } finally {
+        $migrator->rollBack();
+    }
+
+    expect($before)->toBe(implode(',', [
+        'employment_period_corrections.reason:UPDATE',
+        'employment_period_corrections:DELETE',
+        'employment_periods.hired_on:UPDATE',
+        'employment_periods.offboarded_at:UPDATE',
+        'employment_periods:MAINTAIN',
+        'employment_periods:REFERENCES',
+        'employment_periods:TRIGGER',
+        'employment_periods:TRUNCATE',
+        'employment_periods_assert_termination_corrected:EJECUTABLE',
+    ]))
+        ->and(privilegiosActualizadorManipulado($before))->toBeFalse()
+        ->and($after)->toBe('ok')
+        ->and($tampered)->toBe('trigger:employment_period_corrections_guard_anonymized:AUSENTE,trigger:employment_periods_termination_corrected:DESACTIVADO')
+        ->and(privilegiosActualizadorManipulado($tampered))->toBeTrue();
+})->group('RS-07', 'RL-04', 'RN-27');
+
+function privilegiosDeriva(mixed $row): string
+{
+    \assert(is_object($row));
+    $value = array_values((array) $row)[0] ?? null;
+    \assert(is_string($value));
+
+    return $value;
+}

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Compliance\Application\Port;
 
+use App\Modules\Shared\Domain\ValueObject\EmploymentPeriod;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 
 /**
@@ -16,6 +17,9 @@ use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
  * nombre, y el codigo es lo que lleva impreso la tarjeta.
  *
  * Las fechas son civiles y sin zona (`Y-m-d`), como en la ficha de plantilla.
+ * `hiredAt` y `terminatedAt` son las del periodo en curso; `employmentPeriods`,
+ * todos, del mas antiguo al mas reciente (RN-27): una persona readmitida no
+ * aparece como si solo hubiera trabajado el ultimo.
  */
 final readonly class LegalExportEmployeeMatch
 {
@@ -28,5 +32,7 @@ final readonly class LegalExportEmployeeMatch
         public EmploymentStatus $status,
         public string $hiredAt,
         public ?string $terminatedAt,
+        /** @var list<EmploymentPeriod> */
+        public array $employmentPeriods = [],
     ) {}
 }

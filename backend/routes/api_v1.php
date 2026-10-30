@@ -63,12 +63,15 @@ use App\Modules\Reporting\Http\Controller\ReportExportDownloadController;
 use App\Modules\Workforce\Http\Controller\AbsenceController;
 use App\Modules\Workforce\Http\Controller\AbsenceImportController;
 use App\Modules\Workforce\Http\Controller\CancelScheduledOffboardingController;
+use App\Modules\Workforce\Http\Controller\CorrectTerminationDateController;
 use App\Modules\Workforce\Http\Controller\DepartmentController;
 use App\Modules\Workforce\Http\Controller\EmployeeController;
 use App\Modules\Workforce\Http\Controller\EmployeeImportController;
 use App\Modules\Workforce\Http\Controller\EmployeePinController;
 use App\Modules\Workforce\Http\Controller\EmploymentContractController;
 use App\Modules\Workforce\Http\Controller\OffboardEmployeeController;
+use App\Modules\Workforce\Http\Controller\RehireEmployeeController;
+use App\Modules\Workforce\Http\Controller\RehireEmployeesController;
 use App\Modules\Workforce\Http\Controller\SiteController;
 use Illuminate\Support\Facades\Route;
 
@@ -1378,6 +1381,20 @@ Route::middleware([
     Route::post('/employees/{uuid}/offboard/cancel', CancelScheduledOffboardingController::class)
         ->whereUuid('uuid')
         ->name('employees.offboard.cancel');
+
+    // La readmision (RN-27, ADR-062 §6): una persona de baja vuelve en su misma
+    // ficha con un periodo nuevo. En lote, todo o nada; `/employees/rehire` no
+    // casa con `{uuid}`, que lleva `whereUuid()`.
+    Route::post('/employees/rehire', RehireEmployeesController::class)
+        ->name('employees.rehire.batch');
+    Route::post('/employees/{uuid}/rehire', RehireEmployeeController::class)
+        ->whereUuid('uuid')
+        ->name('employees.rehire');
+
+    // La correccion auditada de la fecha de cese de un periodo (RN-27, ADR-062 §7).
+    Route::post('/employees/{uuid}/employment-periods/{periodUuid}/termination-corrections', CorrectTerminationDateController::class)
+        ->whereUuid(['uuid', 'periodUuid'])
+        ->name('employees.employment-periods.termination-corrections');
 
     /*
      * PIN del empleado (tarea 1.13, RF-ID-09).

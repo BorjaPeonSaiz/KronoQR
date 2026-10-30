@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use Database\Seeders\Support\EmploymentPeriods;
 use Database\Seeders\Support\KioskClocking;
 use Database\Seeders\Support\KioskClockingAudit;
 use DateTimeImmutable;
@@ -245,7 +246,7 @@ final class EdgeCaseSeeder extends DevelopmentSeeder
     {
         $code = 'E'.mb_strtoupper(mb_substr(hash('sha256', 'kronoqr-seed-edge-case-'.$index), 0, 9));
 
-        DB::table('employees')->insertOrIgnore([
+        EmploymentPeriods::insertEmployees([[
             'uuid' => Str::uuid7()->toString(),
             'site_id' => $siteId,
             'department_id' => $departmentId,
@@ -260,7 +261,7 @@ final class EdgeCaseSeeder extends DevelopmentSeeder
             'locale' => 'es',
             'created_at' => now(),
             'updated_at' => now(),
-        ]);
+        ]]);
 
         $id = DB::table('employees')->where('employee_code', $code)->value('id');
 

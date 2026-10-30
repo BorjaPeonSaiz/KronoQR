@@ -76,13 +76,19 @@ use App\Modules\Shared\Domain\Exception\InstallationSiteMissing;
 use App\Modules\Workforce\Application\Exception\DepartmentManagerNotEligible;
 use App\Modules\Workforce\Domain\Exception\AbsenceRequiresNote;
 use App\Modules\Workforce\Domain\Exception\EmployeeAlreadyTerminated;
+use App\Modules\Workforce\Domain\Exception\EmployeeNationalIdAlreadyTaken;
+use App\Modules\Workforce\Domain\Exception\EmployeeNotTerminated;
 use App\Modules\Workforce\Domain\Exception\EmployeeRecordMinimised;
 use App\Modules\Workforce\Domain\Exception\ImmediateOffboardingNotDue;
 use App\Modules\Workforce\Domain\Exception\ImportTooLarge;
 use App\Modules\Workforce\Domain\Exception\InvalidAbsencePeriod;
 use App\Modules\Workforce\Domain\Exception\InvalidEmploymentContract;
 use App\Modules\Workforce\Domain\Exception\InvalidEmploymentPeriod;
+use App\Modules\Workforce\Domain\Exception\InvalidRehireDate;
+use App\Modules\Workforce\Domain\Exception\InvalidTerminationCorrection;
+use App\Modules\Workforce\Domain\Exception\OffboardingNotEffective;
 use App\Modules\Workforce\Domain\Exception\OffboardingNotScheduled;
+use App\Modules\Workforce\Domain\Exception\RehireBatchRejected;
 use App\Modules\Workforce\Domain\Exception\ScheduledOffboardingDue;
 use App\Modules\Workforce\Domain\Exception\SiteTimezoneLocked;
 use App\Modules\Workforce\Domain\Exception\UnknownTimezone;
@@ -652,6 +658,40 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(static fn (OffboardingNotScheduled $exception): mixed => ProblemDetails::offboardingNotScheduled(
             ProblemDetails::translated(OffboardingNotScheduled::TRANSLATION_KEY, [], $exception->getMessage()),
         ));
+        /*
+         * La readmision y la correccion de la fecha de cese (RN-27, ADR-062 §6 y
+         * §7). Quien no esta de baja no se readmite (`409`
+         * `employee-not-terminated`); una ficha minimizada no se readmite ni se
+         * corrige (`409` `employee-record-minimised`); sin baja efectiva no hay
+         * fecha que corregir (`409` `offboarding-not-effective`). Las fechas que
+         * no caben son `422` en su campo; en el lote, un error por posicion.
+         */
+        $exceptions->render(static fn (EmployeeNotTerminated $exception): mixed => ProblemDetails::employeeNotTerminated(
+            ProblemDetails::translated(EmployeeNotTerminated::TRANSLATION_KEY, [], $exception->getMessage()),
+        ));
+        $exceptions->render(static fn (OffboardingNotEffective $exception): mixed => ProblemDetails::offboardingNotEffective(
+            ProblemDetails::translated(OffboardingNotEffective::TRANSLATION_KEY, [], $exception->getMessage()),
+        ));
+        $exceptions->render(static fn (InvalidRehireDate $exception): mixed => ProblemDetails::validationFailed([
+            'hired_at' => [ProblemDetails::translated($exception->translationKey, $exception->parameters, $exception->getMessage())],
+        ]));
+        $exceptions->render(static fn (InvalidTerminationCorrection $exception): mixed => ProblemDetails::validationFailed([
+            'terminated_at' => [ProblemDetails::translated($exception->translationKey, $exception->parameters, $exception->getMessage())],
+        ]));
+        $exceptions->render(static fn (RehireBatchRejected $exception): mixed => ProblemDetails::validationFailed(array_combine(
+            array_map(static fn (int $position): string => 'employee_uuids.'.$position, array_keys($exception->errors)),
+            array_map(
+                static fn (array $error): array => [ProblemDetails::translated($error['key'], $error['parameters'], $error['message'])],
+                array_values($exception->errors),
+            ),
+        )));
+
+        // El documento del alta es de una persona de baja: el `409` la ofrece
+        // para readmitirla (RN-27). Antes que `WorkforceConflict`, su madre.
+        $exceptions->render(static fn (EmployeeNationalIdAlreadyTaken $exception): mixed => $exception->rehirableEmployeeUuid === null
+            ? ProblemDetails::conflict($exception->getMessage())
+            : ProblemDetails::rehirableConflict($exception->getMessage(), $exception->rehirableEmployeeUuid));
+
         $exceptions->render(static fn (ImmediateOffboardingNotDue $exception): mixed => ProblemDetails::validationFailed([
             'apply_now' => [ProblemDetails::translated(
                 $exception->translationKey,
@@ -673,11 +713,12 @@ return Application::configure(basePath: dirname(__DIR__))
 
         /*
          * La ficha esta minimizada por retencion y no admite contratos ni
-         * ausencias nuevos (ADR-060): `409` con el `detail` en el idioma
-         * negociado. Antes que `WorkforceConflict`, su clase madre, cuyo
+         * ausencias nuevos, ni readmision ni correccion de su cese (ADR-060,
+         * RN-27): `409` `employee-record-minimised`, con el `detail` en el
+         * idioma negociado. Antes que `WorkforceConflict`, su clase madre, cuyo
          * mensaje es el tecnico del log.
          */
-        $exceptions->render(static fn (EmployeeRecordMinimised $exception): mixed => ProblemDetails::conflict(
+        $exceptions->render(static fn (EmployeeRecordMinimised $exception): mixed => ProblemDetails::employeeRecordMinimised(
             ProblemDetails::translated($exception->translationKey, $exception->parameters, $exception->getMessage()),
         ));
 

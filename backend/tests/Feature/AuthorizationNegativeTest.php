@@ -78,6 +78,17 @@ function managementEndpoints(): array
             'terminated_at' => '2026-09-30',
         ]],
         'anular una baja programada' => ['POST', '/api/v1/employees/0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90/offboard/cancel', []],
+        'readmitir' => ['POST', '/api/v1/employees/0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90/rehire', [
+            'hired_at' => '2027-04-01',
+        ]],
+        'readmitir en lote' => ['POST', '/api/v1/employees/rehire', [
+            'employee_uuids' => ['0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90'],
+            'hired_at' => '2027-04-01',
+        ]],
+        'corregir una fecha de cese' => ['POST', '/api/v1/employees/0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90/employment-periods/0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b91/termination-corrections', [
+            'terminated_at' => '2026-10-18',
+            'reason' => 'Trabajo hasta el 18 segun el cuadrante',
+        ]],
         'listar departamentos' => ['GET', '/api/v1/departments', []],
         'ver un departamento' => ['GET', '/api/v1/departments/1', []],
         'crear un departamento' => ['POST', '/api/v1/departments', ['name' => 'Recepcion']],

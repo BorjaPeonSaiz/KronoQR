@@ -6,6 +6,7 @@ namespace App\Modules\Compliance\Http\Resource;
 
 use App\Modules\Compliance\Application\Port\LegalExportEmployeeMatch;
 use App\Modules\Compliance\Application\UseCase\LegalExportEmployeeMatches;
+use App\Modules\Shared\Domain\ValueObject\EmploymentPeriod;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -57,6 +58,12 @@ final class LegalExportEmployeeMatchesResource extends JsonResource
             'status' => $match->status->value,
             'hired_at' => $match->hiredAt,
             'terminated_at' => $match->terminatedAt,
+            'employment_periods' => array_map(static fn (EmploymentPeriod $period): array => [
+                'uuid' => $period->uuid,
+                'hired_at' => $period->hiredOn,
+                'terminated_at' => $period->terminatedOn,
+                'state' => $period->state(),
+            ], $match->employmentPeriods),
         ];
     }
 }
