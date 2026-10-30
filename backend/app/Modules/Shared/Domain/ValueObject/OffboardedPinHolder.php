@@ -53,7 +53,7 @@ final readonly class OffboardedPinHolder
 
     /**
      * @throws InvalidArgumentException sin UUID o con fechas que no forman un
-     *                                   periodo (las valida {@see EmploymentPeriod})
+     *                                  periodo (las valida {@see EmploymentPeriod})
      */
     public static function of(string $employeeUuid, string $hiredOn, string $terminatedOn, DateTimeZone $timezone): self
     {
