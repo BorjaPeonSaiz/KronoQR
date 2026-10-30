@@ -176,9 +176,7 @@ final readonly class DatabasePeriodReportReader implements PeriodReportReader
 
         $rows = $this->withStatementTimeout(fn (): array => $this->select(<<<SQL
             WITH subjects AS (
-                SELECT e.id            AS employee_id,
-                       e.hired_at::date AS hired_on,
-                       e.terminated_at::date AS terminated_on
+                SELECT e.id AS employee_id
                   FROM employees e
                  WHERE TRUE{$filters}
             ), calendar AS (
@@ -257,8 +255,6 @@ final readonly class DatabasePeriodReportReader implements PeriodReportReader
                        e.employee_code::text AS employee_code,
                        e.first_name,
                        e.last_name,
-                       e.hired_at::date      AS hired_on,
-                       e.terminated_at::date AS terminated_on,
                        dep.id                AS department_id,
                        dep.name              AS department_name
                   FROM employees e
