@@ -18,7 +18,10 @@ use DateTimeImmutable;
  *
  * - **Por tarjeta**, solo si el `qr_payload` es **autentico**: resuelve a una
  *   credencial vigente, o es una tarjeta retirada usada **antes** de su retirada
- *   y despues de su emision —la misma regla que RN-20, {@see WithdrawnCredentialPolicy}—.
+ *   y despues de su emision —la misma regla que RN-20, {@see WithdrawnCredentialPolicy}—
+ *   y, desde la 2.3.0, **no despues del dia de su cese** (ADR-062 §8): una baja
+ *   programada se aplica despues de su fecha, y entre medias la tarjeta sigue
+ *   «antes de su retirada» sin que haya jornada que revisar.
  *   El `token_hash` del padron, que un quiosco robado si conoce, no atribuye:
  *   hace falta la firma, es decir, la tarjeta fisica.
  * - **Por PIN**, solo si el codigo es de una persona que **puede fichar**: el
@@ -30,10 +33,16 @@ use DateTimeImmutable;
  */
 final readonly class DiscardedScanAttributionPolicy
 {
+    /**
+     * @param  DateTimeImmutable|null  $employmentEndsAt  El final del dia civil del cese del
+     *                                                    titular de una tarjeta retirada, en la zona del centro, o `null`
+     *                                                    sin cese. Lo resuelve el caso de uso; aqui no se consulta nada.
+     */
     public function forCard(
         CredentialResolution $resolution,
         DateTimeImmutable $occurredAt,
         DateTimeImmutable $recordedAt,
+        ?DateTimeImmutable $employmentEndsAt = null,
     ): DiscardedScanAttribution {
         $owner = $resolution->employeeUuid();
         $issuedAt = $resolution->issuedAt();
@@ -49,7 +58,7 @@ final readonly class DiscardedScanAttributionPolicy
         $holder = $resolution->holder();
 
         if ($holder instanceof CredentialHolder
-            && (new WithdrawnCredentialPolicy)->requiresReview($occurredAt, $holder->issuedAt, $holder->withdrawnAt ?? $recordedAt)) {
+            && (new WithdrawnCredentialPolicy)->requiresReview($occurredAt, $holder->issuedAt, $holder->withdrawnAt ?? $recordedAt, $employmentEndsAt)) {
             return DiscardedScanAttribution::credential($holder->employeeUuid, $holder->issuedAt);
         }
 

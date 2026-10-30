@@ -90,6 +90,45 @@ it('compara con la recepcion cuando la tarjeta seguia vigente y el titular esta 
         ->toBe(DiscardedScanAttributionMethod::NONE);
 })->group('RN-22', 'RN-20');
 
+it('acota al dia del cese la tarjeta retirada, como el fichaje', function (string $occurredAt, ?string $employmentEndsAt, DiscardedScanAttributionMethod $expected): void {
+    // ADR-062 §8, tarea 25.5: la misma cota que `WithdrawnCredentialPolicy` desde
+    // la 25.2. Una baja programada se aplica despues de su fecha: entre medias
+    // la tarjeta sigue «antes de su retirada», y sin la cota se atribuiria un
+    // descarte del dia siguiente al cese. La retirada, el 20 a las 06:00 UTC.
+    $holder = CredentialHolder::of(
+        DISCARD_ATTRIBUTION_OWNER,
+        instanteDeDescarte('2026-08-01 06:00:00'),
+        instanteDeDescarte('2026-08-20 06:00:00'),
+    );
+
+    $attribution = (new DiscardedScanAttributionPolicy)->forCard(
+        CredentialResolution::rejectedWithHolder(CredentialRejectionReason::REVOKED, $holder),
+        instanteDeDescarte($occurredAt),
+        instanteDeDescarte('2026-08-20 10:00:00'),
+        $employmentEndsAt === null ? null : instanteDeDescarte($employmentEndsAt),
+    );
+
+    expect($attribution->method)->toBe($expected);
+})->with([
+    // Cese el 15 en Madrid: el dia acaba a las 22:00 UTC.
+    'el ultimo segundo del dia del cese' => ['2026-08-15 21:59:59', '2026-08-15 22:00:00', DiscardedScanAttributionMethod::CREDENTIAL],
+    'el primer segundo del dia siguiente' => ['2026-08-15 22:00:00', '2026-08-15 22:00:00', DiscardedScanAttributionMethod::NONE],
+    'dos dias despues del cese, antes de la retirada' => ['2026-08-17 08:00:00', '2026-08-15 22:00:00', DiscardedScanAttributionMethod::NONE],
+    'sin cese, antes de la retirada' => ['2026-08-17 08:00:00', null, DiscardedScanAttributionMethod::CREDENTIAL],
+])->group('RN-22', 'RN-20', 'RN-14');
+
+it('no acota con el cese una tarjeta vigente', function (): void {
+    // La cota es de la tarjeta retirada; la vigente ya la decide su titular.
+    $attribution = (new DiscardedScanAttributionPolicy)->forCard(
+        CredentialResolution::resolved(DISCARD_ATTRIBUTION_OWNER, instanteDeDescarte('2026-08-01 06:00:00')),
+        instanteDeDescarte('2026-08-17 08:00:00'),
+        instanteDeDescarte('2026-08-20 10:00:00'),
+        instanteDeDescarte('2026-08-15 22:00:00'),
+    );
+
+    expect($attribution->method)->toBe(DiscardedScanAttributionMethod::CREDENTIAL);
+})->group('RN-22');
+
 it('no atribuye una tarjeta que no es autentica', function (CredentialRejectionReason $reason): void {
     $attribution = (new DiscardedScanAttributionPolicy)->forCard(
         CredentialResolution::rejected($reason),

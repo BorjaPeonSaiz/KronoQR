@@ -174,6 +174,27 @@ it('atribuye la tarjeta retirada solo si el fichaje fue anterior a la retirada',
         ->and(filaDelAviso($despues['scan_id'])->attribution)->toBe('none');
 })->group('RN-22', 'RN-20');
 
+it('no atribuye la tarjeta retirada usada despues del dia del cese aunque fuera antes de la retirada', function (): void {
+    // ADR-062 §8, tarea 25.5: la cota del cese que el fichaje tiene desde la
+    // 25.2. Cese el 14 de agosto en Madrid (acaba a las 22:00 UTC); la tarjeta
+    // se emitio el 14 a las 06:00 UTC y se revoco el 15 a las 06:00 UTC, como
+    // una baja programada que la tarea aplica al dia siguiente.
+    $escenario = escenarioDeDescartes();
+    $baja = WorkforceFixtures::employee($escenario['site'], $escenario['department'], 'terminated', terminatedAt: '2026-08-14');
+    $bajaId = AttendanceFixtures::employeeIdOf($baja);
+    $retirada = Credentials::issueFor($bajaId, revokedReason: 'offboarding')->toString();
+
+    $elDiaDelCese = avisoQr($retirada, ['occurred_at' => '2026-08-14T21:59:59Z']);
+    $alDiaSiguiente = avisoQr($retirada, ['occurred_at' => '2026-08-14T22:00:00Z']);
+
+    avisarDescartes($escenario['token'], [$elDiaDelCese, $alDiaSiguiente])->assertOk()->assertValidResponse(200);
+
+    expect(filaDelAviso($elDiaDelCese['scan_id'])->attribution)->toBe('credential')
+        ->and(filaDelAviso($elDiaDelCese['scan_id'])->owner_employee_id)->toBe($bajaId)
+        ->and(filaDelAviso($alDiaSiguiente['scan_id'])->attribution)->toBe('none')
+        ->and(filaDelAviso($alDiaSiguiente['scan_id'])->owner_employee_id)->toBeNull();
+})->group('RN-22', 'RN-20', 'RN-14');
+
 it('no guarda el contenido del QR ni el codigo tecleado', function (): void {
     $escenario = escenarioDeDescartes();
     $tarjeta = Credentials::issueFor(AttendanceFixtures::employeeIdOf($escenario['employee']))->toString();

@@ -19,6 +19,8 @@ use App\Modules\Attendance\Application\Port\ScanLog;
 use App\Modules\Attendance\Application\Port\ScanMetrics;
 use App\Modules\Attendance\Application\Port\ScanRecord;
 use App\Modules\Attendance\Application\Port\ScanResult;
+use App\Modules\Attendance\Application\Port\SiteCalendar;
+use App\Modules\Attendance\Application\Support\EmploymentEnd;
 use App\Modules\Attendance\Domain\Event\UnprocessableScanDiscarded;
 use App\Modules\Attendance\Domain\Policy\DiscardedScanAttributionPolicy;
 use App\Modules\Attendance\Domain\Policy\UnprocessableScanPolicy;
@@ -29,6 +31,7 @@ use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Support\ConstantTimeFloor;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\Support\UtcInstant;
+use App\Modules\Shared\Domain\ValueObject\CredentialHolder;
 use DateTimeImmutable;
 use Illuminate\Database\ConnectionInterface;
 use Psr\Log\LoggerInterface;
@@ -118,6 +121,7 @@ final readonly class UnprocessableScanGuard
         private LoggerInterface $logger,
         private ConstantTimeFloor $floor,
         private CardFingerprintOwners $fingerprints,
+        private SiteCalendar $calendar,
     ) {}
 
     /**
@@ -358,7 +362,17 @@ final readonly class UnprocessableScanGuard
                 return $policy->forEmployeeCode($this->employees->findByCode($scan->employeeCode ?? ''));
             }
 
-            $byCard = $policy->forCard($this->credentials->resolve($scan->qrPayload ?? ''), $scan->occurredAt, $now);
+            $resolution = $this->credentials->resolve($scan->qrPayload ?? '');
+            $holder = $resolution->holder();
+
+            // La cota del cese (ADR-062 §8), como en el fichaje: una tarjeta
+            // retirada usada despues del dia del cese no se atribuye.
+            $byCard = $policy->forCard(
+                $resolution,
+                $scan->occurredAt,
+                $now,
+                $holder instanceof CredentialHolder ? EmploymentEnd::of($this->calendar, $holder->terminatedOn, $holder->siteId) : null,
+            );
 
             if ($byCard->isAttributed()) {
                 return $byCard;
