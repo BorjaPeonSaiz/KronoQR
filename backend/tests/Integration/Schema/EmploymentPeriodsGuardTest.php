@@ -2,12 +2,14 @@
 
 declare(strict_types=1);
 
+use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Database\Connection;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\Assert;
 use Tests\Feature\Quality\Support\Commands;
 use Tests\Support\Database\CommittedDatabase;
+use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -79,6 +81,19 @@ function periodosIdDe(string $uuid): int
     return (int) $id;
 }
 
+/**
+ * Escribe la correccion del cese del ultimo periodo de la persona `$id`, como el
+ * repositorio (ADR-062 §7).
+ */
+function periodosCorreccion(ConnectionInterface $db, int $id, string $antes, string $despues): void
+{
+    $db->insert(
+        'INSERT INTO employment_period_corrections (employment_period_id, previous_terminated_on, terminated_on, reason, corrected_by_user_id, corrected_at)'
+        .' SELECT p.id, ?, ?, ?, ?, now() FROM employment_periods p WHERE p.employee_id = ? ORDER BY p.hired_on DESC LIMIT 1',
+        [$antes, $despues, 'Corregida segun el cuadrante firmado', ManagementUsers::withRole(UserRole::RRHH)->id, $id],
+    );
+}
+
 it('corre con el rol de la aplicacion, que es al que se le niega', function (): void {
     /** @var object{name: string} $row */
     $row = DB::selectOne('SELECT current_user AS name');
@@ -113,6 +128,7 @@ it('admite corregir el cese de una baja y la readmision con fecha posterior al c
     $id = periodosIdDe(periodosPersonaDeBaja());
 
     periodosEsperaExito(static function (ConnectionInterface $db) use ($id): void {
+        periodosCorreccion($db, $id, '2026-06-30', '2026-07-03');
         $db->update("UPDATE employees SET terminated_at = '2026-07-03' WHERE id = ?", [$id]);
         $db->update("UPDATE employment_periods SET terminated_on = '2026-07-03' WHERE employee_id = ?", [$id]);
     });
@@ -175,6 +191,49 @@ it('no deja reescribir la baja efectiva de un periodo, quitarle el cese ni cambi
     periodosEsperaRechazo('quitar el cese', static fn (ConnectionInterface $db): int => $db->update('UPDATE employment_periods SET terminated_on = NULL WHERE employee_id = ?', [$id]), '42501');
     periodosEsperaRechazo('cambiar el alta del periodo', static fn (ConnectionInterface $db): int => $db->update("UPDATE employment_periods SET hired_on = '2025-01-01' WHERE employee_id = ?", [$id]), '42501');
 })->group('RN-27', 'RN-13');
+
+it('el cese de una baja efectiva solo cambia con su correccion escrita en la misma transaccion', function (): void {
+    // ADR-062 §7: `employment_periods_termination_corrected`, diferido, al
+    // confirmar. Con la ficha y el periodo de acuerdo, para que solo falle esto.
+    $id = periodosIdDe(periodosPersonaDeBaja());
+
+    $mover = static function (ConnectionInterface $db, string $cese) use ($id): void {
+        $db->update('UPDATE employees SET terminated_at = ? WHERE id = ?', [$cese, $id]);
+        $db->update('UPDATE employment_periods SET terminated_on = ? WHERE employee_id = ?', [$cese, $id]);
+    };
+
+    periodosEsperaRechazo('mover el cese sin correccion', static fn (ConnectionInterface $db) => $mover($db, '2026-07-03'), '42501');
+
+    periodosEsperaRechazo('una correccion con otras fechas', static function (ConnectionInterface $db) use ($id, $mover): void {
+        periodosCorreccion($db, $id, '2026-06-30', '2026-07-05');
+        $mover($db, '2026-07-03');
+    }, '42501');
+
+    // La correccion legitima, en su transaccion.
+    periodosEsperaExito(static function (ConnectionInterface $db) use ($id, $mover): void {
+        periodosCorreccion($db, $id, '2026-06-30', '2026-07-03');
+        $mover($db, '2026-07-03');
+    });
+
+    // Una correccion de otro dia con las mismas fechas no vale: volver al 30 y
+    // otra vez al 3 sin fila nueva.
+    periodosEsperaExito(static function (ConnectionInterface $db) use ($id, $mover): void {
+        periodosCorreccion($db, $id, '2026-07-03', '2026-06-30');
+        $mover($db, '2026-06-30');
+    });
+    periodosEsperaRechazo('reutilizar una correccion anterior', static fn (ConnectionInterface $db) => $mover($db, '2026-07-03'), '42501');
+
+    // Dentro de una subtransaccion (los reintentos y la cadena anidada), si.
+    periodosEsperaExito(static function (ConnectionInterface $db) use ($id, $mover): void {
+        $db->transaction(static function () use ($db, $id): void {
+            periodosCorreccion($db, $id, '2026-06-30', '2026-07-02');
+        });
+        $mover($db, '2026-07-02');
+    });
+
+    expect(DB::table('employment_periods')->where('employee_id', $id)->value('terminated_on'))->toBe('2026-07-02')
+        ->and(DB::table('employment_period_corrections')->count())->toBe(3);
+})->group('RN-27', 'RN-13', 'RL-04');
 
 it('no da a la aplicacion DELETE sobre los periodos ni UPDATE ni DELETE sobre las correcciones', function (): void {
     $role = config()->string('database.roles.application', 'fichaje_app');
