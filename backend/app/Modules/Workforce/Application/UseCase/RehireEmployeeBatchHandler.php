@@ -14,8 +14,8 @@ use App\Modules\Workforce\Application\Port\PinMaterial;
 use App\Modules\Workforce\Application\Port\WorkforceEventPublisher;
 use App\Modules\Workforce\Domain\Event\EmployeesRehired;
 use App\Modules\Workforce\Domain\Exception\EmployeeNotTerminated;
-use App\Modules\Workforce\Domain\Exception\InvalidRehireDate;
 use App\Modules\Workforce\Domain\Exception\EmployeeRecordMinimised;
+use App\Modules\Workforce\Domain\Exception\InvalidRehireDate;
 use App\Modules\Workforce\Domain\Exception\RehireBatchRejected;
 use App\Modules\Workforce\Domain\Model\Employee;
 use DateTimeImmutable;
@@ -68,6 +68,14 @@ final readonly class RehireEmployeeBatchHandler
             countedByBatch: true,
         ), $command->uuids);
 
+        // Con `reset_pin`, cada PIN es un bcrypt de cientos de milisegundos: un
+        // lote que no se puede readmitir se rechaza ANTES de calcularlos, con
+        // una lectura sin candado. La comprobacion que manda sigue siendo la de
+        // las fichas bloqueadas, de abajo.
+        if ($command->resetPin) {
+            $this->assertAllRehirable($commands, $this->unlocked($commands));
+        }
+
         $materials = array_map(fn (RehireEmployeeCommand $one): ?PinMaterial => $this->rehire->pinMaterialFor($one), $commands);
 
         return $this->retry->run('employee.rehire_batch', fn (): array => $this->serialized->withChainLock(function () use ($commands, $materials): array {
@@ -85,6 +93,28 @@ final readonly class RehireEmployeeBatchHandler
 
             return $rehired;
         }));
+    }
+
+    /**
+     * Las fichas del lote leidas sin candado, indexadas por `uuid`; las que no
+     * existen no aparecen, como en `findManyForUpdate()`.
+     *
+     * @param  list<RehireEmployeeCommand>  $commands
+     * @return array<string, Employee>
+     */
+    private function unlocked(array $commands): array
+    {
+        $found = [];
+
+        foreach ($commands as $one) {
+            $employee = $this->employees->findByUuid($one->uuid);
+
+            if ($employee instanceof Employee) {
+                $found[$one->uuid] = $employee;
+            }
+        }
+
+        return $found;
     }
 
     /**

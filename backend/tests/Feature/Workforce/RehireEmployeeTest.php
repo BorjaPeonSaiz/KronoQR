@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use App\Exceptions\ProblemDetails;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
+use App\Modules\Workforce\Application\Port\PinHasher;
+use App\Modules\Workforce\Application\Port\PinMaterial;
 use App\Modules\Workforce\Infrastructure\Persistence\Department;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -368,6 +370,36 @@ it('si una no se puede readmitir no readmite a ninguna y dice cual y por que', f
         ->and(asientosDeLaReadmision('employee.rehired'))->toBe([])
         ->and(DB::table('employment_periods')->count())->toBe(DB::table('employees')->count());
 })->group('RN-27');
+
+it('con reset_pin rechaza un lote que no se puede readmitir sin calcular ningun PIN', function (): void {
+    // Cada PIN es un bcrypt: un lote imposible no los paga (revision de la 25.3).
+    $escenario = personaDeBajaParaReadmitir();
+    $enAlta = WorkforceFixtures::employee($escenario['site'], $escenario['department']);
+    $hashes = new class implements PinHasher
+    {
+        public int $calls = 0;
+
+        public function hash(#[SensitiveParameter] string $pin): PinMaterial
+        {
+            $this->calls++;
+
+            throw new RuntimeException('No se tenia que calcular ningun PIN.');
+        }
+    };
+    app()->instance(PinHasher::class, $hashes);
+
+    Api::as(tokenDeLaReadmision())
+        ->post('/api/v1/employees/rehire', [
+            'employee_uuids' => [$escenario['employee'], $enAlta],
+            'hired_at' => REHIRE_TEST_RETURN,
+            'reset_pin' => true,
+        ])
+        ->assertValidResponse(422)
+        ->assertJsonValidationErrorFor('employee_uuids.1');
+
+    expect($hashes->calls)->toBe(0)
+        ->and(DB::table('employees')->where('uuid', $escenario['employee'])->value('status'))->toBe('terminated');
+})->group('RN-27', 'RF-ID-09');
 
 it('responde 404 a la readmision de una persona que no existe', function (): void {
     FrozenTime::at(REHIRE_TEST_RETURN.' 08:00:00');
