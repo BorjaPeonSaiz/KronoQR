@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Estado** | Aceptada. **Enmendada el 29-10-2026** (D15 del propietario, bloque 25 de la 2.3.0): el PIN correcto de una persona de baja con fecha hasta el cese se atribuye y abre `scan_before_revocation`, sin cambio de respuesta (ver la enmienda al final; la implementa la tarea 25.5) |
+| **Estado** | Aceptada. **Enmendada el 29-10-2026** (D15 del propietario, bloque 25 de la 2.3.0): el PIN correcto de una persona de baja con fecha hasta el cese se atribuye y abre `scan_before_revocation`, sin cambio de respuesta (ver la enmienda al final; implementada en la tarea 25.5, pendiente de la revisión de `seguridad-cumplimiento` del bloque 25) |
 | **Fecha** | 30 de septiembre de 2026 |
 | **Decide** | `arquitecto-dominio` (Bloque 5 de la 2.2.0, hallazgos PIN-06 y SC7-02). Revisión pendiente de `seguridad-cumplimiento` |
 | **Afecta a** | Precisa [ADR-039](ADR-039-que-hechos-de-autenticacion-dejan-asiento.md) (§«Un solo motivo de fallo donde la respuesta es una sola») · Complementa [ADR-038](ADR-038-limite-de-tasa-por-dispositivo-y-por-ip-no-por-credencial.md) y [ADR-020](ADR-020-soporte-con-paquete-de-diagnostico.md) · `Shared\Domain\ValueObject\PinVerification`, `CredentialResolution` · `scan_events` · Especificación `docs/verificacion/2.2.0-bloque5-especificacion-pin-incidencias.md` |
