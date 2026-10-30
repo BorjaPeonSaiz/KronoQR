@@ -14,7 +14,6 @@ use App\Modules\Shared\Domain\ValueObject\EmployeeSnapshot;
 use App\Modules\Shared\Domain\ValueObject\EmploymentPeriod;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use DateTimeImmutable;
-use DateTimeZone;
 
 /**
  * **A quien se le puede anotar un tramo a mano, y de que jornadas** (RN-14,
@@ -175,21 +174,28 @@ final readonly class ManualEntryEligibility
      * las del tramo antes de corregir), igual que la guarda del agregado es
      * local: una marca que ya estaba escrita no impide corregir la otra.
      *
+     * **El cese que cuenta es el del periodo de la jornada** (RN-27): para una
+     * persona readmitida, un tramo del ultimo dia de su periodo anterior se acota
+     * con el cese de ese periodo, no con el del periodo en curso, que puede no
+     * tener cese o tenerlo meses despues. Si ningun periodo cubre la jornada —una
+     * sola baja sin la lista de periodos, o una jornada que
+     * {@see assertWorkDateAllowed()} ya rechaza—, el de la ficha.
+     *
      * @throws ShiftEntryMarkAfterTermination
      */
     public function assertTimesAllowed(
         ShiftEntryTimes $times,
         ContinuationCeiling $continuation,
-        DateTimeZone $timezone,
+        WorkDate $workDate,
         ?ShiftEntryTimes $previous = null,
     ): void {
-        $terminatedOn = $this->employee->terminatedOn;
+        $terminatedOn = $this->terminationBounding($workDate);
 
         if ($terminatedOn === null) {
             return;
         }
 
-        $limit = $continuation->limitAfter(WorkDate::fromIsoDate($terminatedOn, $timezone)->endsAt());
+        $limit = $continuation->limitAfter(WorkDate::fromIsoDate($terminatedOn, $workDate->timezone)->endsAt());
 
         if (! self::sameInstant($times->clockedInAt, $previous?->clockedInAt)) {
             self::assertMark(FutureMark::ClockIn, $times->clockedInAt, $limit, $terminatedOn);
@@ -198,6 +204,21 @@ final readonly class ManualEntryEligibility
         if ($times->clockedOutAt instanceof DateTimeImmutable && ! self::sameInstant($times->clockedOutAt, $previous?->clockedOutAt)) {
             self::assertMark(FutureMark::ClockOut, $times->clockedOutAt, $limit, $terminatedOn);
         }
+    }
+
+    /**
+     * El cese del periodo que cubre la jornada, o el de la ficha si ninguno la
+     * cubre. `null` si ese periodo no tiene cese.
+     */
+    private function terminationBounding(WorkDate $workDate): ?string
+    {
+        foreach ($this->employee->employmentPeriods as $period) {
+            if ($period->covers($workDate->isoDate)) {
+                return $period->terminatedOn;
+            }
+        }
+
+        return $this->employee->terminatedOn;
     }
 
     private static function sameInstant(DateTimeImmutable $mark, ?DateTimeImmutable $previous): bool

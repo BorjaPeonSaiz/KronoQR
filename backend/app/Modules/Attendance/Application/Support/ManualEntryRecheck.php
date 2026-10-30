@@ -97,6 +97,6 @@ final readonly class ManualEntryRecheck
         }
 
         $eligibility->assertWorkDateAllowed($workDate);
-        $eligibility->assertTimesAllowed($times, $continuation, $workDate->timezone, $previous);
+        $eligibility->assertTimesAllowed($times, $continuation, $workDate, $previous);
     }
 }
