@@ -315,7 +315,9 @@ profile before the first purge that applies it.
 - **What remains.** The file keeps its internal identifier, the start and
   leaving dates, the site, the department, the language and whether they
   teleworked. The revoked credential stays, but its revocation reason is
-  replaced by a fixed text.
+  replaced by a fixed text. The same goes for the **corrections of their
+  termination date** (since 2.3.0): both dates, who corrected it and when are
+  kept, and the reason, which is free text, is replaced by a fixed text.
 - **How it is authorised.** Like every purge, it is not automatic: a person
   authorises it and it is recorded, person by person, without names.
 - **What your DPO has to validate.** If in your hotel those dates, that
