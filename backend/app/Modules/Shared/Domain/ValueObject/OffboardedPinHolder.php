@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Shared\Domain\ValueObject;
 
-use DateTimeImmutable;
 use DateTimeZone;
 use InvalidArgumentException;
 
@@ -43,36 +42,25 @@ final readonly class OffboardedPinHolder
     private function __construct(
         /** `employee_uuid` de la persona de baja. */
         public string $employeeUuid,
-        /** Fecha de alta del periodo que cerro la baja (`Y-m-d`). */
-        public string $hiredOn,
-        /** Fecha de cese de ese periodo (`Y-m-d`). */
-        public string $terminatedOn,
+        /**
+         * El periodo que cerro la baja, con la baja efectiva: el de la proyeccion
+         * de la ficha (`employees.hired_at` y `terminated_at`, ADR-062 §1 y §8).
+         */
+        public EmploymentPeriod $period,
         /** Zona del centro, en la que se lee la fecha civil del `occurred_at`. */
         public DateTimeZone $timezone,
     ) {}
 
+    /**
+     * @throws InvalidArgumentException sin UUID o con fechas que no forman un
+     *                                   periodo (las valida {@see EmploymentPeriod})
+     */
     public static function of(string $employeeUuid, string $hiredOn, string $terminatedOn, DateTimeZone $timezone): self
     {
         if ($employeeUuid === '') {
             throw new InvalidArgumentException('Una persona de baja identificada por su PIN necesita su UUID.');
         }
 
-        self::assertCivilDate($hiredOn);
-        self::assertCivilDate($terminatedOn);
-
-        if ($terminatedOn < $hiredOn) {
-            throw new InvalidArgumentException('La fecha de cese no puede ser anterior a la de alta.');
-        }
-
-        return new self($employeeUuid, $hiredOn, $terminatedOn, $timezone);
-    }
-
-    private static function assertCivilDate(string $value): void
-    {
-        $date = DateTimeImmutable::createFromFormat('!Y-m-d', $value);
-
-        if (! $date instanceof DateTimeImmutable || $date->format('Y-m-d') !== $value) {
-            throw new InvalidArgumentException('Las fechas del periodo tienen que ser fechas civiles Y-m-d validas.');
-        }
+        return new self($employeeUuid, new EmploymentPeriod($hiredOn, $terminatedOn, offboarded: true), $timezone);
     }
 }

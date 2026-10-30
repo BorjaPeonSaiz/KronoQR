@@ -469,8 +469,8 @@ it('entrega a la persona de baja con su periodo y la zona del centro solo si el 
         ->and($acierto->employeeUuid())->toBeNull()
         ->and($acierto->claim())->toBeNull()
         ->and($persona?->employeeUuid)->toBe($deBaja['uuid'])
-        ->and($persona?->hiredOn)->toBe('2026-01-01')
-        ->and($persona?->terminatedOn)->toBe('2026-06-30')
+        ->and($persona?->period->hiredOn)->toBe('2026-01-01')
+        ->and($persona?->period->terminatedOn)->toBe('2026-06-30')
         ->and($persona?->timezone->getName())->toBe('Europe/Madrid')
         // Un PIN incorrecto no identifica a nadie, y el portal no la recibe.
         ->and($fallo->offboardedHolder())->toBeNull()

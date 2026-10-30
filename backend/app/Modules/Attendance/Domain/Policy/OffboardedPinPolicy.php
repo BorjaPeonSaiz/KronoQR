@@ -39,8 +39,6 @@ final readonly class OffboardedPinPolicy
 {
     public function attributes(DateTimeImmutable $occurredAt, OffboardedPinHolder $holder): bool
     {
-        $civilDate = WorkDate::fromInstant($occurredAt->setTimezone(new DateTimeZone('UTC')), $holder->timezone)->isoDate;
-
-        return $holder->hiredOn <= $civilDate && $civilDate <= $holder->terminatedOn;
+        return $holder->period->covers(WorkDate::fromInstant($occurredAt->setTimezone(new DateTimeZone('UTC')), $holder->timezone)->isoDate);
     }
 }

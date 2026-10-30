@@ -44,7 +44,7 @@ it('baja a una resolucion que hacia fuera es el mismo rechazo UNKNOWN', function
         ->and($resolution->rejectionReason())->toBe(CredentialRejectionReason::UNKNOWN)
         ->and($resolution->pinClaim())->toBeNull()
         ->and($resolution->holder())->toBeNull()
-        ->and($resolution->offboardedPinHolder()?->terminatedOn)->toBe('2026-08-15')
+        ->and($resolution->offboardedPinHolder()?->period->terminatedOn)->toBe('2026-08-15')
         ->and(CredentialResolution::rejected(CredentialRejectionReason::UNKNOWN)->offboardedPinHolder())->toBeNull();
 })->group('RN-20', 'RS-03');
 
@@ -61,5 +61,6 @@ it('no se construye sin UUID, con fechas que no son civiles o con el cese antes 
 it('admite el cese el mismo dia del alta', function (): void {
     $holder = OffboardedPinHolder::of(OFFBOARDED_PIN_HOLDER_UUID, '2026-08-15', '2026-08-15', new DateTimeZone('UTC'));
 
-    expect($holder->hiredOn)->toBe($holder->terminatedOn);
+    expect($holder->period->hiredOn)->toBe($holder->period->terminatedOn)
+        ->and($holder->period->offboarded)->toBeTrue();
 })->group('RN-20', 'RN-14');
