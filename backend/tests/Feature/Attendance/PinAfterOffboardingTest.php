@@ -301,3 +301,83 @@ it('abre una sola scan_before_revocation para un dia con tarjeta y con PIN, y na
 
     expect(DB::table('incidents')->where('type', 'scan_before_revocation')->count())->toBe(1);
 })->group('RN-20', 'RF-PR-01', 'RS-03');
+
+/**
+ * RRHH, para readmitir y dar de baja por la API, como en el producto.
+ */
+function rrhhTrasLaBaja(): string
+{
+    return ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH));
+}
+
+it('solo atribuye el PIN del periodo que cerro la ultima baja, no el de uno anterior ni el del hueco', function (): void {
+    // ADR-062 §8: el periodo que cuenta es el de la proyeccion de la ficha.
+    // Primer periodo del 1-1-2025 al 30-6-2025, readmision el 1-1-2026 y baja
+    // con cese el 15-8-2026. Ni el ultimo dia del primer periodo ni un dia del
+    // hueco se atribuyen; el ultimo dia del periodo en curso, si.
+    config()->set('identity.pin.max_attempts', 100);
+
+    $scenario = pinTrasLaBajaEscenario();
+    FrozenTime::at('2026-08-16 08:00:00');
+    $rrhh = rrhhTrasLaBaja();
+
+    $uuid = WorkforceFixtures::employee(
+        $scenario['site'],
+        $scenario['department'],
+        'terminated',
+        hiredAt: '2025-01-01',
+        terminatedAt: '2025-06-30',
+    );
+    EmployeePins::issue($uuid, PIN_AFTER_OFFBOARDING_GOOD);
+    $id = AttendanceFixtures::employeeIdOf($uuid);
+    $code = EmployeePins::codeOf($uuid);
+
+    Api::as($rrhh)->post('/api/v1/employees/'.$uuid.'/rehire', ['hired_at' => '2026-01-01'])->assertSuccessful();
+    Api::as($rrhh)->post('/api/v1/employees/'.$uuid.'/offboard', ['terminated_at' => '2026-08-15'])->assertSuccessful();
+
+    expect(DB::table('employment_periods')->where('employee_id', $id)->count())->toBe(2)
+        ->and(DB::table('employees')->where('id', $id)->value('status'))->toBe('terminated');
+
+    $ultimoDia = Str::uuid7()->toString();
+    $primerPeriodo = Str::uuid7()->toString();
+    $hueco = Str::uuid7()->toString();
+
+    pinTrasLaBaja($scenario, $code, PIN_AFTER_OFFBOARDING_GOOD, '2026-08-15T10:00:00Z', $ultimoDia)->assertStatus(422);
+    pinTrasLaBaja($scenario, $code, PIN_AFTER_OFFBOARDING_GOOD, '2025-06-30T10:00:00Z', $primerPeriodo)->assertStatus(422);
+    pinTrasLaBaja($scenario, $code, PIN_AFTER_OFFBOARDING_GOOD, '2025-12-15T10:00:00Z', $hueco)->assertStatus(422);
+
+    expect(filaDelPinTrasLaBaja($ultimoDia)->employee_id)->toBe($id)
+        ->and(filaDelPinTrasLaBaja($ultimoDia)->flagged_for_review)->toBeTrue()
+        ->and(filaDelPinTrasLaBaja($primerPeriodo)->employee_id)->toBeNull()
+        ->and(filaDelPinTrasLaBaja($primerPeriodo)->flagged_for_review)->toBeFalse()
+        ->and(filaDelPinTrasLaBaja($hueco)->employee_id)->toBeNull()
+        ->and(filaDelPinTrasLaBaja($hueco)->flagged_for_review)->toBeFalse();
+})->group('RN-20', 'RN-27', 'RS-03');
+
+it('dice offboarding en la incidencia del PIN aunque la persona se readmita antes de la revision diaria', function (): void {
+    // La retirada del PIN es siempre la baja: si la revision lee el estado de
+    // hoy, una readmision entre el fichaje y la pasada lo haria pasar por una
+    // tarjeta reemitida.
+    $scenario = pinTrasLaBajaEscenario();
+    $nadia = personaDeBajaConPin($scenario);
+
+    pinTrasLaBaja($scenario, $nadia['code'], PIN_AFTER_OFFBOARDING_GOOD, PIN_AFTER_OFFBOARDING_LAST_DAY, Str::uuid7()->toString())->assertStatus(422);
+
+    FrozenTime::at('2026-08-16 08:00:00');
+    Api::as(rrhhTrasLaBaja())->post('/api/v1/employees/'.$nadia['uuid'].'/rehire', ['hired_at' => '2026-08-16'])->assertSuccessful();
+
+    expect(DB::table('employees')->where('id', $nadia['id'])->value('status'))->not->toBe('terminated');
+
+    revisionDiariaTrasLaBaja('2026-08-17 03:30:00');
+
+    /** @var object{context: string}|null $incidencia */
+    $incidencia = DB::table('incidents')->where('type', 'scan_before_revocation')->where('employee_id', $nadia['id'])->first(['context']);
+
+    expect($incidencia)->not->toBeNull();
+
+    /** @var object{context: string} $incidencia */
+    /** @var array{withdrawal: string} $contexto */
+    $contexto = json_decode($incidencia->context, true, flags: JSON_THROW_ON_ERROR);
+
+    expect($contexto['withdrawal'])->toBe('offboarding');
+})->group('RN-20', 'RN-27', 'RF-PR-01');

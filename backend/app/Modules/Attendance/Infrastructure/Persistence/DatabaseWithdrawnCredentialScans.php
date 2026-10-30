@@ -45,7 +45,7 @@ final readonly class DatabaseWithdrawnCredentialScans implements WithdrawnCreden
 
     public function withdrawnBetween(DateTimeImmutable $fromRecordedAt, DateTimeImmutable $toRecordedAt): array
     {
-        /** @var list<object{scan_id: string, holder_uuid: string, holder_status: string, occurred_at: string, recorded_at: string}> $rows */
+        /** @var list<object{scan_id: string, holder_uuid: string, holder_status: string, origin: string, occurred_at: string, recorded_at: string}> $rows */
         $rows = $this->connection->table('scan_events')
             ->join('employees', 'employees.id', '=', 'scan_events.employee_id')
             ->where('scan_events.flagged_for_review', true)
@@ -61,6 +61,7 @@ final readonly class DatabaseWithdrawnCredentialScans implements WithdrawnCreden
                 'scan_events.scan_id',
                 'employees.uuid as holder_uuid',
                 'employees.status as holder_status',
+                'scan_events.origin',
                 'scan_events.occurred_at',
                 'scan_events.recorded_at',
             ])
@@ -75,7 +76,9 @@ final readonly class DatabaseWithdrawnCredentialScans implements WithdrawnCreden
                 holderUuid: $row->holder_uuid,
                 occurredAt: $this->toUtc($row->occurred_at),
                 recordedAt: $this->toUtc($row->recorded_at),
-                holderOffboarded: $row->holder_status === self::TERMINATED,
+                // El PIN solo se atribuye a una persona de baja: lo retirado es
+                // siempre la baja, aunque se haya readmitido antes de esta pasada.
+                holderOffboarded: $row->origin === self::PIN_KIOSK || $row->holder_status === self::TERMINATED,
             );
         }
 
