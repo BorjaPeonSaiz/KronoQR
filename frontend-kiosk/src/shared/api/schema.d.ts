@@ -14089,8 +14089,9 @@ export interface components {
          *     `create`/`created` el panel tendria que pintar dos tablas distintas para
          *     el mismo informe; lo que dice si ocurrio o no es `mode`.
          *
-         *     **`rehire`** (RN-27, desde la 2.3.0): la fila es de una persona de baja
-         *     y se propone su readmision en su ficha, con la fecha de alta de la fila;
+         *     **`rehire`** (RN-27, desde la 2.3.0): la fila identifica por su documento,
+         *     y con el nombre de su ficha, a una persona de baja, y se propone su
+         *     readmision en su ficha, con la fecha de alta de la fila;
          *     lleva el aviso `rehire_proposed`. Al aplicar, la persona vuelve a estar
          *     de alta como con `POST /employees/{uuid}/rehire`, con su departamento e
          *     idioma si la fila los cambia y su asiento `employee.rehired` con
@@ -14124,6 +14125,17 @@ export interface components {
              *     rechazan la fila. **Desde la 2.3.0 `employee_terminated` ya no se
              *     emite**; se conserva en el enum por los clientes anteriores.
              *
+             *     **`rehire_identity_mismatch`** (RN-27, 2.3.0): la fila coincide con una
+             *     persona de baja, pero solo por correo o con un nombre que no es el de
+             *     su ficha. Rechaza la fila: solo se readmite a quien la fila identifica
+             *     por su documento y con su nombre (sin distinguir mayusculas, tildes ni
+             *     espacios), para que un correo compartido o una errata en el documento
+             *     no readmitan a otra persona en su ficha.
+             *
+             *     **`rehire_ignores_identity_changes`** (RN-27, 2.3.0) es un aviso de la
+             *     fila `rehire`: trae un nombre o un correo distintos de los de la ficha
+             *     y la readmision no los aplica.
+             *
              *     **`employee_terminated`** (2.2.0): la fila corresponde a una persona
              *     dada de baja. La importacion no modifica su ficha ni la da de alta
              *     otra vez (RN-14); el resto del fichero se aplica. `apply` vuelve a
@@ -14141,7 +14153,7 @@ export interface components {
              *     comprobacion, antes de escribir nada.
              * @enum {string}
              */
-            code: "missing_identity" | "missing_first_name" | "missing_last_name" | "missing_hired_at" | "invalid_email" | "invalid_hired_at" | "invalid_national_id" | "unknown_department" | "duplicate_in_file" | "email_taken" | "hired_at_not_updated" | "employee_terminated" | "rehire_proposed" | "rehire_requires_hired_at" | "rehire_not_after_termination" | "unknown_column" | "locale_not_active";
+            code: "missing_identity" | "missing_first_name" | "missing_last_name" | "missing_hired_at" | "invalid_email" | "invalid_hired_at" | "invalid_national_id" | "unknown_department" | "duplicate_in_file" | "email_taken" | "hired_at_not_updated" | "employee_terminated" | "rehire_proposed" | "rehire_requires_hired_at" | "rehire_not_after_termination" | "rehire_identity_mismatch" | "rehire_ignores_identity_changes" | "unknown_column" | "locale_not_active";
             /** @enum {string} */
             severity: "error" | "warning";
             /** @description Columna del fichero a la que se refiere, si es a una. */
@@ -14209,6 +14221,17 @@ export interface components {
              *     fases.
              */
             confirm_checksum?: string;
+            /**
+             * @description **Obligatorio con `mode: apply` cuando la validacion devolvio
+             *     `rehire_digest`** (RN-27, 2.3.0): ese mismo valor. `apply` vuelve a
+             *     comprobar el fichero, y si las personas que se readmitirian ya no son
+             *     las que se revisaron —alguien se ha dado de baja o de alta entre la
+             *     validacion y esta peticion—, responde `409` sin escribir nada. Sin
+             *     readmisiones en la validacion no se manda; si se manda y al aplicar
+             *     no hay ninguna, tambien es `409`. Una readmision no ocurre sin que
+             *     quien importa la haya visto en el resumen.
+             */
+            confirm_rehire_digest?: string;
         };
         /**
          * EmployeeImportReport
@@ -14255,6 +14278,13 @@ export interface components {
                 rehire: number;
             };
             rows: components["schemas"]["EmployeeImportRow"][];
+            /**
+             * @description **Solo si alguna fila es `rehire`** (RN-27, 2.3.0): `sha256` estable
+             *     de los `employee_uuid` de esas filas, ordenados. Se devuelve en
+             *     `confirm_rehire_digest` al aplicar, para que la aplicacion no readmita
+             *     a nadie que no estuviera en el resumen revisado.
+             */
+            rehire_digest?: string;
             /**
              * @description `true` si el fichero traia mas lineas que el maximo admitido y se
              *     dejaron de leer. **Con `truncated: true` no se aplica nada**: se parte
@@ -20735,13 +20765,22 @@ export interface operations {
              *     baja **durante** esta misma peticion de aplicar, entre su
              *     comprobacion y su escritura (ADR-046). Al repetirla, esa fila sale
              *     rechazada con `employee_terminated` (hasta la 2.2.x) o propuesta como
-             *     `rehire` (desde la 2.3.0). Una baja registrada antes, entre la
-             *     peticion de validar y esta, no da `409`: esta peticion vuelve a
-             *     comprobar el fichero y la fila se decide con el estado nuevo. Una
-             *     readmision hecha por otra via en ese hueco da `409`
+             *     `rehire` (desde la 2.3.0).
+             *
+             *     **Las readmisiones son las revisadas o no se aplica nada** (RN-27,
+             *     2.3.0). Esta peticion vuelve a comprobar el fichero; si las filas
+             *     `rehire` que salen ahora no son las de la validacion
+             *     (`confirm_rehire_digest` distinto de su `rehire_digest`, o ausente
+             *     cuando ahora hay alguna) responde `409` sin escribir nada. Es el caso
+             *     de una baja registrada entre la peticion de validar y esta, que
+             *     convertiria un `update` revisado en una readmision que nadie ha visto,
+             *     y el de una readmision hecha por otra via en ese hueco. Se vuelve a
+             *     validar y se aplica con el resumen nuevo. Una readmision hecha por
+             *     otra via **durante** esta peticion da `409`
              *     (`urn:kronoqr:problem:employee-not-terminated`).
              *
-             *     **`type` distingue las dos causas**: el fichero distinto es
+             *     **`type` distingue las causas**: el fichero distinto y las
+             *     readmisiones distintas de las revisadas son
              *     `urn:kronoqr:problem:conflict`; la baja durante la aplicacion es
              *     `urn:kronoqr:problem:employee-terminated`; la readmision por otra
              *     via durante la aplicacion,
