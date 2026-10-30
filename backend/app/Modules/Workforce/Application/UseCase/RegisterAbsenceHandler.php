@@ -42,11 +42,11 @@ use Illuminate\Database\ConnectionInterface;
  *
  * ## Lo que si se comprueba antes, y por que
  *
- * Que la ausencia **toque al menos un dia de la relacion laboral**.
- * Eso no lo puede declarar el esquema —depende de dos
- * columnas de otra tabla— y sin ello se podrian registrar vacaciones de alguien
- * para el año anterior a su alta, que no justifican nada y ensucian el informe.
- * El solape **parcial** si se admite: el informe cuenta solo los dias de alta.
+ * Que la ausencia **caiga entera en uno de los periodos de alta** de la persona
+ * (RF-GP-04, RN-27). Eso no lo puede declarar el esquema —depende de otra
+ * tabla— y sin ello se podrian registrar vacaciones de alguien para el año
+ * anterior a su alta, o en el hueco entre una baja y una readmision, que no
+ * justifican nada y ensucian el informe.
  *
  * ## `now()` no aparece
  *
@@ -72,7 +72,7 @@ final readonly class RegisterAbsenceHandler
      * traduce el controlador. **No `404`**, porque el identificador va en el
      * cuerpo y hay un campo que corregir en el formulario.
      *
-     * @throws InvalidAbsencePeriod si el periodo no toca la relacion laboral
+     * @throws InvalidAbsencePeriod si no cae entera en un periodo de alta
      * @throws OverlappingAbsence si pisa otra ausencia activa de esa persona
      * @throws EmployeeRecordMinimised si la ficha se minimizo por retencion (ADR-060)
      */
@@ -101,7 +101,7 @@ final readonly class RegisterAbsenceHandler
             note: $command->note,
         );
 
-        if (! $absence->fallsWithinEmployment($employee->hiredAt, $employee->terminatedAt)) {
+        if (! $absence->fallsWithin($this->employees->employmentHistory($absence->employeeUuid))) {
             throw InvalidAbsencePeriod::isOutsideEmployment($absence->isoStartsOn(), $absence->isoEndsOn());
         }
 

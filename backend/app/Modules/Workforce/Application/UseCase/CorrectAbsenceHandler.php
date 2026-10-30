@@ -63,7 +63,7 @@ final readonly class CorrectAbsenceHandler
      * `null` si esa ausencia no existe: es un `404` y lo traduce el controlador.
      *
      * @throws AbsenceNotActive si la version de la ruta ya fue corregida o anulada
-     * @throws InvalidAbsencePeriod si el periodo nuevo no toca la relacion laboral
+     * @throws InvalidAbsencePeriod si el periodo nuevo no cae entero en un periodo de alta
      * @throws OverlappingAbsence si el periodo nuevo pisa otra ausencia activa
      */
     public function handle(CorrectAbsenceCommand $command): ?Absence
@@ -150,7 +150,7 @@ final readonly class CorrectAbsenceHandler
     }
 
     /**
-     * La version nueva tambien tiene que tocar la relacion laboral.
+     * La version nueva tambien tiene que caer entera en un periodo de alta.
      *
      * Se comprueba aunque la anterior ya lo cumpliera: corregir puede mover las
      * fechas a un periodo en el que esa persona no estaba de alta, y eso no es
@@ -172,7 +172,7 @@ final readonly class CorrectAbsenceHandler
 
         $employee->assertAcceptsPersonnelRecords();
 
-        if (! $absence->fallsWithinEmployment($employee->hiredAt, $employee->terminatedAt)) {
+        if (! $absence->fallsWithin($this->employees->employmentHistory($absence->employeeUuid))) {
             throw InvalidAbsencePeriod::isOutsideEmployment($absence->isoStartsOn(), $absence->isoEndsOn());
         }
     }

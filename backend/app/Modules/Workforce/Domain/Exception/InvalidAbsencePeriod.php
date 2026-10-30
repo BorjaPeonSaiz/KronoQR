@@ -26,18 +26,20 @@ final class InvalidAbsencePeriod extends WorkforceDomainException implements Bus
     }
 
     /**
-     * La ausencia no toca ni un dia de la relacion laboral (decision 2 de la
-     * ficha 3.10).
+     * La ausencia no cae entera en ningun periodo de alta de la persona
+     * (RF-GP-04, RN-27).
      *
-     * Termina antes del alta o empieza despues del cese: no son dias que esa
-     * persona fuera a trabajar, asi que registrarlos no justifica nada y ademas
-     * mentiria en el informe. El solape **parcial** si se admite, y el informe
-     * cuenta solo los dias de alta.
+     * Empieza antes de un alta, termina despues de un cese o pisa el hueco entre
+     * una baja y una readmision: no son dias que esa persona fuera a trabajar,
+     * asi que registrarlos no justifica nada y ademas mentiria en el informe.
+     * Hasta la 2.2.x se admitia el solape parcial (decision 2 de la ficha 3.10);
+     * con varios periodos, ese criterio dejaba pasar una ausencia que salta el
+     * hueco.
      */
     public static function isOutsideEmployment(string $startsOn, string $endsOn): self
     {
         return new self(
-            'La ausencia ('.$startsOn.' a '.$endsOn.') no cae en ningun dia de la relacion laboral.',
+            'La ausencia ('.$startsOn.' a '.$endsOn.') no cae dentro de ningun periodo de alta de la persona.',
         );
     }
 }

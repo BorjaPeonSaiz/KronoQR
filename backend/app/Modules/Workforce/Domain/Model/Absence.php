@@ -330,23 +330,32 @@ final readonly class Absence
     }
 
     /**
-     * Si el intervalo toca al menos un dia de la relacion laboral.
+     * Si el intervalo cae **entero** dentro de alguno de los periodos de alta de
+     * la persona (RF-GP-04, RN-27, ADR-062).
      *
-     * Decision 2 de la ficha 3.10: una ausencia que termina antes del alta o
-     * empieza despues del cese se rechaza, porque esos dias no eran dias de
-     * trabajo y registrarlos no justificaria nada. El solape **parcial** si se
-     * admite y el informe cuenta solo los dias de alta, con el mismo criterio
-     * con el que ya cuenta `days_without_contract`.
+     * Ni antes de un alta, ni despues de un cese, ni en el hueco entre una baja
+     * y una readmision: esos dias no eran dias de trabajo y registrar una
+     * ausencia en ellos no justificaria nada. Desde la 2.3.0 ya no basta con
+     * tocar la relacion laboral (decision 2 de la ficha 3.10): con varios
+     * periodos, «tocar» admitiria una ausencia que salta el hueco de un periodo
+     * al siguiente. Como los periodos son intervalos continuos, basta con que el
+     * primer y el ultimo dia caigan en el mismo.
      *
-     * @param  DateTimeImmutable|null  $terminatedAt  `null` si la persona sigue de alta.
+     * Una historia vacia —la persona no existe o no tiene periodos— no admite
+     * ninguna.
      */
-    public function fallsWithinEmployment(DateTimeImmutable $hiredAt, ?DateTimeImmutable $terminatedAt): bool
+    public function fallsWithin(EmploymentHistory $history): bool
     {
-        if (self::asDate($this->endsOn) < self::asDate($hiredAt)) {
-            return false;
+        $first = $this->isoStartsOn();
+        $last = $this->isoEndsOn();
+
+        foreach ($history->periods as $period) {
+            if ($period->covers($first) && $period->covers($last)) {
+                return true;
+            }
         }
 
-        return $terminatedAt === null || self::asDate($this->startsOn) <= self::asDate($terminatedAt);
+        return false;
     }
 
     /**

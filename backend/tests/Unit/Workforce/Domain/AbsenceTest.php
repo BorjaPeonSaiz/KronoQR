@@ -2,10 +2,12 @@
 
 declare(strict_types=1);
 
+use App\Modules\Shared\Domain\ValueObject\EmploymentPeriod;
 use App\Modules\Workforce\Domain\Exception\AbsenceNotActive;
 use App\Modules\Workforce\Domain\Exception\AbsenceRequiresNote;
 use App\Modules\Workforce\Domain\Exception\InvalidAbsencePeriod;
 use App\Modules\Workforce\Domain\Model\Absence;
+use App\Modules\Workforce\Domain\Model\EmploymentHistory;
 use App\Modules\Workforce\Domain\ValueObject\AbsenceStatus;
 use App\Modules\Workforce\Domain\ValueObject\AbsenceType;
 
@@ -340,22 +342,56 @@ it('no deja corregir ni anular una version que ya no es la vigente', function ()
     ))->toThrow(AbsenceNotActive::class);
 })->group('RF-GP-04', 'RN-13');
 
-it('rechaza una ausencia que no toca ningun dia de la relacion laboral', function (): void {
-    // Decision 2 de la ficha: esos dias no eran dias de trabajo, asi que
-    // registrarlos no justifica nada y ensucia el informe. El solape PARCIAL si
-    // se admite.
+/**
+ * @param  list<array{0: string, 1: string|null}>  $periodos  alta y cese
+ */
+function historiaDeAusencia(array $periodos): EmploymentHistory
+{
+    $ultimo = \count($periodos) - 1;
+
+    return new EmploymentHistory(array_map(
+        static fn (array $periodo, int $i): EmploymentPeriod => new EmploymentPeriod(
+            $periodo[0],
+            $periodo[1],
+            $periodo[1] !== null && $i < $ultimo,
+        ),
+        $periodos,
+        array_keys($periodos),
+    ));
+}
+
+it('admite una ausencia que cae entera en un periodo de alta, y ninguna que lo desborde', function (): void {
+    // RF-GP-04, RN-27: ni antes del alta, ni despues del cese. Desde la 2.3.0 ya
+    // no basta con tocar la relacion laboral (decision 2 de la ficha 3.10).
     $ausencia = ausencia(startsOn: '2026-03-02', endsOn: '2026-03-06');
 
-    expect($ausencia->fallsWithinEmployment(dia('2026-04-01'), null))->toBeFalse();
-    expect($ausencia->fallsWithinEmployment(dia('2026-01-01'), dia('2026-02-28')))->toBeFalse();
+    expect($ausencia->fallsWithin(historiaDeAusencia([['2026-04-01', null]])))->toBeFalse()
+        ->and($ausencia->fallsWithin(historiaDeAusencia([['2026-01-01', '2026-02-28']])))->toBeFalse()
+        // Parcial por el principio y por el final: ya no entra.
+        ->and($ausencia->fallsWithin(historiaDeAusencia([['2026-03-04', null]])))->toBeFalse()
+        ->and($ausencia->fallsWithin(historiaDeAusencia([['2026-01-01', '2026-03-03']])))->toBeFalse()
+        // El dia exacto de alta y de cese cuentan.
+        ->and($ausencia->fallsWithin(historiaDeAusencia([['2026-03-02', null]])))->toBeTrue()
+        ->and($ausencia->fallsWithin(historiaDeAusencia([['2026-01-01', '2026-03-06']])))->toBeTrue()
+        // Sin periodos, ninguna.
+        ->and($ausencia->fallsWithin(new EmploymentHistory([])))->toBeFalse();
+})->group('RF-GP-04', 'RN-27');
 
-    // Parcial por el principio y por el final: entra.
-    expect($ausencia->fallsWithinEmployment(dia('2026-03-04'), null))->toBeTrue();
-    expect($ausencia->fallsWithinEmployment(dia('2026-01-01'), dia('2026-03-03')))->toBeTrue();
-    // Y el dia exacto de alta y de cese cuentan.
-    expect($ausencia->fallsWithinEmployment(dia('2026-03-06'), null))->toBeTrue();
-    expect($ausencia->fallsWithinEmployment(dia('2026-01-01'), dia('2026-03-02')))->toBeTrue();
-})->group('RF-GP-04');
+it('con dos periodos y un hueco, admite cada periodo y rechaza el hueco y lo que lo salta', function (): void {
+    // Alta del 1 de enero al 31 de marzo; readmision el 1 de mayo. Abril es el
+    // hueco.
+    $historia = historiaDeAusencia([['2026-01-01', '2026-03-31'], ['2026-05-01', null]]);
+
+    expect(ausencia(startsOn: '2026-03-02', endsOn: '2026-03-06')->fallsWithin($historia))->toBeTrue()
+        ->and(ausencia(startsOn: '2026-03-30', endsOn: '2026-03-31')->fallsWithin($historia))->toBeTrue()
+        ->and(ausencia(startsOn: '2026-05-01', endsOn: '2026-05-03')->fallsWithin($historia))->toBeTrue()
+        // En el hueco.
+        ->and(ausencia(startsOn: '2026-04-01', endsOn: '2026-04-30')->fallsWithin($historia))->toBeFalse()
+        // Del cese al hueco, del hueco a la readmision, y de un periodo al otro.
+        ->and(ausencia(startsOn: '2026-03-31', endsOn: '2026-04-01')->fallsWithin($historia))->toBeFalse()
+        ->and(ausencia(startsOn: '2026-04-30', endsOn: '2026-05-01')->fallsWithin($historia))->toBeFalse()
+        ->and(ausencia(startsOn: '2026-03-31', endsOn: '2026-05-01')->fallsWithin($historia))->toBeFalse();
+})->group('RF-GP-04', 'RN-27');
 
 it('reconoce el mismo hecho para que reimportar sea seguro', function (): void {
     // Una linea identica a una ausencia activa sale como `unchanged` y no como

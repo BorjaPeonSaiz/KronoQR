@@ -211,8 +211,8 @@ final readonly class ApplyAbsenceImport
     }
 
     /**
-     * La ausencia tiene que tocar la relacion laboral, igual que en el alta
-     * individual.
+     * La ausencia tiene que caer entera en un periodo de alta, igual que en el
+     * alta individual (RF-GP-04, RN-27).
      */
     private function fallsWithinEmployment(Absence $absence): bool
     {
@@ -223,7 +223,7 @@ final readonly class ApplyAbsenceImport
         $employee?->assertAcceptsPersonnelRecords();
 
         return $employee === null
-            || $absence->fallsWithinEmployment($employee->hiredAt, $employee->terminatedAt);
+            || $absence->fallsWithin($this->employees->employmentHistory($absence->employeeUuid));
     }
 
     /**

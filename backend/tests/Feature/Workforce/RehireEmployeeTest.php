@@ -416,3 +416,49 @@ it('vuelve a entrar al portal con el PIN de siempre y ve el registro de los dos 
 
     Api::as($sesion)->get('/api/v1/me/workdays', ['from' => '2026-10-01', 'to' => '2027-04-01'])->assertStatus(200);
 })->group('RN-27', 'RL-05', 'RF-ID-06');
+
+it('tras la readmision se registra y se corrige una ausencia del periodo anterior, y ninguna en el hueco', function (): void {
+    // RF-GP-04, RN-27: la ausencia cae entera en ALGUN periodo de alta, no solo
+    // en el periodo en curso.
+    $escenario = personaDeBajaParaReadmitir();
+    $token = tokenDeLaReadmision();
+
+    Api::as($token)
+        ->post('/api/v1/employees/'.$escenario['employee'].'/rehire', ['hired_at' => REHIRE_TEST_RETURN])
+        ->assertValidResponse(200);
+
+    $ausencia = textoDeLaReadmision(Api::as($token)
+        ->post('/api/v1/absences', [
+            'employee_uuid' => $escenario['employee'],
+            'type' => 'vacation',
+            'starts_on' => '2026-03-02',
+            'ends_on' => '2026-03-06',
+        ])
+        ->assertValidResponse(201)
+        ->json('uuid'));
+
+    Api::as($token)
+        ->patch('/api/v1/absences/'.$ausencia, ['ends_on' => '2026-03-10', 'reason' => 'Se alargaron una semana.'])
+        ->assertValidRequest()
+        ->assertValidResponse(200)
+        ->assertJsonPath('ends_on', '2026-03-10');
+
+    $vigente = textoDeLaReadmision(DB::table('absences')->where('status', 'active')->value('uuid'));
+
+    // Llevarla al hueco, o registrarla en el, no.
+    Api::as($token)
+        ->patch('/api/v1/absences/'.$vigente, ['starts_on' => '2026-10-30', 'ends_on' => '2026-11-02', 'reason' => 'Fechas erroneas.'])
+        ->assertStatus(422)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:validation-failed');
+
+    Api::as($token)
+        ->post('/api/v1/absences', [
+            'employee_uuid' => $escenario['employee'],
+            'type' => 'leave',
+            'starts_on' => '2026-12-01',
+            'ends_on' => '2026-12-03',
+        ])
+        ->assertStatus(422);
+
+    expect(DB::table('absences')->where('status', 'active')->pluck('ends_on')->all())->toBe(['2026-03-10']);
+})->group('RF-GP-04', 'RN-27');

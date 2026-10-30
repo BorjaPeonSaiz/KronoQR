@@ -124,6 +124,10 @@ it('no cuenta la ausencia de ayer, la de mañana, la anulada ni la de quien caus
     // Y RN-14: `terminate()` cierra la relacion el 2026-06-30, asi que esta
     // persona **si** esta de alta hoy; se le adelanta el cese para el caso.
     DB::table('employees')->where('uuid', $cesada)->update(['terminated_at' => '2026-03-01', 'status' => 'terminated']);
+    // Con su periodo, que es lo que lee la metrica desde la 2.3.0 (RN-27).
+    DB::table('employment_periods')
+        ->where('employee_id', DB::table('employees')->where('uuid', $cesada)->value('id'))
+        ->update(['terminated_on' => '2026-03-01', 'offboarded_at' => (string) now()]);
 
     expect(Artisan::call('reporting:absence-metrics'))->toBe(0);
 
