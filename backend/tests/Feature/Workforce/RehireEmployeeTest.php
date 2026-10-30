@@ -557,3 +557,12 @@ it('rechaza el fichaje de quien aun no ha llegado a su fecha de alta, readmitida
     expect(DB::table('shift_entries')->count())->toBe(0)
         ->and(DB::table('scan_events')->value('result'))->toBe('rejected_unknown');
 })->group('RN-27', 'RS-03', 'RF-AT-02');
+
+it('el periodo cerrado lleva como baja efectiva el instante del reloj de la aplicacion', function (): void {
+    // Regla dura 2: el mismo instante que el asiento employee.offboarded, no el
+    // now() de la base.
+    $escenario = personaDeBajaParaReadmitir();
+
+    expect(DB::table('employment_periods')->where('employee_id', AttendanceFixtures::employeeIdOf($escenario['employee']))->value('offboarded_at'))
+        ->toStartWith('2026-11-05 10:00:00');
+})->group('RN-27', 'RN-14');

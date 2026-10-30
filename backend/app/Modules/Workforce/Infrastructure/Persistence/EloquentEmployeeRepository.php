@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Infrastructure\Persistence;
 
+use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\UuidGenerator;
 use App\Modules\Shared\Domain\ValueObject\AccessScope;
 use App\Modules\Shared\Domain\ValueObject\EmploymentPeriod;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
@@ -25,7 +27,6 @@ use DateTimeImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use RuntimeException;
 
 /**
@@ -48,6 +49,17 @@ use RuntimeException;
  */
 final readonly class EloquentEmployeeRepository implements EmployeeRepository
 {
+    /**
+     * El reloj y el generador de identificadores de la aplicacion, no los de la
+     * base: `offboarded_at` es el instante del Clock (regla dura 2, el mismo que
+     * lleva el asiento) y el `uuid` de un periodo sale del mismo puerto que el
+     * del resto de entidades.
+     */
+    public function __construct(
+        private Clock $clock,
+        private UuidGenerator $uuids,
+    ) {}
+
     public function add(EmployeeEntity $employee, ?string $nationalId = null): void
     {
         // Las dos sentencias son un solo hecho: un empleado con ficha pero sin
@@ -267,7 +279,7 @@ final readonly class EloquentEmployeeRepository implements EmployeeRepository
             ->whereNull('offboarded_at')
             ->update([
                 'terminated_on' => $employee->terminatedAt?->format('Y-m-d'),
-                'offboarded_at' => $effective ? DB::raw('now()') : null,
+                'offboarded_at' => $effective ? $this->now() : null,
             ]);
     }
 
@@ -277,12 +289,18 @@ final readonly class EloquentEmployeeRepository implements EmployeeRepository
     private function openFirstPeriod(EmployeeEntity $employee): void
     {
         DB::table('employment_periods')->insert([
-            'uuid' => Str::uuid7()->toString(),
+            'uuid' => $this->uuids->next(),
             'employee_id' => $this->idOf($employee->uuid),
             'hired_on' => $employee->hiredAt->format('Y-m-d'),
             'terminated_on' => $employee->terminatedAt?->format('Y-m-d'),
-            'offboarded_at' => $employee->status === EmploymentStatus::TERMINATED ? DB::raw('now()') : null,
+            'offboarded_at' => $employee->status === EmploymentStatus::TERMINATED ? $this->now() : null,
         ]);
+    }
+
+    /** El instante del Clock, en el formato de `timestamptz(6)`. */
+    private function now(): string
+    {
+        return $this->clock->now()->format('Y-m-d H:i:s.uP');
     }
 
     private function idOf(string $uuid): int
