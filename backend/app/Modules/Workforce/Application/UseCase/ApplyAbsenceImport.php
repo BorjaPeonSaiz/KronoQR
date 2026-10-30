@@ -216,14 +216,18 @@ final readonly class ApplyAbsenceImport
      */
     private function fallsWithinEmployment(Absence $absence): bool
     {
+        // Los periodos ANTES que la ficha, las dos lecturas sin candado: una
+        // baja que confirme entre esta lectura y el asiento la detecta
+        // {@see AbsenceEmploymentRecheck} con la cadena tomada y deshace la
+        // importacion entera, en lugar de saltarse la fila en silencio.
+        $history = $this->employees->employmentHistory($absence->employeeUuid);
         $employee = $this->employees->findByUuid($absence->employeeUuid);
 
         // ADR-060: una ficha minimizada no recibe ausencias; la importacion
         // entera se deshace con el 409, como con una baja que llega a medias.
         $employee?->assertAcceptsPersonnelRecords();
 
-        return $employee === null
-            || $absence->fallsWithin($this->employees->employmentHistory($absence->employeeUuid));
+        return $employee === null || $absence->fallsWithin($history);
     }
 
     /**
