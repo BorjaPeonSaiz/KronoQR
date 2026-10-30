@@ -110,7 +110,7 @@ describe('EmployeesImportStep', () => {
       const validated = employeeImportReport()
       const applied = employeeImportReport({
         mode: 'apply',
-        summary: { create, update: 0, unchanged: 0, reject: 0 },
+        summary: { create, update: 0, unchanged: 0, reject: 0, rehire: 0 },
       })
 
       stubFetch(async (_url, init) =>
