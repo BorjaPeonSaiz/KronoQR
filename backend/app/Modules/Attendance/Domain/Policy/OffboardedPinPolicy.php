@@ -10,7 +10,7 @@ use DateTimeImmutable;
 use DateTimeZone;
 
 /**
- * **¿Era de su periodo el PIN correcto de una persona de baja?** (RN-20, D15,
+ * **¿Era de su periodo el PIN correcto de una persona de baja?** (RN-20,
  * enmienda del 29-10-2026 de ADR-043; ADR-062 §8).
  *
  * El PIN correcto de una persona de baja se rechaza siempre igual (RS-03). La

@@ -383,7 +383,7 @@ final readonly class RegisterScanHandler implements ScanRegistration
      *   fila a su titular, y la marca si se uso antes de la retirada y no
      *   despues del dia del cese. Sin credencial retirada, la retirada es la
      *   recepcion: la baja confirmo durante esta peticion o antes.
-     * - **D15 (enmienda del 29-10-2026 de ADR-043)**: el PIN correcto de una
+     * - **Enmienda del 29-10-2026 de ADR-043**: el PIN correcto de una
      *   persona de baja atribuye y marca la fila solo si la fecha civil del
      *   fichaje cae en el periodo que cerro la baja. Fuera de el, sin persona,
      *   como un PIN incorrecto. Sin E/S: la zona y las fechas vienen con la
@@ -440,7 +440,7 @@ final readonly class RegisterScanHandler implements ScanRegistration
      * - **Tarjeta** (`qr_kiosk`): la retirada es la recepcion del escaneo y la
      *   cota inferior es el **alta** de la persona: aqui la tarjeta resolvio y
      *   su emision no viaja, y el alta es anterior a cualquier tarjeta suya.
-     * - **PIN** (`pin_kiosk`, D15, enmienda del 29-10-2026 de ADR-043): el PIN
+     * - **PIN** (`pin_kiosk`, enmienda del 29-10-2026 de ADR-043): el PIN
      *   acerto, asi que es la misma regla que su rechazo fuera de la carrera:
      *   la fecha civil del fichaje entre el alta y el cese, ambos incluidos
      *   ({@see OffboardedPinPolicy}).

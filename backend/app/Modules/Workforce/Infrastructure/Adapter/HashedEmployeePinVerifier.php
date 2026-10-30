@@ -81,7 +81,7 @@ use SensitiveParameter;
  * sin poder distinguir nada. Se construye con lo que ya habia en `$employee`:
  * **ninguna E/S nueva**, asi que el tiempo de los cinco caminos no cambia.
  *
- * **Desde la 2.3.0 (D15, enmienda del 29-10-2026 de ADR-043)**, el PIN
+ * **Desde la 2.3.0 (enmienda del 29-10-2026 de ADR-043)**, el PIN
  * **correcto** de una persona **de baja**, en el quiosco, baja como
  * `PinVerification::rejectedOffboarded()`: el mismo rechazo, el mismo apunte y
  * el mismo contador —la persona de baja no se autentica—, con la persona, las
@@ -193,7 +193,7 @@ final readonly class HashedEmployeePinVerifier implements EmployeePinVerifier
                 $this->journal->lockoutStarted($channel, $employee['uuid'], $opened);
             }
 
-            // D15 (enmienda del 29-10-2026 de ADR-043): el PIN correcto de una
+            // Enmienda del 29-10-2026 de ADR-043: el PIN correcto de una
             // persona de baja baja con ella, solo para la fila. Sin E/S nueva y
             // sin tocar el contador: la persona de baja no se autentica.
             $offboarded = $this->offboardedHolderOf($employee, $matches, $origin);
@@ -295,7 +295,7 @@ final readonly class HashedEmployeePinVerifier implements EmployeePinVerifier
 
     /**
      * La persona **de baja** cuyo PIN acaba de acertar en el quiosco (RN-20,
-     * D15), o `null`.
+     * ADR-043), o `null`.
      *
      * Solo con el PIN comparado contra su hash real —`$matches` es falso con el
      * señuelo y con el bloqueo, que compara contra el señuelo—, solo en el
@@ -382,7 +382,7 @@ final readonly class HashedEmployeePinVerifier implements EmployeePinVerifier
     private function findByCode(string $employeeCode): ?array
     {
         // Las fechas del periodo en curso y la zona del centro van en LA MISMA
-        // consulta para todos los codigos (D15): una segunda lectura solo para
+        // consulta para todos los codigos (RN-20): una segunda lectura solo para
         // el PIN correcto de una persona de baja seria un oraculo de tiempo.
         $row = DB::table('employees')
             ->leftJoin('sites', 'sites.id', '=', 'employees.site_id')

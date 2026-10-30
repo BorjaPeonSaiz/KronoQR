@@ -33,7 +33,7 @@ use InvalidArgumentException;
  * `employeeUuid()`, `isVerified()` sigue siendo falso y quien construye la
  * respuesta no lo lee. El portal recibe este mismo valor y no usa `claim()`.
  *
- * **Desde la 2.3.0 (D15) el PIN correcto de una persona de baja** baja con un
+ * **Desde la 2.3.0 (RN-20) el PIN correcto de una persona de baja** baja con un
  * {@see OffboardedPinHolder}, tambien solo para la base de datos: es el mismo
  * rechazo, sin `employeeUuid()`, y el fichaje decide con el si atribuye la fila.
  *
@@ -86,7 +86,7 @@ final readonly class PinVerification
 
     /**
      * El PIN **correcto** de una persona **de baja**, tecleado en el quiosco
-     * (RN-20, D15, enmienda del 29-10-2026 de ADR-043). **Hacia fuera es el
+     * (RN-20, enmienda del 29-10-2026 de ADR-043). **Hacia fuera es el
      * mismo rechazo** que {@see rejected()}: sin `employeeUuid()`, sin claim y
      * con `isVerified()` falso. La persona solo la lee el fichaje del quiosco
      * para atribuir y marcar la fila si la fecha cae en su periodo.
@@ -154,7 +154,7 @@ final readonly class PinVerification
     }
 
     /**
-     * La persona de baja cuyo PIN correcto se rechazo (D15), o `null`. **Solo
+     * La persona de baja cuyo PIN correcto se rechazo (RN-20), o `null`. **Solo
      * lo lee el fichaje del quiosco** para escribir la fila; nada que construya
      * una respuesta debe llamarlo.
      */

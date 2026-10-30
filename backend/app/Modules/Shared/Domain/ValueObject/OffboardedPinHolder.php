@@ -9,7 +9,7 @@ use DateTimeZone;
 use InvalidArgumentException;
 
 /**
- * **La persona de baja que tecleo su PIN correcto** en el quiosco (RN-20, D15,
+ * **La persona de baja que tecleo su PIN correcto** en el quiosco (RN-20,
  * enmienda del 29-10-2026 de ADR-043; ADR-062 §8).
  *
  * Solo existe cuando el codigo es de una persona **de baja** y el PIN que

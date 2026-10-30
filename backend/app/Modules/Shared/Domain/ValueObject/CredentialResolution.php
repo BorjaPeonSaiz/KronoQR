@@ -78,7 +78,7 @@ final readonly class CredentialResolution
     }
 
     /**
-     * Rechazo del PIN **correcto** de una persona **de baja** (RN-20, D15,
+     * Rechazo del PIN **correcto** de una persona **de baja** (RN-20,
      * enmienda del 29-10-2026 de ADR-043). **Hacia fuera es el mismo rechazo**
      * que {@see rejected()} con `UNKNOWN`: sin `employeeUuid()` y con el mismo
      * motivo, asi que `scan_events.result` sigue siendo `rejected_unknown`. La
@@ -134,7 +134,7 @@ final readonly class CredentialResolution
     }
 
     /**
-     * La persona de baja cuyo PIN correcto se rechazo (D15), o `null`. Nunca
+     * La persona de baja cuyo PIN correcto se rechazo (RN-20), o `null`. Nunca
      * viaja a una respuesta.
      */
     public function offboardedPinHolder(): ?OffboardedPinHolder

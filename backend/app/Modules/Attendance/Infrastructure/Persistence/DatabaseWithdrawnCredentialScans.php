@@ -21,7 +21,7 @@ use Illuminate\Database\ConnectionInterface;
  * marcado para revision— y aqui solo se lee. Las tres condiciones juntas solo
  * las cumple RN-20: un rechazo de credencial sin titular no lleva `employee_id`,
  * y con titular no se marca si fue posterior a la retirada. **Desde la 2.3.0
- * tambien el PIN** (`pin_kiosk`, D15, enmienda del 29-10-2026 de ADR-043): el PIN
+ * tambien el PIN** (`pin_kiosk`, enmienda del 29-10-2026 de ADR-043): el PIN
  * correcto de una persona de baja con fecha dentro de su periodo se escribe
  * igual, `rejected_unknown` con `employee_id` y marca. Ningun otro rechazo de PIN
  * lleva `employee_id` y marca a la vez: el fichaje por PIN aceptado si se marca

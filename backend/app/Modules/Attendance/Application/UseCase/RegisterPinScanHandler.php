@@ -70,7 +70,7 @@ use App\Modules\Shared\Domain\ValueObject\PinOrigin;
  * incidencia si nadie lo subsana; la respuesta, el evento `ScanRejected` y el
  * log no lo llevan. El sobre que no abre nunca lleva claim.
  *
- * **El PIN correcto de una persona de baja (D15, 2.3.0)** baja como
+ * **El PIN correcto de una persona de baja (RN-20, desde la 2.3.0)** baja como
  * `CredentialResolution::rejectedWithOffboardedPinHolder()`: el mismo `UNKNOWN`.
  * {@see RegisterScanHandler} atribuye y marca la fila solo si la fecha civil
  * del fichaje cae en el periodo que cerro la baja (RN-20).
@@ -211,7 +211,7 @@ final readonly class RegisterPinScanHandler
             // Hacia fuera es el mismo rechazo `UNKNOWN`, sin `employeeUuid`.
             $claim = $verification->claim();
 
-            // D15 (enmienda del 29-10-2026 de ADR-043): el PIN correcto de una
+            // Enmienda del 29-10-2026 de ADR-043: el PIN correcto de una
             // persona de baja. El mismo `UNKNOWN` hacia fuera; la fila decide si
             // se atribuye por la fecha.
             $offboarded = $verification->offboardedHolder();
