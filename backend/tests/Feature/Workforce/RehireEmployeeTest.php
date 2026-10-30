@@ -205,7 +205,7 @@ it('con reset_pin devuelve un PIN nuevo una sola vez; sin el conserva el que ten
         ->and(asientosDeLaReadmision('employee.rehired')[0]['pin_reset'] ?? null)->toBeTrue();
 })->group('RN-27', 'RF-ID-09');
 
-it('cierra el contrato abierto en el cese y abre otro con sus terminos, o ninguno con contract null', function (): void {
+it('cierra el contrato abierto en el cese y abre otro con sus terminos', function (): void {
     $escenario = personaDeBajaParaReadmitir();
     $empleado = AttendanceFixtures::employeeIdOf($escenario['employee']);
 
@@ -234,6 +234,52 @@ it('cierra el contrato abierto en el cese y abre otro con sus terminos, o ningun
         ->and((float) $contratos[1]->weekly_hours)->toBe(30.0)
         ->and($contratos[1]->schedule_type)->toBe('turnos');
 })->group('RN-27', 'RF-GP-02', 'RF-IN-03');
+
+it('con contract null cierra el contrato abierto en el cese sin abrir otro, y el cierre queda en el asiento', function (): void {
+    $escenario = personaDeBajaParaReadmitir();
+    $empleado = AttendanceFixtures::employeeIdOf($escenario['employee']);
+
+    DB::table('employment_contracts')->insert([
+        'employee_id' => $empleado,
+        'weekly_hours' => 30,
+        'annual_hours' => 1500,
+        'schedule_type' => 'turnos',
+        'valid_from' => '2026-01-01',
+        'valid_to' => null,
+        'created_at' => now(),
+    ]);
+
+    Api::as(tokenDeLaReadmision())
+        ->post('/api/v1/employees/'.$escenario['employee'].'/rehire', ['hired_at' => REHIRE_TEST_RETURN, 'contract' => null])
+        ->assertValidRequest()
+        ->assertValidResponse(200);
+
+    /** @var list<object{valid_from: string, valid_to: string|null}> $contratos */
+    $contratos = DB::table('employment_contracts')->where('employee_id', $empleado)->orderBy('valid_from')
+        ->get(['valid_from', 'valid_to'])->all();
+
+    expect($contratos)->toHaveCount(1)
+        ->and($contratos[0]->valid_to)->toBe(REHIRE_TEST_TERMINATION)
+        ->and(DB::table('audit_log')->where('action', 'employment_contract.registered')->count())->toBe(0)
+        ->and(asientosDeLaReadmision('employee.rehired'))->toHaveCount(1)
+        ->and(asientosDeLaReadmision('employee.rehired')[0])->toMatchArray([
+            'previous_contract_valid_from' => '2026-01-01',
+            'previous_contract_valid_to' => REHIRE_TEST_TERMINATION,
+            'previous_contract_weekly_hours' => 30.0,
+            'previous_contract_annual_hours' => 1500.0,
+            'previous_contract_schedule_type' => 'turnos',
+        ]);
+})->group('RN-27', 'RF-GP-02', 'RF-IN-03');
+
+it('sin contrato abierto el asiento no lleva previous_contract', function (): void {
+    $escenario = personaDeBajaParaReadmitir();
+
+    Api::as(tokenDeLaReadmision())
+        ->post('/api/v1/employees/'.$escenario['employee'].'/rehire', ['hired_at' => REHIRE_TEST_RETURN, 'contract' => null])
+        ->assertValidResponse(200);
+
+    expect(asientosDeLaReadmision('employee.rehired')[0])->not->toHaveKey('previous_contract_valid_to');
+})->group('RN-27', 'RF-GP-02');
 
 it('cambia de departamento si se pide y deja el anterior en el asiento', function (): void {
     $escenario = personaDeBajaParaReadmitir();

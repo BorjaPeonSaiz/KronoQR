@@ -26,6 +26,10 @@ use DateTimeZone;
  * - El periodo nuevo recibe un contrato con los terminos pedidos o, si no se
  *   pidio nada, con los del ultimo; con `contract: null`, ninguno.
  *
+ * El cierre deja siempre rastro, tambien sin contrato nuevo: {@see self::apply()}
+ * devuelve el contrato cerrado y `employee.rehired` lleva su vigencia y sus
+ * terminos (`previous_contract_*`).
+ *
  * Cada contrato nuevo deja su `EmploymentContractRegistered` y por tanto su
  * asiento `contract.registered`, como el alta de un contrato desde la ficha.
  * Corre dentro de la transaccion de la readmision, con la cadena ya tomada.
@@ -38,20 +42,22 @@ final readonly class RehireContracts
     ) {}
 
     /**
+     * El contrato que estaba abierto, ya cerrado, o `null` si no habia ninguno.
+     *
      * @param  string  $previousTermination  cese del periodo anterior, `Y-m-d`
      *
      * @throws OverlappingEmploymentContract si el contrato abierto empieza en el periodo nuevo
      */
-    public function apply(RehireEmployeeCommand $command, Employee $rehired, string $previousTermination, DateTimeImmutable $now): void
+    public function apply(RehireEmployeeCommand $command, Employee $rehired, string $previousTermination, DateTimeImmutable $now): ?EmploymentContract
     {
         $history = $this->contracts->forEmployee($rehired->uuid);
         $last = $history === [] ? null : $history[\count($history) - 1];
-        $previousValidTo = $this->closeOpenContract($rehired, $previousTermination);
+        $closed = $this->closeOpenContract($rehired, $previousTermination);
 
         $terms = $command->contractGiven ? $command->contract : self::termsOf($last);
 
         if (! $terms instanceof RehireContractTerms) {
-            return;
+            return $closed;
         }
 
         $contract = new EmploymentContract(
@@ -72,20 +78,22 @@ final readonly class RehireContracts
             annualHours: $contract->annualHours,
             scheduleType: $contract->scheduleType->value,
             validFrom: $contract->isoValidFrom(),
-            previousValidTo: $previousValidTo ?? $last?->isoValidTo(),
+            previousValidTo: $closed?->isoValidTo() ?? $last?->isoValidTo(),
             previousWeeklyHours: $last?->weeklyHours,
             previousAnnualHours: $last?->annualHours,
             occurredAt: $now,
         ));
+
+        return $closed;
     }
 
     /**
      * Cierra el contrato abierto en el cese anterior, o la vispera del alta
-     * nueva si empezo despues del cese. Devuelve el `valid_to` que le queda.
+     * nueva si empezo despues del cese. Devuelve el contrato ya cerrado.
      *
      * @throws OverlappingEmploymentContract
      */
-    private function closeOpenContract(Employee $rehired, string $previousTermination): ?string
+    private function closeOpenContract(Employee $rehired, string $previousTermination): ?EmploymentContract
     {
         $open = $this->contracts->openContractFor($rehired->uuid);
 
@@ -107,7 +115,7 @@ final readonly class RehireContracts
         $closed = $open->closedBefore($end);
         $this->contracts->close($closed);
 
-        return $closed->isoValidTo();
+        return $closed;
     }
 
     private static function termsOf(?EmploymentContract $contract): ?RehireContractTerms

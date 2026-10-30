@@ -20,6 +20,7 @@ use App\Modules\Workforce\Domain\Exception\EmployeeNotTerminated;
 use App\Modules\Workforce\Domain\Exception\InvalidRehireDate;
 use App\Modules\Workforce\Domain\Exception\MinimisedEmploymentHistory;
 use App\Modules\Workforce\Domain\Model\Employee;
+use App\Modules\Workforce\Domain\Model\EmploymentContract;
 use DateTimeImmutable;
 use RuntimeException;
 
@@ -124,7 +125,7 @@ final readonly class RehireEmployeeHandler
         $credentialUuid = $this->uuids->next();
 
         $this->employees->saveRehire($rehired, $periodUuid, $command->actorUserId);
-        $this->contracts->apply($command, $rehired, (string) $previousTermination, $now);
+        $closedContract = $this->contracts->apply($command, $rehired, (string) $previousTermination, $now);
 
         $pin = $material === null ? null : $this->pins->handle(new IssueEmployeePinCommand(
             employeeUuid: $rehired->uuid,
@@ -148,6 +149,13 @@ final readonly class RehireEmployeeHandler
             countedByBatch: $command->countedByBatch,
             credentialUuid: $credentialUuid,
             actorUserId: $command->actorUserId,
+            closedContract: $closedContract instanceof EmploymentContract ? [
+                'valid_from' => $closedContract->isoValidFrom(),
+                'valid_to' => (string) $closedContract->isoValidTo(),
+                'weekly_hours' => $closedContract->weeklyHours,
+                'annual_hours' => $closedContract->annualHours,
+                'schedule_type' => $closedContract->scheduleType->value,
+            ] : null,
             occurredAt: $now,
         ));
 

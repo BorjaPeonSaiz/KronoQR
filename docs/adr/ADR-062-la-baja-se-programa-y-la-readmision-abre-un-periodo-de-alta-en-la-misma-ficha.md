@@ -365,7 +365,7 @@ fechas e identificadores de la organización, **nunca nombre, documento ni motiv
 | `employee.offboarding_scheduled` | cuenta de gestión | se programa o se reprograma una baja, también con cese de hoy sin `apply_now` | `terminated_on`, `previous_terminated_on` (al reprogramar) |
 | `employee.offboarding_cancelled` | cuenta de gestión | se anula | `terminated_on` anulada |
 | `employee.offboarded` | cuenta de gestión o `system` | la baja se hace efectiva, en el acto o por la tarea | `terminated_on`; `apply_now: true` si se aplicó ya con cese de hoy; si la aplica la tarea, `scheduled: true`, `due_on`, `days_late` y, si la jornada del cese siguió después de su día (un turno de noche o una pausa que la hizo esperar), `deferred: true`: explica unos `days_late` que no son una tarea parada |
-| `employee.rehired` | cuenta de gestión | readmisión, individual, en lote o por importación | `employment_period_uuid`, `hired_at`, `department_id`, `previous_department_id` (si cambia), `pin_reset`, `via_import` |
+| `employee.rehired` | cuenta de gestión | readmisión, individual, en lote o por importación | `employment_period_uuid`, `hired_at`, `department_id`, `previous_department_id` (si cambia), `pin_reset`, `via_import`; si cerró un contrato abierto, `previous_contract_valid_from`, `previous_contract_valid_to`, `previous_contract_weekly_hours`, `previous_contract_annual_hours` y `previous_contract_schedule_type`, también con `contract: null`, para que ese cierre no quede sin asiento |
 | `employee.termination_date_corrected` | cuenta de gestión | corrección de §7 | `employment_period_uuid`, `previous_terminated_on`, `terminated_on`, `correction_id` |
 
 **Se mantiene `employee.offboarded` para la baja que aplica la tarea, y no se crea

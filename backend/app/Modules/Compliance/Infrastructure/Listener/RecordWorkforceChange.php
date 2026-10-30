@@ -177,7 +177,7 @@ final readonly class RecordWorkforceChange
     /**
      * Readmision (RN-27, ADR-062 §9): el periodo nuevo, su fecha de alta y el
      * departamento con el que vuelve. El anterior solo si cambia, como en
-     * `employee.updated`.
+     * `employee.updated`; el contrato que cierra, solo si habia uno abierto.
      */
     public function rehired(EmployeeRehired $event): void
     {
@@ -192,6 +192,17 @@ final readonly class RecordWorkforceChange
 
         if ($event->departmentChanged()) {
             $payload['previous_department_id'] = $event->previousDepartmentId;
+        }
+
+        // El cierre del contrato abierto deja rastro aunque la readmision no
+        // registre contrato nuevo (`contract: null`): si no, su `valid_to`
+        // cambiaria sin asiento.
+        if ($event->closedContract !== null) {
+            $payload['previous_contract_valid_from'] = $event->closedContract['valid_from'];
+            $payload['previous_contract_valid_to'] = $event->closedContract['valid_to'];
+            $payload['previous_contract_weekly_hours'] = $event->closedContract['weekly_hours'];
+            $payload['previous_contract_annual_hours'] = $event->closedContract['annual_hours'];
+            $payload['previous_contract_schedule_type'] = $event->closedContract['schedule_type'];
         }
 
         $this->record(AuditAction::EmployeeRehired, AuditSubject::of('employee'), $payload, $event->occurredAt());

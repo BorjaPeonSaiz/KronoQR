@@ -37,6 +37,14 @@ final readonly class EmployeeRehired implements DomainEvent
         public bool $countedByBatch,
         public string $credentialUuid,
         public ?int $actorUserId,
+        /**
+         * El contrato que la readmision ha cerrado, o `null` si no habia ninguno
+         * abierto: su cierre deja rastro aunque no se registre contrato nuevo
+         * (`contract: null`). Fechas `Y-m-d`.
+         *
+         * @var array{valid_from: string, valid_to: string, weekly_hours: float, annual_hours: float|null, schedule_type: string}|null
+         */
+        public ?array $closedContract,
         private DateTimeImmutable $occurredAt,
     ) {}
 
