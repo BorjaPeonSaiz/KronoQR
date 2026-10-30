@@ -293,6 +293,16 @@ export interface paths {
          *     quien correspondia para la revision de RN-19 (ADR-043), y eso **nunca cambia la
          *     respuesta ni su tiempo**: la misma sentencia escribe la fila con y sin dueño.
          *
+         *     **El PIN correcto de una persona de baja** (RN-20, D15, enmienda del 29-10-2026
+         *     de ADR-043, 2.3.0) recibe ese mismo rechazo, con el mismo cuerpo, tambien al
+         *     reenviarlo, y en el mismo tiempo. Si la fecha civil del `occurred_at`, en la zona
+         *     del centro, cae entre la fecha de alta y la de cese del periodo que cerro la
+         *     baja, ambas incluidas, la fila queda atribuida a esa persona y marcada para
+         *     revision, y la revision diaria abre `scan_before_revocation` (una por persona y
+         *     jornada, tambien si ese dia hubo ademas una tarjeta retirada). Fuera de esas
+         *     fechas, o con un PIN incorrecto, no se atribuye a nadie. El fichaje del quiosco
+         *     sin red del ultimo dia que llega despues de la baja deja asi rastro para RRHH.
+         *
          *     La garantia de **tiempo constante** cubre esas cinco, que son las que hablan
          *     de la credencial. El rechazo de RN-18 —un fichaje que no puede cuadrar con el
          *     registro— viaja en el mismo `422` pero se decide despues de identificar a la
@@ -11162,7 +11172,11 @@ export interface components {
          *       titular estaba de baja, y su hora real era **anterior** a la retirada:
          *       una tarjeta que valia cuando se uso, tipicamente un fichaje de la cola
          *       offline del ultimo dia. Se rechazo como siempre (RS-03) y quedo
-         *       atribuido a su titular. Una por persona y jornada, sin
+         *       atribuido a su titular. **Desde la 2.3.0 tambien el PIN** (D15): un
+         *       PIN correcto de una persona de baja cuya fecha civil cae entre el alta y
+         *       el cese del periodo que cerro la baja; un dia con tarjeta y con PIN da
+         *       una sola. Y la fecha de cese acota la tarjeta: un escaneo posterior a
+         *       ella no abre nada. Una por persona y jornada, sin
          *       `shift_entry_uuid`; el `context` lleva `scan_id` y `occurred_at` del
          *       primero, `attempts`, `max_sync_delay_seconds` y `withdrawal`.
          *       Se cierra con un alta manual de tramo (RN-14 la admite hasta la fecha
@@ -11342,7 +11356,9 @@ export interface components {
          *     `occurred_at` del primer escaneo de la jornada, `attempts`,
          *     `max_sync_delay_seconds` (como arriba) y `withdrawal`: `offboarding` si
          *     la persona esta de baja, `credential` si lo retirado fue solo la tarjeta
-         *     (reemision o perdida). **Nunca** el motivo libre de la revocacion.
+         *     (reemision o perdida). Un PIN correcto despues de la baja (D15) siempre
+         *     es `offboarding`. **Nunca** el motivo libre de la revocacion, ni el
+         *     codigo de empleado.
          *
          *     La incidencia `discarded_scan` (RN-22) lleva `scan_id` y `occurred_at`
          *     del primer aviso de la jornada, `device_uuid`, `origin`, `http_status`,
@@ -11950,6 +11966,13 @@ export interface components {
              *     `duplicate_in_file` borrando una de las dos lineas. Un unico
              *     `invalid_row` obligaria a llamar por telefono.
              *
+             *     **`outside_employment`** (2.3.0, RN-27): la ausencia no cae entera
+             *     dentro de un periodo de alta de la persona —empieza antes de un alta,
+             *     termina despues de un cese o pisa el hueco entre una baja y una
+             *     readmision—. Es la misma regla que el alta individual, que responde
+             *     `422` en `ends_on`, y se dice en la revision para que una linea que la
+             *     aplicacion no escribiria no salga como `create`.
+             *
              *     **`note_too_long` se comprueba en la fase de revision y no al
              *     escribir**, aunque el esquema tambien lo declare: una nota puede
              *     llevar texto libre sobre la salud de alguien, y dejar que el rechazo
@@ -11965,7 +11988,7 @@ export interface components {
              *     fichero entero y no impide nada.
              * @enum {string}
              */
-            code: "missing_employee_code" | "unknown_employee" | "missing_type" | "unknown_type" | "missing_starts_on" | "missing_ends_on" | "invalid_starts_on" | "invalid_ends_on" | "inverted_period" | "note_required" | "note_too_long" | "overlapping_absence" | "duplicate_in_file" | "unknown_column";
+            code: "missing_employee_code" | "unknown_employee" | "missing_type" | "unknown_type" | "missing_starts_on" | "missing_ends_on" | "invalid_starts_on" | "invalid_ends_on" | "inverted_period" | "note_required" | "note_too_long" | "overlapping_absence" | "duplicate_in_file" | "outside_employment" | "unknown_column";
             /** @enum {string} */
             severity: "error" | "warning";
             column: string | null;
