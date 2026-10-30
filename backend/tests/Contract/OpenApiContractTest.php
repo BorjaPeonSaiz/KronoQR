@@ -1561,7 +1561,7 @@ it('devuelve como mucho diez personas con los campos minimos, ni codigo ni docum
 
     $properties = Contract::keys('components', 'schemas', 'LegalExportEmployeeMatch', 'properties');
 
-    expect($properties)->toBe(['uuid', 'first_name', 'last_name', 'department', 'status', 'hired_at', 'terminated_at'])
+    expect($properties)->toBe(['uuid', 'first_name', 'last_name', 'department', 'status', 'hired_at', 'terminated_at', 'employment_periods'])
         ->and($properties)->not->toContain('employee_code')
         ->and($properties)->not->toContain('email')
         ->and($properties)->not->toContain('national_id')

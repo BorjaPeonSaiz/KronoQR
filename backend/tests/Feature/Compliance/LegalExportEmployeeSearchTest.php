@@ -162,7 +162,7 @@ it('devuelve solo los campos minimos: ni el codigo ni el documento', function ()
     $data = $response->json('data');
 
     expect($data)->toHaveCount(1)
-        ->and(array_keys($data[0]))->toBe(['uuid', 'first_name', 'last_name', 'department', 'status', 'hired_at', 'terminated_at'])
+        ->and(array_keys($data[0]))->toBe(['uuid', 'first_name', 'last_name', 'department', 'status', 'hired_at', 'terminated_at', 'employment_periods'])
         ->and($data[0]['department'])->toMatchArray(['id' => $plantilla['department']]);
 
     foreach ([LEGAL_EXPORT_EMPLOYEE_SEARCH_CODE, LEGAL_EXPORT_EMPLOYEE_SEARCH_DNI, 'employee_code', 'national_id', 'email'] as $prohibido) {
@@ -527,3 +527,26 @@ it('lleva una sola zona de limite: la suya y no la de gestion', function (): voi
 
     expect($throttles)->toBe(['throttle:legal-export-search']);
 })->group('RF-IN-05', 'RS-02');
+
+it('devuelve todos los periodos de alta de una persona readmitida, y no solo el ultimo', function (): void {
+    // RN-27, ADR-062: hired_at y terminated_at son los del periodo en curso; los
+    // anteriores viajan en employment_periods para no engañar a quien exporta.
+    $plantilla = plantillaDeLaBusquedaLegal();
+    $id = DB::table('employees')->where('uuid', $plantilla['baja'])->value('id');
+
+    // Lucia, de baja el 30 de junio de 2026, vuelve el 1 de septiembre.
+    DB::update("UPDATE employees SET status = 'active', hired_at = '2026-09-01', terminated_at = NULL WHERE id = ?", [$id]);
+    DB::insert("INSERT INTO employment_periods (uuid, employee_id, hired_on) VALUES (gen_random_uuid(), ?, '2026-09-01')", [$id]);
+
+    buscarPersonaLegal($plantilla['token'], ['q' => 'Amrani Baja'])
+        ->assertValidResponse(200)
+        ->assertJsonPath('data.0.uuid', $plantilla['baja'])
+        ->assertJsonPath('data.0.hired_at', '2026-09-01')
+        ->assertJsonPath('data.0.terminated_at', null)
+        ->assertJsonCount(2, 'data.0.employment_periods')
+        ->assertJsonPath('data.0.employment_periods.0.hired_at', '2026-01-01')
+        ->assertJsonPath('data.0.employment_periods.0.terminated_at', '2026-06-30')
+        ->assertJsonPath('data.0.employment_periods.0.state', 'terminated')
+        ->assertJsonPath('data.0.employment_periods.1.hired_at', '2026-09-01')
+        ->assertJsonPath('data.0.employment_periods.1.state', 'active');
+})->group('RF-IN-05', 'RN-27');
