@@ -65,6 +65,9 @@ return new class extends Migration
     /**
      * `CREATE OR REPLACE` conserva el propietario, `SECURITY DEFINER` va en la
      * definicion y los permisos de `EXECUTE` no cambian con la sustitucion.
+     * Sin las correcciones, el texto es **byte a byte** el de
+     * `2026_10_21_100300`: por eso el bloque nuevo se pega al final de la linea
+     * de las tarjetas y no en una linea propia (`MigrationsRoundTripTest`).
      */
     private function anonymizeFunction(bool $withCorrections): string
     {
@@ -160,8 +163,7 @@ return new class extends Migration
                            SET revoked_reason = '__CREDENTIAL_REASON__'
                          WHERE c.employee_id = v_record.id
                            AND c.revoked_reason IS NOT NULL
-                           AND c.revoked_reason <> '__CREDENTIAL_REASON__';
-                __CORRECTIONS__
+                           AND c.revoked_reason <> '__CREDENTIAL_REASON__';__CORRECTIONS__
 
                         UPDATE public.employees e
                            SET first_name = '',
