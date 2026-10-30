@@ -8446,14 +8446,22 @@ export interface components {
             status: components["schemas"]["EmploymentStatus"];
             /**
              * Format: date
-             * @description Fecha de alta, civil y sin zona.
+             * @description Fecha de alta **del periodo en curso**, civil y sin zona. Una persona
+             *     readmitida tuvo otros antes: estan en `employment_periods`.
              */
             hired_at: string;
             /**
              * Format: date
-             * @description Fecha de cese, o `null` si sigue de alta.
+             * @description Fecha de cese **del periodo en curso**, o `null` si sigue de alta.
              */
             terminated_at: string | null;
+            /**
+             * @description Todos sus periodos de alta, del mas antiguo al mas reciente (RN-27,
+             *     ADR-062). El rango de la exportacion legal puede caer en
+             *     cualquiera de ellos: `hired_at` y `terminated_at` solos harian creer
+             *     que la persona solo trabajo en el ultimo.
+             */
+            employment_periods: components["schemas"]["EmploymentPeriod"][];
         };
         /**
          * EmploymentStatus
