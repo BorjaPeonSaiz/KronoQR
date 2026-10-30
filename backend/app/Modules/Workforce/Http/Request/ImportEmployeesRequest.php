@@ -61,6 +61,9 @@ final class ImportEmployeesRequest extends FormRequest
             'mode' => ['required', 'string', 'in:validate,apply'],
             // `required_if` y no `required`: la validacion no confirma nada.
             'confirm_checksum' => ['required_if:mode,apply', 'nullable', 'string', 'regex:/^[0-9a-f]{64}$/'],
+            // Sin `required_if`: solo hace falta si la validacion devolvio
+            // `rehire_digest`, y eso lo decide el caso de uso con el fichero.
+            'confirm_rehire_digest' => ['nullable', 'string', 'regex:/^[0-9a-f]{64}$/'],
         ];
     }
 
@@ -91,6 +94,7 @@ final class ImportEmployeesRequest extends FormRequest
             apply: $this->string('mode')->value() === 'apply',
             confirmChecksum: $this->optionalString('confirm_checksum'),
             importedByUserId: is_numeric($identifier) ? (int) $identifier : null,
+            confirmRehireDigest: $this->optionalString('confirm_rehire_digest'),
         );
     }
 

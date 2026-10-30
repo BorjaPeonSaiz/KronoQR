@@ -55,7 +55,7 @@ final class EmployeeImportResource extends JsonResource
         /** @var ImportReport $report */
         $report = $this->resource;
 
-        return [
+        $body = [
             'mode' => $this->applied ? 'apply' : 'validate',
             'file' => [
                 'sha256' => $report->sha256,
@@ -75,6 +75,12 @@ final class EmployeeImportResource extends JsonResource
             'rows' => array_map(self::row(...), $report->rows),
             'truncated' => $report->truncated,
         ];
+
+        // Solo si alguna fila readmite (RN-27): `apply` la exige de vuelta en
+        // `confirm_rehire_digest` para no readmitir a nadie que no se reviso.
+        $rehires = $report->rehireDigest();
+
+        return $rehires === null ? $body : [...$body, 'rehire_digest' => $rehires];
     }
 
     /**

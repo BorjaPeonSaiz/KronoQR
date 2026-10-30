@@ -23,5 +23,10 @@ final readonly class ImportEmployeesCommand
         public ?string $confirmChecksum,
         /** La cuenta de gestion que importa: autora de las readmisiones del lote (RN-27). */
         public ?int $importedByUserId = null,
+        /**
+         * El `rehire_digest` que devolvio la validacion, o `null` si no lo
+         * devolvio: las readmisiones que se aplican son las revisadas (RN-27).
+         */
+        public ?string $confirmRehireDigest = null,
     ) {}
 }

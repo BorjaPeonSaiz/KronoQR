@@ -771,6 +771,7 @@ final readonly class ErrorVocabulary
         'dada',
         'dado',
         'daily',
+        'dar',
         'data',
         'database',
         'dataset',

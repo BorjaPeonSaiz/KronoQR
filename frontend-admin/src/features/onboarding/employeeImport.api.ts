@@ -4,7 +4,8 @@
 // servidor y nunca se carga entero en memoria (§3.1). Dos fases: `validate` no
 // escribe nada y devuelve el informe linea a linea; `apply` exige
 // `confirm_checksum` con el `file.sha256` que devolvio la validacion, para que
-// lo que se aplica sea exactamente lo que se reviso.
+// lo que se aplica sea exactamente lo que se reviso, y `confirm_rehire_digest` con
+// el `rehire_digest` si lo hubo, para no readmitir a nadie que no se revisara.
 import { requestJson } from '@kronoqr/web-kit/http'
 import type { EmployeeImportMode, EmployeeImportReport } from '@/shared/api/types'
 
@@ -13,6 +14,11 @@ export interface ImportEmployeesInput {
   mode: EmployeeImportMode
   /** Obligatorio con `mode: 'apply'`: el `file.sha256` que devolvio la validacion. */
   confirmChecksum?: string
+  /**
+   * El `rehire_digest` de la validacion, si lo trajo (RN-27): sin el, `apply`
+   * responde `409` en cuanto el fichero readmite a alguien.
+   */
+  confirmRehireDigest?: string | undefined
 }
 
 export function importEmployees(input: ImportEmployeesInput): Promise<EmployeeImportReport> {
@@ -23,6 +29,10 @@ export function importEmployees(input: ImportEmployeesInput): Promise<EmployeeIm
 
   if (input.confirmChecksum !== undefined) {
     form.set('confirm_checksum', input.confirmChecksum)
+  }
+
+  if (input.confirmRehireDigest !== undefined) {
+    form.set('confirm_rehire_digest', input.confirmRehireDigest)
   }
 
   return requestJson<EmployeeImportReport>('/api/v1/employees/import', {

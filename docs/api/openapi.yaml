@@ -11647,9 +11647,9 @@ paths:
                     title: Conflicto con el estado actual
                     status: 409
                     detail: >-
-                      Las personas que se darian de alta de nuevo ya no son las
-                      del resumen revisado. Vuelve a validar el fichero y aplica
-                      con el resumen nuevo.
+                      Las personas que se van a dar de alta de nuevo ya no son
+                      las del resumen revisado. Vuelve a comprobar el fichero y
+                      aplica con el resumen nuevo.
         '415':
           $ref: '#/components/responses/UnsupportedMediaType'
         '422':

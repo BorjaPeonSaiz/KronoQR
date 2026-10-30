@@ -97,6 +97,36 @@ final readonly class ImportReport
     }
 
     /**
+     * Huella de **a quien readmitiria** este informe (RN-27), o `null` si no
+     * readmite a nadie: `sha256` de los `employee_uuid` de las filas `rehire`,
+     * ordenados y sin repetir, unidos por saltos de linea. No depende del orden
+     * de las filas del fichero ni de nada mas que de esas personas.
+     *
+     * La validacion la devuelve y la aplicacion la exige: `confirm_checksum`
+     * prueba que el fichero es el mismo, y esto, que las readmisiones tambien lo
+     * son aunque el estado de la plantilla haya cambiado entre las dos fases.
+     */
+    public function rehireDigest(): ?string
+    {
+        $uuids = [];
+
+        foreach ($this->rows as $row) {
+            if ($row->outcome === ImportOutcome::REHIRE && $row->employeeUuid !== null) {
+                $uuids[$row->employeeUuid] = true;
+            }
+        }
+
+        if ($uuids === []) {
+            return null;
+        }
+
+        $sorted = array_keys($uuids);
+        sort($sorted);
+
+        return hash('sha256', implode("\n", $sorted));
+    }
+
+    /**
      * @param  list<ImportRow>  $rows
      */
     public function withRows(array $rows): self

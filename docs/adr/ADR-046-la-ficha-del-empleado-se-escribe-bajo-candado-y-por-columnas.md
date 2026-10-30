@@ -343,8 +343,14 @@ orden de candados de §1, `FOR NO KEY UPDATE` de §2, la escritura por columnas 
 4. **La importación ya no rechaza la fila de una persona de baja** (§5, primer punto): la planifica
    como `rehire`, con el aviso `rehire_proposed` (ADR-062 §6). El código `employee_terminated` de
    `ImportMessageCode` deja de emitirse, y se conserva en el enumerado para leer informes antiguos.
-   Los dos puntos siguientes de §5, la baja que confirma entre la comprobación y la aplicación o
-   dentro de la propia aplicación, no cambian.
+   La baja que confirma dentro de la propia aplicación no cambia. **La que llega entre la petición de
+   comprobar y la de aplicar sí** (revisión de la 25.3, 30-10-2026): la segunda planificación ya no
+   rechaza esa fila, la propondría como `rehire`, y una readmisión que nadie ha revisado no se aplica.
+   La comprobación devuelve `rehire_digest`, la huella de los `employee_uuid` que se readmitirían, y
+   `apply` la exige en `confirm_rehire_digest`; si no coincide con la de la segunda planificación
+   (también si una readmisión por otra vía ha quitado una), responde `409`
+   `urn:kronoqr:problem:conflict` sin escribir nada. Además, la fila solo propone la readmisión si
+   identifica a la persona por su documento y con el nombre de su ficha (`rehire_identity_mismatch`).
 
 La prueba funcional del punto 6 de §6, «Baja con fecha futura: `422`…», se sustituye por la de la baja
 programada de ADR-062 (cese de hoy o futuro sin `apply_now`: persona en alta, tarjetas y portal sin cambios, asiento

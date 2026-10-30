@@ -81,6 +81,7 @@ async function apply(): Promise<void> {
       file: selectedFile.value,
       mode: 'apply',
       confirmChecksum: report.value.file.sha256,
+      confirmRehireDigest: report.value.rehire_digest,
     })
     setup.importedWithoutPin += report.value.summary.create
   } catch (caught) {
