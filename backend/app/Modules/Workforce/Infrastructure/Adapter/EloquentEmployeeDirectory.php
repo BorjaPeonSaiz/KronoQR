@@ -28,10 +28,13 @@ use Illuminate\Support\Facades\DB;
  * —nombre de pila e inicial del primer apellido, §7.3— se decida en un solo
  * sitio. Un token de quiosco robado no debe permitir reconstruir la plantilla.
  *
- * **Los periodos de alta (RN-27) viajan en la misma consulta**, como una
+ * **Los periodos de alta (RN-27) solo para el camino manual**
+ * ({ self::findWithEmploymentPeriods()}), en la misma consulta, como una
  * subconsulta correlacionada que los agrega en JSON por el indice de
- * `employment_periods_no_overlap`: una sola ida a la base y una sola forma de
- * consulta, exista o no la persona, como pide el aviso de RN-22.
+ * `employment_periods_no_overlap`. El fichaje y el aviso de RN-22 no los leen:
+ * { self::find()} y { self::findByCode()} no pagan esa agregacion en el
+ * camino caliente (RNF-P-01), y su consulta sigue teniendo una sola forma,
+ * exista o no la persona.
  */
 final readonly class EloquentEmployeeDirectory implements EmployeeDirectory
 {
@@ -53,6 +56,11 @@ final readonly class EloquentEmployeeDirectory implements EmployeeDirectory
         return $this->snapshotOf($this->query()->where('uuid', $employeeUuid)->first());
     }
 
+    public function findWithEmploymentPeriods(string $employeeUuid): ?EmployeeSnapshot
+    {
+        return $this->snapshotOf($this->query()->addSelect(DB::raw(self::PERIODS))->where('uuid', $employeeUuid)->first());
+    }
+
     public function findByCode(string $employeeCode): ?EmployeeSnapshot
     {
         // La misma consulta, exista o no el codigo: un acceso al indice
@@ -65,7 +73,7 @@ final readonly class EloquentEmployeeDirectory implements EmployeeDirectory
      */
     private function query(): Builder
     {
-        return Employee::query()->select(self::COLUMNS)->addSelect(DB::raw(self::PERIODS));
+        return Employee::query()->select(self::COLUMNS);
     }
 
     private function snapshotOf(?Employee $row): ?EmployeeSnapshot

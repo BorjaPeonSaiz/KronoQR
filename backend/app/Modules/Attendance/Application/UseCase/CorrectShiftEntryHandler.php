@@ -153,7 +153,7 @@ final readonly class CorrectShiftEntryHandler
         // zona es la de la jornada: la del centro con que se atribuyo (RN-23).
         $continuation = ContinuationCeilings::forSite($this->compliance, $workDay->siteId());
         $previous = $workDay->entry($command->shiftEntryUuid)->times();
-        $employee = $this->employees->find($workDay->employeeUuid());
+        $employee = $this->employees->findWithEmploymentPeriods($workDay->employeeUuid());
 
         if ($employee instanceof EmployeeSnapshot) {
             ManualEntryRecheck::assertAllowed($employee, $workDay->workDate(), $times, $continuation, false, $previous);

@@ -206,6 +206,11 @@ function guardianDePrueba(array $piezas = []): UnprocessableScanGuard
                 return null;
             }
 
+            public function findWithEmploymentPeriods(string $employeeUuid): ?EmployeeSnapshot
+            {
+                return null;
+            }
+
             public function findByCode(string $employeeCode): ?EmployeeSnapshot
             {
                 return null;

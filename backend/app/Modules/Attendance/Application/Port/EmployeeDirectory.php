@@ -31,6 +31,15 @@ interface EmployeeDirectory
     public function find(string $employeeUuid): ?EmployeeSnapshot;
 
     /**
+     * Lo mismo que {@see self::find()}, **con sus periodos de alta** (RN-27) en
+     * `EmployeeSnapshot::$employmentPeriods`. Solo el camino manual del panel
+     * los necesita (`ManualEntryEligibility`): el fichaje usa {@see self::find()},
+     * que no los lee, para no pagar la agregacion en el camino caliente
+     * (RNF-P-01).
+     */
+    public function findWithEmploymentPeriods(string $employeeUuid): ?EmployeeSnapshot;
+
+    /**
      * El empleado con ese **codigo de empleado**, o `null` si no existe (RN-22).
      *
      * Lo usa el aviso de fichaje descartado por PIN para atribuirlo a quien
