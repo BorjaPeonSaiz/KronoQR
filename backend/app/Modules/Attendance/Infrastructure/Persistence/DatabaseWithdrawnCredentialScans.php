@@ -20,9 +20,13 @@ use Illuminate\Database\ConnectionInterface;
  * credencial (`rejected_revoked` o `rejected_unknown`) **con** `employee_id` y
  * marcado para revision— y aqui solo se lee. Las tres condiciones juntas solo
  * las cumple RN-20: un rechazo de credencial sin titular no lleva `employee_id`,
- * y con titular no se marca si fue posterior a la retirada. El origen
- * `qr_kiosk` lo acota a la tarjeta: el PIN de una persona de baja queda fuera
- * hasta que se amplie ADR-043.
+ * y con titular no se marca si fue posterior a la retirada. **Desde la 2.3.0
+ * tambien el PIN** (`pin_kiosk`, D15, enmienda del 29-10-2026 de ADR-043): el PIN
+ * correcto de una persona de baja con fecha dentro de su periodo se escribe
+ * igual, `rejected_unknown` con `employee_id` y marca. Ningun otro rechazo de PIN
+ * lleva `employee_id` y marca a la vez: el fichaje por PIN aceptado si se marca
+ * (RF-AT-11), pero no es un rechazo. La revision agrupa por persona y jornada,
+ * asi que un dia con tarjeta y con PIN abre una sola incidencia.
  *
  * Entra por `scan_events_flagged_for_review_index`, parcial sobre las filas
  * marcadas y ordenado por `recorded_at`: es exactamente el rango que se pide.
@@ -32,6 +36,8 @@ use Illuminate\Database\ConnectionInterface;
 final readonly class DatabaseWithdrawnCredentialScans implements WithdrawnCredentialScans
 {
     private const string QR_KIOSK = 'qr_kiosk';
+
+    private const string PIN_KIOSK = 'pin_kiosk';
 
     private const string TERMINATED = 'terminated';
 
@@ -43,7 +49,7 @@ final readonly class DatabaseWithdrawnCredentialScans implements WithdrawnCreden
         $rows = $this->connection->table('scan_events')
             ->join('employees', 'employees.id', '=', 'scan_events.employee_id')
             ->where('scan_events.flagged_for_review', true)
-            ->where('scan_events.origin', self::QR_KIOSK)
+            ->whereIn('scan_events.origin', [self::QR_KIOSK, self::PIN_KIOSK])
             ->whereIn('scan_events.result', [ScanResult::REJECTED_REVOKED->value, ScanResult::REJECTED_UNKNOWN->value])
             ->whereBetween('scan_events.recorded_at', [
                 $this->toTimestamp($fromRecordedAt),

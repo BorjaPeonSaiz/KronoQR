@@ -450,3 +450,61 @@ it('no verifica en el portal el PIN de una persona de baja', function (): void {
     expect($verificacion->isVerified())->toBeFalse()
         ->and($verificacion->employeeUuid())->toBeNull();
 })->group('RN-14', 'RN-25', 'RS-03');
+
+// --- D15: el PIN correcto de una persona de baja (enmienda de ADR-043) ---------
+
+it('entrega a la persona de baja con su periodo y la zona del centro solo si el PIN es el suyo y en el quiosco', function (): void {
+    // RN-20, D15: el PIN acerto contra su hash real, asi que identifica, pero no
+    // autentica. Las fechas son las del fixture (alta 2026-01-01, cese
+    // 2026-06-30) y la zona, la del centro del PIN.
+    $deBaja = empleadoConPin(PIN_BUENO, 'terminated');
+
+    $acierto = verificador()->verify($deBaja['code'], PIN_BUENO, PinOrigin::KIOSK);
+    $fallo = verificador()->verify($deBaja['code'], PIN_MALO, PinOrigin::KIOSK);
+    $enElPortal = verificador()->verify($deBaja['code'], PIN_BUENO, PinOrigin::PORTAL);
+
+    $persona = $acierto->offboardedHolder();
+
+    expect($acierto->isVerified())->toBeFalse()
+        ->and($acierto->employeeUuid())->toBeNull()
+        ->and($acierto->claim())->toBeNull()
+        ->and($persona?->employeeUuid)->toBe($deBaja['uuid'])
+        ->and($persona?->hiredOn)->toBe('2026-01-01')
+        ->and($persona?->terminatedOn)->toBe('2026-06-30')
+        ->and($persona?->timezone->getName())->toBe('Europe/Madrid')
+        // Un PIN incorrecto no identifica a nadie, y el portal no la recibe.
+        ->and($fallo->offboardedHolder())->toBeNull()
+        ->and($fallo->claim())->toBeNull()
+        ->and($enElPortal->offboardedHolder())->toBeNull();
+})->group('RN-20', 'RN-14', 'RS-03');
+
+it('no entrega a nadie con el bloqueo activo ni a una persona suspendida', function (): void {
+    // El bloqueo compara contra el señuelo (RS-12): no se sabe si acerto. Y la
+    // suspension no es una baja.
+    $suspendida = empleadoConPin(PIN_BUENO, 'suspended');
+    $deBaja = empleadoConPin(PIN_BUENO, 'terminated');
+
+    verificador()->verify($deBaja['code'], PIN_MALO, PinOrigin::KIOSK);
+    verificador()->verify($deBaja['code'], PIN_MALO, PinOrigin::KIOSK);
+    verificador()->verify($deBaja['code'], PIN_MALO, PinOrigin::KIOSK);
+
+    $bloqueada = verificador()->verify($deBaja['code'], PIN_BUENO, PinOrigin::KIOSK);
+
+    expect($bloqueada->isLocked())->toBeTrue()
+        ->and($bloqueada->offboardedHolder())->toBeNull()
+        ->and(verificador()->verify($suspendida['code'], PIN_BUENO, PinOrigin::KIOSK)->offboardedHolder())->toBeNull();
+})->group('RN-20', 'RS-12', 'RN-25');
+
+it('no borra el contador ni rehashea con el acierto de una persona de baja', function (): void {
+    // Enmienda de ADR-043, punto 6: la persona de baja no se autentica. Dos
+    // fallos y un acierto siguen siendo tres intentos: el tercero abre el bloqueo.
+    $deBaja = empleadoConPin(PIN_BUENO, 'terminated');
+    $hashAntes = pinHashDe($deBaja['uuid']);
+
+    verificador()->verify($deBaja['code'], PIN_MALO, PinOrigin::KIOSK);
+    verificador()->verify($deBaja['code'], PIN_MALO, PinOrigin::KIOSK);
+    verificador()->verify($deBaja['code'], PIN_BUENO, PinOrigin::KIOSK);
+
+    expect(verificador()->verify($deBaja['code'], PIN_BUENO, PinOrigin::KIOSK)->isLocked())->toBeTrue()
+        ->and(pinHashDe($deBaja['uuid']))->toBe($hashAntes);
+})->group('RN-20', 'RS-12');

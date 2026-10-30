@@ -9,9 +9,12 @@ use App\Modules\Shared\Application\Port\EmployeePinVerifier;
 use App\Modules\Shared\Application\Port\PinAttempts;
 use App\Modules\Shared\Domain\ValueObject\AuthFailureReason;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
+use App\Modules\Shared\Domain\ValueObject\OffboardedPinHolder;
 use App\Modules\Shared\Domain\ValueObject\PinClaim;
 use App\Modules\Shared\Domain\ValueObject\PinOrigin;
 use App\Modules\Shared\Domain\ValueObject\PinVerification;
+use DateTimeZone;
+use Exception;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use SensitiveParameter;
@@ -77,6 +80,14 @@ use SensitiveParameter;
  * `scan_events.claimed_employee_id`; la respuesta, el evento y el log siguen
  * sin poder distinguir nada. Se construye con lo que ya habia en `$employee`:
  * **ninguna E/S nueva**, asi que el tiempo de los cinco caminos no cambia.
+ *
+ * **Desde la 2.3.0 (D15, enmienda del 29-10-2026 de ADR-043)**, el PIN
+ * **correcto** de una persona **de baja**, en el quiosco, baja como
+ * `PinVerification::rejectedOffboarded()`: el mismo rechazo, el mismo apunte y
+ * el mismo contador —la persona de baja no se autentica—, con la persona, las
+ * fechas de su periodo y la zona del centro para que el fichaje decida si
+ * atribuye la fila. Las fechas y la zona salen de la misma consulta que ya se
+ * hace para todos los codigos.
  *
  * ## El contador del señuelo no bloquea a nadie
  *
@@ -182,6 +193,15 @@ final readonly class HashedEmployeePinVerifier implements EmployeePinVerifier
                 $this->journal->lockoutStarted($channel, $employee['uuid'], $opened);
             }
 
+            // D15 (enmienda del 29-10-2026 de ADR-043): el PIN correcto de una
+            // persona de baja baja con ella, solo para la fila. Sin E/S nueva y
+            // sin tocar el contador: la persona de baja no se autentica.
+            $offboarded = $this->offboardedHolderOf($employee, $matches, $origin);
+
+            if ($offboarded instanceof OffboardedPinHolder) {
+                return PinVerification::rejectedOffboarded($offboarded);
+            }
+
             // RN-19: con un codigo inexistente `claimOf()` devuelve `null`.
             return PinVerification::rejected($this->claimOf($employee, lockout: $opened > 0));
         }
@@ -235,7 +255,7 @@ final readonly class HashedEmployeePinVerifier implements EmployeePinVerifier
      * Una sola sentencia y no un `SELECT` seguido de un `UPDATE`: sin transaccion
      * alrededor, el candado de la fila dura lo que dura la sentencia.
      *
-     * @param  array{uuid: string, status: string, pin_hash: string|null}  $employee
+     * @param  array{uuid: string, status: string, pin_hash: string|null, hired_on: string|null, terminated_on: string|null, timezone: string|null}  $employee
      */
     private function rehashIfStale(array $employee, #[SensitiveParameter] string $pin): void
     {
@@ -262,7 +282,7 @@ final readonly class HashedEmployeePinVerifier implements EmployeePinVerifier
      * ADR-043). Sin E/S: todo esta ya en `$employee`, y por eso no altera el
      * tiempo de ningun camino (RS-03).
      *
-     * @param  array{uuid: string, status: string, pin_hash: string|null}|null  $employee
+     * @param  array{uuid: string, status: string, pin_hash: string|null, hired_on: string|null, terminated_on: string|null, timezone: string|null}|null  $employee
      */
     private function claimOf(?array $employee, bool $lockout): ?PinClaim
     {
@@ -274,13 +294,51 @@ final readonly class HashedEmployeePinVerifier implements EmployeePinVerifier
     }
 
     /**
+     * La persona **de baja** cuyo PIN acaba de acertar en el quiosco (RN-20,
+     * D15), o `null`.
+     *
+     * Solo con el PIN comparado contra su hash real —`$matches` es falso con el
+     * señuelo y con el bloqueo, que compara contra el señuelo—, solo en el
+     * quiosco y solo con las dos fechas del periodo y la zona del centro: sin
+     * ellas no hay periodo con el que comparar y no se afirma nada. Sin E/S:
+     * todo esta ya en `$employee` (RS-03).
+     *
+     * @param  array{uuid: string, status: string, pin_hash: string|null, hired_on: string|null, terminated_on: string|null, timezone: string|null}|null  $employee
+     */
+    private function offboardedHolderOf(?array $employee, bool $matches, PinOrigin $origin): ?OffboardedPinHolder
+    {
+        if ($employee === null
+            || ! $matches
+            || $origin !== PinOrigin::KIOSK
+            || EmploymentStatus::from($employee['status']) !== EmploymentStatus::TERMINATED
+            || $employee['hired_on'] === null
+            || $employee['terminated_on'] === null
+            || $employee['timezone'] === null) {
+            return null;
+        }
+
+        try {
+            return OffboardedPinHolder::of(
+                $employee['uuid'],
+                $employee['hired_on'],
+                $employee['terminated_on'],
+                new DateTimeZone($employee['timezone']),
+            );
+        } catch (Exception) {
+            // Una zona o unas fechas que no se pueden leer no atribuyen nada: el
+            // rechazo sigue siendo el mismo (regla dura 19, el quiosco ya cerro).
+            return null;
+        }
+    }
+
+    /**
      * Contra que hash se compara este intento.
      *
      * **Nunca devuelve nada que no sea un hash valido**: el señuelo cubre los
      * cuatro caminos donde no hay uno real —no hay empleado, no hay PIN emitido,
      * o lo hay pero el bloqueo esta puesto y RS-12 prohibe mirarlo—.
      *
-     * @param  array{uuid: string, status: string, pin_hash: string|null}|null  $employee
+     * @param  array{uuid: string, status: string, pin_hash: string|null, hired_on: string|null, terminated_on: string|null, timezone: string|null}|null  $employee
      */
     private function hashToCompare(?array $employee, bool $locked): string
     {
@@ -305,7 +363,7 @@ final readonly class HashedEmployeePinVerifier implements EmployeePinVerifier
      * aunque no pueda fichar (RL-05). La baja no entra por ninguna. Lo decide
      * `EmploymentStatus::admitsPinFrom()`, no este adaptador.
      *
-     * @param  array{uuid: string, status: string, pin_hash: string|null}  $employee
+     * @param  array{uuid: string, status: string, pin_hash: string|null, hired_on: string|null, terminated_on: string|null, timezone: string|null}  $employee
      */
     private function isRejected(array $employee, bool $matches, PinOrigin $origin): bool
     {
@@ -319,13 +377,24 @@ final readonly class HashedEmployeePinVerifier implements EmployeePinVerifier
      * distinguir mayusculas: quien teclea su codigo en una tablet con guantes no
      * tiene por que acertar la caja.
      *
-     * @return array{uuid: string, status: string, pin_hash: string|null}|null
+     * @return array{uuid: string, status: string, pin_hash: string|null, hired_on: string|null, terminated_on: string|null, timezone: string|null}|null
      */
     private function findByCode(string $employeeCode): ?array
     {
+        // Las fechas del periodo en curso y la zona del centro van en LA MISMA
+        // consulta para todos los codigos (D15): una segunda lectura solo para
+        // el PIN correcto de una persona de baja seria un oraculo de tiempo.
         $row = DB::table('employees')
-            ->select(['uuid', 'status', 'pin_hash'])
-            ->where('employee_code', $employeeCode)
+            ->leftJoin('sites', 'sites.id', '=', 'employees.site_id')
+            ->select([
+                'employees.uuid',
+                'employees.status',
+                'employees.pin_hash',
+                'employees.hired_at',
+                'employees.terminated_at',
+                'sites.timezone',
+            ])
+            ->where('employees.employee_code', $employeeCode)
             ->first();
 
         if ($row === null) {
@@ -343,7 +412,26 @@ final readonly class HashedEmployeePinVerifier implements EmployeePinVerifier
         return [
             'uuid' => $uuid,
             'status' => $status,
-            'pin_hash' => \is_string($hash) && $hash !== '' ? $hash : null,
+            'pin_hash' => self::stringOrNull($hash),
+            'hired_on' => self::civilDateOf($row->hired_at ?? null),
+            'terminated_on' => self::civilDateOf($row->terminated_at ?? null),
+            'timezone' => self::stringOrNull($row->timezone ?? null),
         ];
+    }
+
+    /**
+     * La columna `DATE` tal como la devuelve el controlador (`Y-m-d`, quiza con
+     * hora), o `null`.
+     */
+    private static function civilDateOf(mixed $value): ?string
+    {
+        $text = self::stringOrNull($value);
+
+        return $text === null ? null : substr($text, 0, 10);
+    }
+
+    private static function stringOrNull(mixed $value): ?string
+    {
+        return \is_string($value) && $value !== '' ? $value : null;
     }
 }
