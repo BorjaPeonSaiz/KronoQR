@@ -101,6 +101,21 @@ final class WorkforceFixtures
     }
 
     /**
+     * Inserta fichas en bloque, para las pruebas de volumen, **con su periodo de
+     * alta en la misma transaccion** (RN-27): sin el, el disparador diferido
+     * `employees_current_period_matches` rechazaria el `COMMIT`.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     */
+    public static function insertEmployees(array $rows): void
+    {
+        DB::transaction(static function () use ($rows): void {
+            DB::table('employees')->insert($rows);
+            self::openEmploymentPeriods();
+        });
+    }
+
+    /**
      * Abre el periodo de alta de cada ficha que aun no tiene ninguno, con sus
      * mismas fechas y estado (RN-27). Para las pruebas que escriben `employees`
      * con el constructor de consultas: se llama en la misma transaccion.

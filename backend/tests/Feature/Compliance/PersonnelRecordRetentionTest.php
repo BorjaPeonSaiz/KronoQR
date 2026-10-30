@@ -62,13 +62,12 @@ beforeEach(function (): void {
 function fichaVencida(): array
 {
     $code = 'E'.Str::upper(Str::random(9));
-    $uuid = WorkforceFixtures::employee(WorkforceFixtures::onlySiteId(), status: 'terminated', firstName: 'Lucia', lastName: 'Ferrer', employeeCode: $code);
+    $uuid = WorkforceFixtures::employee(WorkforceFixtures::onlySiteId(), status: 'terminated', firstName: 'Lucia', lastName: 'Ferrer', employeeCode: $code, hiredAt: '2010-01-01', terminatedAt: '2015-06-30');
     $id = DB::table('employees')->where('uuid', $uuid)->value('id');
     $id = \is_int($id) ? $id : 0;
 
+    // Las fechas, desde el alta: la base no deja moverlas despues (ADR-062 §2).
     DB::table('employees')->where('id', $id)->update([
-        'hired_at' => '2010-01-01',
-        'terminated_at' => '2015-06-30',
         'email' => 'lucia@hotel.example',
         'photo_path' => 'fotos/'.$uuid.'.jpg',
     ]);

@@ -221,11 +221,13 @@ it('cierra el contrato abierto en el cese y abre otro con sus terminos, o ningun
         ->post('/api/v1/employees/'.$escenario['employee'].'/rehire', ['hired_at' => REHIRE_TEST_RETURN])
         ->assertValidResponse(200);
 
-    $contratos = DB::table('employment_contracts')->where('employee_id', $empleado)->orderBy('valid_from')->get(['valid_from', 'valid_to', 'weekly_hours', 'schedule_type']);
+    /** @var list<object{valid_from: string, valid_to: string|null, weekly_hours: string, schedule_type: string}> $contratos */
+    $contratos = DB::table('employment_contracts')->where('employee_id', $empleado)->orderBy('valid_from')
+        ->get(['valid_from', 'valid_to', 'weekly_hours', 'schedule_type'])->all();
 
     expect($contratos)->toHaveCount(2)
-        ->and((string) $contratos[0]->valid_to)->toBe(REHIRE_TEST_TERMINATION)
-        ->and((string) $contratos[1]->valid_from)->toBe(REHIRE_TEST_RETURN)
+        ->and($contratos[0]->valid_to)->toBe(REHIRE_TEST_TERMINATION)
+        ->and($contratos[1]->valid_from)->toBe(REHIRE_TEST_RETURN)
         ->and($contratos[1]->valid_to)->toBeNull()
         ->and((float) $contratos[1]->weekly_hours)->toBe(30.0)
         ->and($contratos[1]->schedule_type)->toBe('turnos');
@@ -315,3 +317,37 @@ it('si una no se puede readmitir no readmite a ninguna y dice cual y por que', f
         ->and(asientosDeLaReadmision('employee.rehired'))->toBe([])
         ->and(DB::table('employment_periods')->count())->toBe(DB::table('employees')->count());
 })->group('RN-27');
+
+it('responde 404 a la readmision de una persona que no existe', function (): void {
+    FrozenTime::at(REHIRE_TEST_RETURN.' 08:00:00');
+    AttendanceFixtures::scenario();
+
+    Api::as(tokenDeLaReadmision())
+        ->post('/api/v1/employees/0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90/rehire', ['hired_at' => REHIRE_TEST_RETURN])
+        ->assertValidResponse(404);
+})->group('RN-27');
+
+it('en lote, un contrato que pisaria el periodo nuevo responde 409 y no readmite a nadie', function (): void {
+    $escenario = personaDeBajaParaReadmitir();
+    $otra = WorkforceFixtures::employee($escenario['site'], $escenario['department'], 'terminated');
+
+    // Un contrato abierto que empieza despues de la fecha de alta comun.
+    DB::table('employment_contracts')->insert([
+        'employee_id' => AttendanceFixtures::employeeIdOf($otra),
+        'weekly_hours' => 20,
+        'schedule_type' => 'continua',
+        'valid_from' => '2027-05-01',
+        'valid_to' => null,
+        'created_at' => now(),
+    ]);
+
+    Api::as(tokenDeLaReadmision())
+        ->post('/api/v1/employees/rehire', [
+            'employee_uuids' => [$escenario['employee'], $otra],
+            'hired_at' => REHIRE_TEST_RETURN,
+        ])
+        ->assertValidResponse(409);
+
+    expect(asientosDeLaReadmision('employee.rehired'))->toBe([])
+        ->and(DB::table('employees')->whereIn('uuid', [$escenario['employee'], $otra])->where('status', 'terminated')->count())->toBe(2);
+})->group('RN-27', 'RF-GP-02');

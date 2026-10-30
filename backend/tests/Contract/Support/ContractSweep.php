@@ -94,6 +94,8 @@ final class ContractSweep
             'POST /api/v1/credentials/{uuid}/revoke' => self::BODY_FIRST,
             'POST /api/v1/employees/{uuid}/contracts' => self::BODY_FIRST,
             'POST /api/v1/employees/{uuid}/offboard' => self::BODY_FIRST,
+            'POST /api/v1/employees/{uuid}/rehire' => self::BODY_FIRST,
+            'POST /api/v1/employees/{uuid}/employment-periods/{periodUuid}/termination-corrections' => self::BODY_FIRST,
             'POST /api/v1/incidents/{id}/resolve' => self::BODY_FIRST,
             'POST /api/v1/management-accounts/{uuid}/deactivate' => self::BODY_FIRST,
             'POST /api/v1/management-accounts/{uuid}/password/reset' => self::BODY_FIRST,
@@ -287,7 +289,7 @@ final class ContractSweep
     {
         [$method, $path] = explode(' ', $operation, 2);
 
-        return [$method, str_replace(['{uuid}', '{id}', '{step}'], [AuthorizationMatrix::UUID, self::MISSING_ID, 'site'], $path)];
+        return [$method, str_replace(['{uuid}', '{periodUuid}', '{id}', '{step}'], [AuthorizationMatrix::UUID, AuthorizationMatrix::UUID, self::MISSING_ID, 'site'], $path)];
     }
 
     /**

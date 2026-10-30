@@ -349,8 +349,8 @@ final class AuthorizationMatrix
         $employeeUri = str_starts_with($uri, 'api/v1/employees/{uuid}');
 
         $concrete = str_replace(
-            ['{uuid}', '{id}', '{step}'],
-            [$employeeUri ? $installation['employee'] : self::UUID, '1', 'site'],
+            ['{uuid}', '{periodUuid}', '{id}', '{step}'],
+            [$employeeUri ? $installation['employee'] : self::UUID, self::UUID, '1', 'site'],
             $uri,
         );
 

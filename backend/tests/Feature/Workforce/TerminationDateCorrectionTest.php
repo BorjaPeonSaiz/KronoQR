@@ -58,16 +58,11 @@ function omarDeBajaDesdeEl15(): array
     return ['employee' => $escenario['employee'], 'period' => $period, 'employeeId' => $id];
 }
 
-function rutaDeLaCorreccionDelCese(string $employee, string $period): string
-{
-    return '/api/v1/employees/'.$employee.'/employment-periods/'.$period.'/termination-corrections';
-}
-
 it('corrige la fecha de cese con motivo, conserva la anterior y deja un asiento sin el motivo', function (): void {
     $omar = omarDeBajaDesdeEl15();
 
     Api::as(tokenDeLaCorreccionDelCese())
-        ->post(rutaDeLaCorreccionDelCese($omar['employee'], $omar['period']), [
+        ->post('/api/v1/employees/'.$omar['employee'].'/employment-periods/'.$omar['period'].'/termination-corrections', [
             'terminated_at' => '2026-10-18',
             'reason' => TERMINATION_CORRECTION_REASON,
         ])
@@ -111,7 +106,7 @@ it('los dias que gana el periodo admiten tramos a mano', function (): void {
     Api::as($token)->post('/api/v1/shift-entries', $tramo)->assertValidResponse(422);
 
     Api::as($token)
-        ->post(rutaDeLaCorreccionDelCese($omar['employee'], $omar['period']), [
+        ->post('/api/v1/employees/'.$omar['employee'].'/employment-periods/'.$omar['period'].'/termination-corrections', [
             'terminated_at' => '2026-10-18',
             'reason' => TERMINATION_CORRECTION_REASON,
         ])
@@ -124,7 +119,7 @@ it('rechaza una fecha posterior a hoy, anterior al alta o un motivo corto con 42
     $omar = omarDeBajaDesdeEl15();
 
     Api::as(tokenDeLaCorreccionDelCese())
-        ->post(rutaDeLaCorreccionDelCese($omar['employee'], $omar['period']), $cuerpo)
+        ->post('/api/v1/employees/'.$omar['employee'].'/employment-periods/'.$omar['period'].'/termination-corrections', $cuerpo)
         ->assertValidResponse(422)
         ->assertJsonValidationErrorFor($campo);
 
@@ -150,7 +145,7 @@ it('una baja programada no se corrige: 409 offboarding-not-effective', function 
     $period = DB::table('employment_periods')->where('employee_id', AttendanceFixtures::employeeIdOf($escenario['employee']))->value('uuid');
 
     Api::as(tokenDeLaCorreccionDelCese())
-        ->post(rutaDeLaCorreccionDelCese($escenario['employee'], $period), [
+        ->post('/api/v1/employees/'.$escenario['employee'].'/employment-periods/'.$period.'/termination-corrections', [
             'terminated_at' => '2026-10-29',
             'reason' => TERMINATION_CORRECTION_REASON,
         ])
@@ -162,7 +157,7 @@ it('un periodo que no es de esa persona responde 404', function (): void {
     $omar = omarDeBajaDesdeEl15();
 
     Api::as(tokenDeLaCorreccionDelCese())
-        ->post(rutaDeLaCorreccionDelCese($omar['employee'], '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b91'), [
+        ->post('/api/v1/employees/'.$omar['employee'].'/employment-periods/0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b91/termination-corrections', [
             'terminated_at' => '2026-10-18',
             'reason' => TERMINATION_CORRECTION_REASON,
         ])
@@ -178,7 +173,7 @@ it('corrige el cese de un periodo anterior a una readmision sin alcanzar el sigu
         ->assertValidResponse(200);
 
     Api::as($token)
-        ->post(rutaDeLaCorreccionDelCese($omar['employee'], $omar['period']), [
+        ->post('/api/v1/employees/'.$omar['employee'].'/employment-periods/'.$omar['period'].'/termination-corrections', [
             'terminated_at' => '2026-10-25',
             'reason' => TERMINATION_CORRECTION_REASON,
         ])
@@ -186,7 +181,7 @@ it('corrige el cese de un periodo anterior a una readmision sin alcanzar el sigu
         ->assertJsonValidationErrorFor('terminated_at');
 
     Api::as($token)
-        ->post(rutaDeLaCorreccionDelCese($omar['employee'], $omar['period']), [
+        ->post('/api/v1/employees/'.$omar['employee'].'/employment-periods/'.$omar['period'].'/termination-corrections', [
             'terminated_at' => '2026-10-24',
             'reason' => TERMINATION_CORRECTION_REASON,
         ])

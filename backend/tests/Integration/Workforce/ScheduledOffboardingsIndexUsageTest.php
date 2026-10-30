@@ -50,7 +50,7 @@ function plantillaParaElIndiceDeBajas(int $site): void
     }
 
     foreach (array_chunk($filas, 1_000) as $tanda) {
-        DB::table('employees')->insert($tanda);
+        WorkforceFixtures::insertEmployees($tanda);
     }
 
     QueryPlans::analyze('employees');

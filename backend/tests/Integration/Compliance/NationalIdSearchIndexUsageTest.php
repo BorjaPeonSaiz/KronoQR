@@ -30,14 +30,18 @@ const NATIONAL_ID_SEARCH_INDEX_EMPLEADOS = 3_000;
 it('busca por DNI con el indice del hash, sin recorrer employees', function (): void {
     $site = WorkforceFixtures::site('Hotel con plantilla grande');
 
-    DB::insert(<<<'SQL'
-        INSERT INTO employees (uuid, site_id, first_name, last_name, employee_code, national_id_hash,
-                               status, hired_at, locale, created_at, updated_at)
-        SELECT gen_random_uuid(), ?, 'Persona', 'Numero ' || g, 'IDX' || g,
-               digest('DOC' || lpad(g::text, 6, '0') || 'X', 'sha256'),
-               'active', DATE '2026-01-01', 'es', now(), now()
-          FROM generate_series(1, ?) AS g
-        SQL, [$site, NATIONAL_ID_SEARCH_INDEX_EMPLEADOS]);
+    // Con su periodo de alta en la misma transaccion (RN-27).
+    DB::transaction(static function () use ($site): void {
+        DB::insert(<<<'SQL'
+            INSERT INTO employees (uuid, site_id, first_name, last_name, employee_code, national_id_hash,
+                                   status, hired_at, locale, created_at, updated_at)
+            SELECT gen_random_uuid(), ?, 'Persona', 'Numero ' || g, 'IDX' || g,
+                   digest('DOC' || lpad(g::text, 6, '0') || 'X', 'sha256'),
+                   'active', DATE '2026-01-01', 'es', now(), now()
+              FROM generate_series(1, ?) AS g
+            SQL, [$site, NATIONAL_ID_SEARCH_INDEX_EMPLEADOS]);
+        WorkforceFixtures::openEmploymentPeriods();
+    });
 
     QueryPlans::analyze('employees');
 
