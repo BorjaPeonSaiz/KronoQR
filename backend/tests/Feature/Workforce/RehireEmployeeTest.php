@@ -6,7 +6,10 @@ use App\Exceptions\ProblemDetails;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use App\Modules\Workforce\Infrastructure\Persistence\Department;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Illuminate\Testing\TestResponse;
 use Spectator\Spectator;
+use Symfony\Component\HttpFoundation\Response;
 use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
@@ -462,3 +465,63 @@ it('tras la readmision se registra y se corrige una ausencia del periodo anterio
 
     expect(DB::table('absences')->where('status', 'active')->pluck('ends_on')->all())->toBe(['2026-03-10']);
 })->group('RF-GP-04', 'RN-27');
+
+/**
+ * @return TestResponse<Response>
+ */
+function ficharTrasLaReadmision(string $deviceToken, string $card, string $occurredAt): TestResponse
+{
+    $scanId = Str::uuid7()->toString();
+
+    return Api::as($deviceToken)
+        ->withHeaders(['Idempotency-Key' => $scanId])
+        ->post('/api/v1/scan', ['scan_id' => $scanId, 'occurred_at' => $occurredAt, 'qr_payload' => $card]);
+}
+
+it('rechaza con el rechazo generico un fichaje de la cola cuya jornada cae en el hueco, y admite el del dia de la vuelta', function (): void {
+    // ADR-062 §6 (decision del 30-10-2026): una jornada anterior al alta del
+    // periodo en curso se trata como la posterior al cese. El hueco no se
+    // puede corregir desde el panel, asi que tampoco entra por el quiosco.
+    $escenario = personaDeBajaParaReadmitir();
+
+    Api::as(tokenDeLaReadmision())
+        ->post('/api/v1/employees/'.$escenario['employee'].'/rehire', ['hired_at' => REHIRE_TEST_RETURN])
+        ->assertValidResponse(200);
+
+    $tarjeta = Credentials::issueFor(AttendanceFixtures::employeeIdOf($escenario['employee']))->toString();
+
+    // Desde la cola: 31 de marzo, la vispera de la vuelta.
+    $enElHueco = ficharTrasLaReadmision($escenario['token'], $tarjeta, '2027-03-31T10:00:00Z');
+    $desconocida = ficharTrasLaReadmision($escenario['token'], Credentials::signedWithUnknownKey()->toString(), '2027-03-31T10:01:00Z');
+
+    $enElHueco->assertStatus(422)->assertValidResponse(422);
+    $cuerpo = (array) $enElHueco->json();
+    $otro = (array) $desconocida->json();
+    unset($cuerpo['scan_id'], $otro['scan_id']);
+
+    $fila = DB::table('scan_events')->where('scan_id', $enElHueco->json('scan_id'))->first();
+
+    expect($cuerpo)->toBe($otro)
+        ->and($fila?->result)->toBe('rejected_unknown')
+        ->and($fila?->employee_id)->toBe(AttendanceFixtures::employeeIdOf($escenario['employee']))
+        ->and(DB::table('shift_entries')->where('work_date', '<', REHIRE_TEST_RETURN)->where('work_date', '>', REHIRE_TEST_TERMINATION)->count())->toBe(0);
+
+    // El dia de la vuelta, si.
+    ficharTrasLaReadmision($escenario['token'], $tarjeta, REHIRE_TEST_RETURN.'T06:30:00Z')->assertOk();
+
+    expect(DB::table('shift_entries')->where('work_date', REHIRE_TEST_RETURN)->count())->toBe(1);
+})->group('RN-27', 'RS-03', 'RF-AT-02');
+
+it('rechaza el fichaje de quien aun no ha llegado a su fecha de alta, readmitida o no', function (): void {
+    // Alta el 1 de enero de 2026; el 31 de diciembre todavia no.
+    FrozenTime::at('2025-12-31 10:00:00');
+    $escenario = AttendanceFixtures::scenario();
+    $tarjeta = Credentials::issueFor(AttendanceFixtures::employeeIdOf($escenario['employee']))->toString();
+
+    ficharTrasLaReadmision($escenario['token'], $tarjeta, '2025-12-31T09:00:00Z')
+        ->assertStatus(422)
+        ->assertValidResponse(422);
+
+    expect(DB::table('shift_entries')->count())->toBe(0)
+        ->and(DB::table('scan_events')->value('result'))->toBe('rejected_unknown');
+})->group('RN-27', 'RS-03', 'RF-AT-02');

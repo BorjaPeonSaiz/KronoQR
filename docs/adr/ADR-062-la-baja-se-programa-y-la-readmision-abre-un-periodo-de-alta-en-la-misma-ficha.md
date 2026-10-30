@@ -469,6 +469,13 @@ por rol (regla dura 18).
   DPO del cliente, igual que el plazo de `absences` (33.11). Está en la lista de validación jurídica
   del plan de la 2.3.0 (decisión del propietario del 29-10-2026: el diseño no cambia).
 - **Hay una tarea programada más**, con su métrica, su alerta y su comprobación en `product:doctor`.
+- **Un fichaje cuya jornada cae antes del alta del periodo en curso se trata como el posterior al
+  cese** (decisión del 30-10-2026, revisión de la 25.3): `ScanIntentPolicy::opensBeforeHire()`,
+  simétrico de `opensAfterTermination()`, con el mismo rechazo genérico y por el mismo camino,
+  también desde la cola del quiosco. Vale para cualquier alta futura, no solo para la readmisión. El
+  motivo: un tramo en el hueco entre dos periodos no se podría corregir desde el panel
+  (`work_date_between_periods`), y sería registro legal de días en los que la persona no estaba de
+  alta.
 - **El riesgo de doc 07 §6 «días trabajados después de la fecha de cese»** queda cubierto por §7 y
   por la enmienda de ADR-043 cuando se implementen las tareas 25.4 y 25.5. No antes.
 
@@ -485,6 +492,8 @@ por rol (regla dura 18).
 - La regla «ningún tramo después del cese» en `ScanIntentPolicy` y `ManualEntryEligibility`: la
   salida a las 06:00 del turno de noche del cese y la vuelta de una pausa admitidas, y la entrada del
   día siguiente rechazada.
+- Su simétrica, «ningún tramo antes del alta» (`ScanIntentPolicy::opensBeforeHire()`): la entrada de
+  la víspera del alta rechazada, la del propio día admitida y la salida, que no abre, admitida.
 
 **Integración** (`qa-testing`, `CommittedDatabase`):
 

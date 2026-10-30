@@ -176,6 +176,27 @@ final readonly class ScanIntentPolicy
     }
 
     /**
+     * **Ningun tramo nuevo antes del alta** (RN-27, ADR-062 §6): `true` si este
+     * escaneo abriria un tramo en una jornada anterior a la fecha de alta del
+     * periodo en curso. Es el simetrico de {@see opensAfterTermination()} y
+     * quien llama lo trata igual: rechazo generico (regla dura 17, RS-03).
+     *
+     * Cubre a cualquier persona con un alta que todavia no ha llegado, no solo a
+     * las readmitidas. Para una readmitida es ademas lo que impide que un
+     * fichaje de la cola, o una tarjeta usada antes de la vuelta, escriba un
+     * tramo en el hueco entre sus dos periodos: ese hueco no se puede corregir
+     * desde el panel (`work_date_between_periods`), y un tramo ahi seria
+     * registro legal de dias en los que no estaba de alta.
+     *
+     * Con la jornada **ya resuelta**, como el cese: la salida de un turno abierto
+     * no abre nada y pasa.
+     */
+    public static function opensBeforeHire(ClockingResolution $resolution, WorkDate $workDate, ?string $hiredOn): bool
+    {
+        return $hiredOn !== null && $resolution->opensEntry() && $workDate->isoDate < $hiredOn;
+    }
+
+    /**
      * Sin tramo abierto solo se puede abrir uno; lo que se decide aqui es **en
      * que jornada**.
      *
