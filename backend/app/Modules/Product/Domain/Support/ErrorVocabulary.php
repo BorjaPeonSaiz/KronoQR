@@ -2223,6 +2223,7 @@ final readonly class ErrorVocabulary
         'readiness',
         'reading',
         'readmision',
+        'readmitida',
         'readonly',
         'ready',
         'realtime',
