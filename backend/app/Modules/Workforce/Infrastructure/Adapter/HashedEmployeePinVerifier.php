@@ -412,10 +412,10 @@ final readonly class HashedEmployeePinVerifier implements EmployeePinVerifier
         return [
             'uuid' => $uuid,
             'status' => $status,
-            'pin_hash' => self::stringOrNull($hash),
-            'hired_on' => self::civilDateOf($row->hired_at ?? null),
-            'terminated_on' => self::civilDateOf($row->terminated_at ?? null),
-            'timezone' => self::stringOrNull($row->timezone ?? null),
+            'pin_hash' => $this->stringOrNull($hash),
+            'hired_on' => $this->civilDateOf($row->hired_at ?? null),
+            'terminated_on' => $this->civilDateOf($row->terminated_at ?? null),
+            'timezone' => $this->stringOrNull($row->timezone ?? null),
         ];
     }
 
@@ -423,14 +423,14 @@ final readonly class HashedEmployeePinVerifier implements EmployeePinVerifier
      * La columna `DATE` tal como la devuelve el controlador (`Y-m-d`, quiza con
      * hora), o `null`.
      */
-    private static function civilDateOf(mixed $value): ?string
+    private function civilDateOf(mixed $value): ?string
     {
-        $text = self::stringOrNull($value);
+        $text = $this->stringOrNull($value);
 
         return $text === null ? null : substr($text, 0, 10);
     }
 
-    private static function stringOrNull(mixed $value): ?string
+    private function stringOrNull(mixed $value): ?string
     {
         return \is_string($value) && $value !== '' ? $value : null;
     }
