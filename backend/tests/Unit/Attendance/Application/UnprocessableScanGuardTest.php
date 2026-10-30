@@ -568,6 +568,35 @@ it('acota al dia del cese la atribucion de una tarjeta retirada, como el fichaje
     'sin cese' => [null, DiscardedScanAttributionMethod::CREDENTIAL],
 ])->group('RN-22', 'RN-20', 'RN-14');
 
+it('no busca por la huella una tarjeta autentica que la cota del cese deja sin atribuir', function (): void {
+    // ADR-061 A2: la huella es para una firma que no se pudo verificar. Una
+    // tarjeta autentica ya dijo de quien es; si la cota del cese (ADR-062 §8)
+    // no la atribuye, la huella no puede contradecirla, aunque encuentre al
+    // mismo titular en un aceptado anterior.
+    $avisos = new AvisosDelGuardian;
+
+    intentarConVeneno(guardianDePrueba([
+        'avisos' => $avisos,
+        'huella' => GUARDIAN_EMPLOYEE,
+        'resolutor' => new class implements CredentialResolver
+        {
+            public function resolve(string $qrPayload): CredentialResolution
+            {
+                return CredentialResolution::rejectedWithHolder(CredentialRejectionReason::REVOKED, CredentialHolder::of(
+                    GUARDIAN_EMPLOYEE,
+                    new DateTimeImmutable('2026-08-01 06:00:00', new DateTimeZone('UTC')),
+                    new DateTimeImmutable('2026-08-14 08:00:00', new DateTimeZone('UTC')),
+                    '2026-08-13',
+                    1,
+                ));
+            }
+        },
+    ]), new LogicException('veneno'));
+
+    expect($avisos->avisos[0]->attribution->method)->toBe(DiscardedScanAttributionMethod::NONE)
+        ->and($avisos->avisos[0]->attribution->ownerUuid)->toBeNull();
+})->group('RN-22', 'RN-20', 'RN-14');
+
 it('calcula la misma huella que el registro del fichaje, de una sola fuente', function (): void {
     // ADR-061 A2: la atribucion por huella busca en `scan_events` lo que calcula
     // el guardian. Si discreparan, no encontraria a nadie.

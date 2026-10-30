@@ -42,7 +42,7 @@ final readonly class DiscardedScanAttributionPolicy
         CredentialResolution $resolution,
         DateTimeImmutable $occurredAt,
         DateTimeImmutable $recordedAt,
-        ?DateTimeImmutable $employmentEndsAt = null,
+        ?DateTimeImmutable $employmentEndsAt,
     ): DiscardedScanAttribution {
         $owner = $resolution->employeeUuid();
         $issuedAt = $resolution->issuedAt();

@@ -345,8 +345,10 @@ final readonly class UnprocessableScanGuard
      * La atribucion del aviso del quiosco (ADR-047 §2): tarjeta autentica, o
      * codigo de una persona que puede fichar. Nunca el `token_hash` del padron.
      *
-     * **Una tarjeta que no se atribuye por su firma busca a su titular por la
-     * huella del contenido** (ADR-061 A2): el aceptado mas reciente con el mismo
+     * **Una tarjeta cuya firma no se pudo verificar busca a su titular por la
+     * huella del contenido** (ADR-061 A2). Una tarjeta autentica que no se
+     * atribuye —retirada fuera de su vida o despues del cese— no la busca: la
+     * firma ya dijo de quien es. La huella toma el aceptado mas reciente con el mismo
      * `payload_fingerprint`, dentro de {@see self::FINGERPRINT_LOOKBACK_DAYS}
      * dias antes del fichaje. Tambien si el resolutor lanza, que puede ser
      * justamente lo roto.
@@ -374,7 +376,11 @@ final readonly class UnprocessableScanGuard
                 $holder instanceof CredentialHolder ? EmploymentEnd::of($this->calendar, $holder->terminatedOn, $holder->siteId) : null,
             );
 
-            if ($byCard->isAttributed()) {
+            // Con la firma verificada la tarjeta ya dijo de quien es: si no se
+            // atribuye —por la cota del cese o sin emision conocida— la huella
+            // no puede contradecirla. La huella es solo para una firma que no se
+            // pudo verificar (ADR-061 A2).
+            if ($byCard->isAttributed() || $holder instanceof CredentialHolder || $resolution->employeeUuid() !== null) {
                 return $byCard;
             }
         } catch (Throwable $failure) {

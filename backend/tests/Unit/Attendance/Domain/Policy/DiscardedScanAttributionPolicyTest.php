@@ -40,6 +40,7 @@ it('atribuye la tarjeta vigente con su emision', function (): void {
         CredentialResolution::resolved(DISCARD_ATTRIBUTION_OWNER, instanteDeDescarte('2026-08-14 06:00:00')),
         instanteDeDescarte('2026-08-15 06:58:00'),
         instanteDeDescarte('2026-08-15 10:00:00'),
+        null,
     );
 
     expect($attribution->method)->toBe(DiscardedScanAttributionMethod::CREDENTIAL)
@@ -54,6 +55,7 @@ it('no atribuye una tarjeta resuelta sin emision conocida', function (): void {
         CredentialResolution::resolved(DISCARD_ATTRIBUTION_OWNER),
         instanteDeDescarte('2026-08-15 06:58:00'),
         instanteDeDescarte('2026-08-15 10:00:00'),
+        null,
     );
 
     expect($attribution->method)->toBe(DiscardedScanAttributionMethod::NONE);
@@ -70,6 +72,7 @@ it('atribuye la tarjeta retirada solo dentro de su vida, con la regla de RN-20',
         CredentialResolution::rejectedWithHolder(CredentialRejectionReason::REVOKED, $holder),
         instanteDeDescarte($occurredAt),
         instanteDeDescarte('2026-08-15 10:00:00'),
+        null,
     );
 
     expect($attribution->method)->toBe($expected);
@@ -84,9 +87,9 @@ it('compara con la recepcion cuando la tarjeta seguia vigente y el titular esta 
     $policy = new DiscardedScanAttributionPolicy;
     $resolution = CredentialResolution::rejectedWithHolder(CredentialRejectionReason::REVOKED, $holder);
 
-    expect($policy->forCard($resolution, instanteDeDescarte('2026-08-15 09:59:59'), instanteDeDescarte('2026-08-15 10:00:00'))->method)
+    expect($policy->forCard($resolution, instanteDeDescarte('2026-08-15 09:59:59'), instanteDeDescarte('2026-08-15 10:00:00'), null)->method)
         ->toBe(DiscardedScanAttributionMethod::CREDENTIAL)
-        ->and($policy->forCard($resolution, instanteDeDescarte('2026-08-15 10:00:01'), instanteDeDescarte('2026-08-15 10:00:00'))->method)
+        ->and($policy->forCard($resolution, instanteDeDescarte('2026-08-15 10:00:01'), instanteDeDescarte('2026-08-15 10:00:00'), null)->method)
         ->toBe(DiscardedScanAttributionMethod::NONE);
 })->group('RN-22', 'RN-20');
 
@@ -134,6 +137,7 @@ it('no atribuye una tarjeta que no es autentica', function (CredentialRejectionR
         CredentialResolution::rejected($reason),
         instanteDeDescarte('2026-08-15 06:58:00'),
         instanteDeDescarte('2026-08-15 10:00:00'),
+        null,
     );
 
     expect($attribution->method)->toBe(DiscardedScanAttributionMethod::NONE)

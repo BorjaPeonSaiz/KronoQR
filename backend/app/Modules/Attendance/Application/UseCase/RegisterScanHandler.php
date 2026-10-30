@@ -481,7 +481,7 @@ final readonly class RegisterScanHandler implements ScanRegistration
             $command->occurredAt,
             $hiredAt,
             $recordedAt,
-            $employee->terminatedOn === null ? null : WorkDate::fromIsoDate($employee->terminatedOn, $timezone)->endsAt(),
+            EmploymentEnd::inZone($employee->terminatedOn, $timezone),
         );
     }
 

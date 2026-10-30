@@ -33,6 +33,15 @@ final class EmploymentEnd
 
         $timezone = $calendar->timezoneOf($siteId);
 
-        return $timezone instanceof DateTimeZone ? WorkDate::fromIsoDate($terminatedOn, $timezone)->endsAt() : null;
+        return $timezone instanceof DateTimeZone ? self::inZone($terminatedOn, $timezone) : null;
+    }
+
+    /**
+     * La misma cota con la zona ya resuelta: para quien ya la tiene y no debe
+     * pagar otra consulta.
+     */
+    public static function inZone(?string $terminatedOn, DateTimeZone $timezone): ?DateTimeImmutable
+    {
+        return $terminatedOn === null ? null : WorkDate::fromIsoDate($terminatedOn, $timezone)->endsAt();
     }
 }
