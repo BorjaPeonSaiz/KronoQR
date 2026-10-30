@@ -26,4 +26,7 @@ enum ImportOutcome: string
     case UPDATE = 'update';
     case UNCHANGED = 'unchanged';
     case REJECT = 'reject';
+
+    /** La fila es de una persona de baja y se readmite en su ficha (RN-27). */
+    case REHIRE = 'rehire';
 }

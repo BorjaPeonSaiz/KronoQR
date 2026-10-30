@@ -184,13 +184,16 @@ it('declara la marca de redaccion junto al valor de la configuracion', function 
         ->toBe(['key', 'value', 'value_redacted', 'updated_at', 'updated_by_user_uuid']);
 })->group('RF-PD-14', 'RL-20', 'RF-KI-08');
 
-it('declara los veintidos conjuntos del catalogo, sin efimeros ni fontaneria', function (): void {
+it('declara los veinticuatro conjuntos del catalogo, sin efimeros ni fontaneria', function (): void {
     // El catalogo completo, valor a valor: añadir o quitar un conjunto tiene que
     // ser un cambio visible que alguien revise, no un efecto colateral.
     expect(DataExportCatalog::names())->toBe([
         'site',
         'departments',
         'employees',
+        // RN-27 (2.3.0): los periodos de alta y las correcciones de su cese.
+        'employment_periods',
+        'employment_period_corrections',
         'employment_contracts',
         'absences',
         'credentials',

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use Database\Seeders\Support\EmploymentPeriods;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -118,7 +119,8 @@ final class EmployeeSeeder extends DevelopmentSeeder
         // `insertOrIgnore` y no `insert`: repetir la semilla no debe romper por
         // el UNIQUE de `employee_code`, que es estable a proposito.
         foreach (array_chunk($rows, 500) as $chunk) {
-            DB::table('employees')->insertOrIgnore($chunk);
+            // Con su periodo de alta, en la misma transaccion (RN-27).
+            EmploymentPeriods::insertEmployees($chunk);
         }
     }
 

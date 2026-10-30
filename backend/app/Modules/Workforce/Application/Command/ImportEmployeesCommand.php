@@ -21,5 +21,7 @@ final readonly class ImportEmployeesCommand
         public string $path,
         public bool $apply,
         public ?string $confirmChecksum,
+        /** La cuenta de gestion que importa: autora de las readmisiones del lote (RN-27). */
+        public ?int $importedByUserId = null,
     ) {}
 }

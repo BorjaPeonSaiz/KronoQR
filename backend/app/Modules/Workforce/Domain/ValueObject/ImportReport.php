@@ -91,7 +91,8 @@ final readonly class ImportReport
         return array_values(array_filter(
             $this->rows,
             static fn (ImportRow $row): bool => $row->outcome === ImportOutcome::CREATE
-                || $row->outcome === ImportOutcome::UPDATE,
+                || $row->outcome === ImportOutcome::UPDATE
+                || $row->outcome === ImportOutcome::REHIRE,
         ));
     }
 

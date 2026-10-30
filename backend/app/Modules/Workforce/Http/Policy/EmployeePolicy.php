@@ -145,6 +145,25 @@ final class EmployeePolicy
     }
 
     /**
+     * Readmitir a una persona de baja, sola o en lote (RN-27, ADR-062 §10): los
+     * mismos que dan de baja. Metodo propio para que la autorizacion negativa
+     * pruebe estas rutas por separado (regla dura 18).
+     */
+    public function rehire(ManagementActor $actor): bool
+    {
+        return $actor->actsAs(...self::writers());
+    }
+
+    /**
+     * Corregir la fecha de cese de un periodo con baja efectiva (RN-27,
+     * ADR-062 §7): `rrhh` y `admin`, como la baja.
+     */
+    public function correctTerminationDate(ManagementActor $actor): bool
+    {
+        return $actor->actsAs(...self::writers());
+    }
+
+    /**
      * Restablecer el PIN (RF-ID-09). Rol RRHH, como pide el Anexo B del doc 01.
      *
      * **Permiso propio y no `update`.** Restablecer un PIN da acceso al registro

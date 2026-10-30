@@ -55,6 +55,15 @@ return [
         'employee_terminated' => 'This person has been offboarded. The import does not change their record '
             .'or make them employed again; remove the line from the file.',
 
+        'rehire_proposed' => 'This person has left: applying the batch rehires them in their same record, '
+            .'with the start date of this row, a new card and the PIN they had.',
+
+        'rehire_requires_hired_at' => 'This person has left and rehiring them needs a start date: write it in '
+            .'the row or remove the row from the file.',
+
+        'rehire_not_after_termination' => 'This person has left and the start date of this row is not after '
+            .'their termination date. To rehire them, use a date after the termination.',
+
         'locale_not_active' => 'The language in this row is not active on this installation, so it is '
             .'ignored: a new record gets the installation language and an existing one keeps its own. To '
             .'offer that language, turn it on in Operational settings > Languages and import again.',

@@ -9,7 +9,10 @@ use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
 use App\Modules\Workforce\Application\Port\PinStatus;
 use App\Modules\Workforce\Domain\Model\Employee;
+use App\Modules\Workforce\Domain\Model\EmploymentHistory;
+use App\Modules\Workforce\Domain\Model\TerminationDateCorrection;
 use Closure;
+use DateTimeImmutable;
 
 /**
  * El repositorio de verdad, con un gancho que se ejecuta **justo despues de la
@@ -95,6 +98,41 @@ final class InterleavingEmployeeRepository implements EmployeeRepository
     public function saveTermination(Employee $employee): void
     {
         $this->inner->saveTermination($employee);
+    }
+
+    public function findManyForUpdate(array $uuids): array
+    {
+        $employees = $this->inner->findManyForUpdate($uuids);
+
+        foreach (array_keys($employees) as $uuid) {
+            $this->afterReadOf($uuid);
+        }
+
+        return $employees;
+    }
+
+    public function employmentHistory(string $uuid): EmploymentHistory
+    {
+        return $this->inner->employmentHistory($uuid);
+    }
+
+    public function saveRehire(Employee $employee, string $periodUuid, ?int $createdByUserId): void
+    {
+        $this->inner->saveRehire($employee, $periodUuid, $createdByUserId);
+    }
+
+    public function saveTerminationCorrection(
+        Employee $employee,
+        TerminationDateCorrection $correction,
+        int $correctedByUserId,
+        DateTimeImmutable $correctedAt,
+    ): int {
+        return $this->inner->saveTerminationCorrection($employee, $correction, $correctedByUserId, $correctedAt);
+    }
+
+    public function rehirableUuidByNationalId(string $nationalId): ?string
+    {
+        return $this->inner->rehirableUuidByNationalId($nationalId);
     }
 
     public function dueScheduledOffboardings(string $today): array

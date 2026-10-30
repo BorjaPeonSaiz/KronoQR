@@ -228,6 +228,31 @@ return [
             ],
         ],
 
+        'employment_periods' => [
+            'summary' => 'Each person\'s employment periods: from their start date to their termination date. Someone who left and came back has several, which do not overlap; the days between them admit no time record.',
+            'columns' => [
+                'employment_period_uuid' => 'Identifier of the period.',
+                'employee_uuid' => 'Person it belongs to.',
+                'hired_on' => 'Start date of the period.',
+                'terminated_on' => 'Termination date. Empty while employed; with a date and no `offboarded_at`, the offboarding is scheduled.',
+                'offboarded_at' => 'When the offboarding became effective. Empty without an effective offboarding.',
+                'created_at' => 'When the period was opened.',
+                'created_by_user_uuid' => 'Who opened it, on a rehire. Empty for the first hiring and for periods prior to 2.3.0.',
+            ],
+        ],
+
+        'employment_period_corrections' => [
+            'summary' => 'Corrections of a period\'s termination date: the previous date, the new one, the reason, who and when. Nothing is overwritten without leaving the previous date here.',
+            'columns' => [
+                'employment_period_uuid' => 'Corrected period.',
+                'previous_terminated_on' => 'Termination date before the correction.',
+                'terminated_on' => 'Corrected termination date.',
+                'reason' => 'Reason written by whoever corrected it. It is in your export because it is your data; it does not go into the audit log.',
+                'corrected_by_user_uuid' => 'Who corrected it.',
+                'corrected_at' => 'When it was corrected.',
+            ],
+        ],
+
         'employment_contracts' => [
             'summary' => 'Contracted working hours, with their history: a change opens a new row and closes the previous one. It is the figure worked hours are measured against.',
             'columns' => [

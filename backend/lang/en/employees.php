@@ -29,6 +29,30 @@ return [
 
         'record_minimised' => 'This person\'s record was minimised on :anonymized_on when its retention period '
             .'ended: it no longer accepts contracts or absences.',
+        'employee_not_terminated' => 'This person has not left and cannot be rehired. If they have a scheduled '
+            .'offboarding, cancel it or wait for it to be applied.',
+
+        'employment_history_minimised' => 'This person\'s record was minimised on :anonymized_on when its retention '
+            .'period ended: it is not rehired nor corrected. Someone who comes back is hired as a new person.',
+
+        'offboarding_not_effective' => 'This period has no effective offboarding. A scheduled offboarding is moved '
+            .'from the offboarding itself.',
+
+        'rehire_not_after_termination' => 'The hiring date (:hired_on) must be after the termination date '
+            .'(:terminated_on).',
+
+        'rehire_not_found' => 'This person does not exist.',
+
+        'correction_after_today' => 'The termination date (:terminated_on) cannot be after today (:today).',
+
+        'correction_before_hiring' => 'The termination date (:terminated_on) cannot be before the hiring date of the '
+            .'period (:hired_on).',
+
+        'correction_reaches_next_period' => 'The termination date (:terminated_on) must be before the hiring date of '
+            .'the next period (:next_hired_on).',
+
+        'correction_unchanged' => 'The termination date is already :terminated_on.',
+
     ],
 
 ];

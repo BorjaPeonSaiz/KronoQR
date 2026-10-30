@@ -16,10 +16,24 @@ use App\Modules\Shared\Domain\Exception\BusinessRejection;
  */
 final class EmployeeNationalIdAlreadyTaken extends WorkforceConflict implements BusinessRejection
 {
+    /**
+     * La persona **de baja y sin minimizar** que tiene ese documento, si la hay
+     * (RN-27, ADR-062 §6): el `409` la ofrece para readmitirla en su ficha.
+     */
+    public ?string $rehirableEmployeeUuid = null;
+
     public static function make(): self
     {
         // Sin el documento en el mensaje: el texto de una excepcion acaba en un
         // log, y el documento en claro no puede llegar a ninguno (RL-08).
         return new self('Ya existe otro empleado con ese documento de identidad.');
+    }
+
+    public static function rehirable(string $employeeUuid): self
+    {
+        $exception = self::make();
+        $exception->rehirableEmployeeUuid = $employeeUuid;
+
+        return $exception;
     }
 }

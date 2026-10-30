@@ -33,6 +33,30 @@ return [
 
         'record_minimised' => 'La ficha de esta persona se minimizó el :anonymized_on al vencer su plazo de '
             .'conservación: ya no admite contratos ni ausencias.',
+        'employee_not_terminated' => 'Esta persona no está de baja y no se puede dar de alta de nuevo. Si tiene una '
+            .'baja programada, anúlala o espera a que se aplique.',
+
+        'employment_history_minimised' => 'La ficha de esta persona se minimizó el :anonymized_on al vencer su plazo '
+            .'de conservación: no se readmite ni se corrige. Quien vuelve se da de alta como persona nueva.',
+
+        'offboarding_not_effective' => 'Este periodo no tiene la baja efectiva. Una baja programada se cambia de fecha '
+            .'desde la baja.',
+
+        'rehire_not_after_termination' => 'La fecha de alta (:hired_on) tiene que ser posterior a la fecha de cese '
+            .'(:terminated_on).',
+
+        'rehire_not_found' => 'Esta persona no existe.',
+
+        'correction_after_today' => 'La fecha de cese (:terminated_on) no puede ser posterior a hoy (:today).',
+
+        'correction_before_hiring' => 'La fecha de cese (:terminated_on) no puede ser anterior a la fecha de alta del '
+            .'periodo (:hired_on).',
+
+        'correction_reaches_next_period' => 'La fecha de cese (:terminated_on) tiene que ser anterior a la fecha de '
+            .'alta del periodo siguiente (:next_hired_on).',
+
+        'correction_unchanged' => 'La fecha de cese ya es :terminated_on.',
+
     ],
 
 ];

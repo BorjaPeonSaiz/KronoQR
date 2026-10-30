@@ -37,10 +37,10 @@ beforeEach(function (): void {
 /**
  * @return array{site: int, bajaId: int, bajaUuid: string, altaId: int}
  */
-function bajasConTarjeta(): array
+function bajasConTarjeta(string $alta = '2026-01-01', string $cese = '2026-06-30'): array
 {
     $escenario = AttendanceFixtures::scenario();
-    $baja = WorkforceFixtures::employee($escenario['site'], $escenario['department'], 'terminated');
+    $baja = WorkforceFixtures::employee($escenario['site'], $escenario['department'], 'terminated', hiredAt: $alta, terminatedAt: $cese);
     $bajaId = AttendanceFixtures::employeeIdOf($baja);
     $altaId = AttendanceFixtures::employeeIdOf($escenario['employee']);
 
@@ -120,9 +120,9 @@ it('revoca tambien la tarjeta activa de una ficha ya minimizada sin chocar con s
     // ADR-060 (bloque 11): la ficha minimizada esta congelada por un trigger. La
     // revocacion solo escribe en `credentials` (`revoked_at`, `revoked_reason`)
     // con un motivo fijo y sin datos de la persona, asi que no la toca.
-    $escenario = bajasConTarjeta();
-    DB::table('employees')->where('id', $escenario['bajaId'])
-        ->update(['hired_at' => '2010-01-01', 'terminated_at' => '2015-06-30']);
+    // Las fechas antiguas desde el alta: la base no deja moverlas despues
+    // (ADR-062 §2).
+    $escenario = bajasConTarjeta('2010-01-01', '2015-06-30');
 
     /** @var object{today: string} $hoy */
     $hoy = DB::selectOne("SELECT ((now() AT TIME ZONE 'UTC')::date - interval '4 years')::date::text AS today");

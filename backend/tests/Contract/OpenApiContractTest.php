@@ -116,6 +116,10 @@ it('describe solo los endpoints cuya tarea existe, y todos bajo /api/v1', functi
         '/api/v1/employees/{uuid}/offboard',
         // ADR-062 §3: la anulacion de una baja programada.
         '/api/v1/employees/{uuid}/offboard/cancel',
+        // RN-27, ADR-062 §6 y §7: la readmision y la correccion de la fecha de cese.
+        '/api/v1/employees/rehire',
+        '/api/v1/employees/{uuid}/rehire',
+        '/api/v1/employees/{uuid}/employment-periods/{periodUuid}/termination-corrections',
         // Tarea 1.13: provision, entrega y restablecimiento del PIN (RF-ID-09).
         '/api/v1/employees/{uuid}/pin/reset',
         '/api/v1/employees/{uuid}/pin/deliver',
@@ -653,6 +657,9 @@ it('exige el ambito employees:* en todo endpoint que ESCRIBE plantilla', functio
     $paths = [
         '/api/v1/employees/{uuid}/offboard',
         '/api/v1/employees/{uuid}/offboard/cancel',
+        '/api/v1/employees/rehire',
+        '/api/v1/employees/{uuid}/rehire',
+        '/api/v1/employees/{uuid}/employment-periods/{periodUuid}/termination-corrections',
         '/api/v1/employees/{uuid}/pin/reset',
         '/api/v1/employees/{uuid}/pin/deliver',
         '/api/v1/departments',

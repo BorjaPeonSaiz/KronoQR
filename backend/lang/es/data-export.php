@@ -254,6 +254,31 @@ return [
             ],
         ],
 
+        'employment_periods' => [
+            'summary' => 'Los periodos de alta de cada persona: de su fecha de alta a su fecha de cese. Quien se fue y volvio tiene varios, que no se solapan; los dias entre uno y otro no admiten registro horario.',
+            'columns' => [
+                'employment_period_uuid' => 'Identificador del periodo.',
+                'employee_uuid' => 'Persona a la que corresponde.',
+                'hired_on' => 'Fecha de alta del periodo.',
+                'terminated_on' => 'Fecha de cese. Vacia si sigue de alta; con fecha y sin `offboarded_at`, la baja esta programada.',
+                'offboarded_at' => 'Cuando la baja se hizo efectiva. Vacio sin baja efectiva.',
+                'created_at' => 'Cuando se abrio el periodo.',
+                'created_by_user_uuid' => 'Quien lo abrio, en una readmision. Vacio en el alta inicial y en los periodos anteriores a la 2.3.0.',
+            ],
+        ],
+
+        'employment_period_corrections' => [
+            'summary' => 'Las correcciones de la fecha de cese de un periodo: la fecha anterior, la nueva, el motivo, quien y cuando. Nada se sobrescribe sin dejar aqui la fecha que habia.',
+            'columns' => [
+                'employment_period_uuid' => 'Periodo corregido.',
+                'previous_terminated_on' => 'Fecha de cese antes de la correccion.',
+                'terminated_on' => 'Fecha de cese corregida.',
+                'reason' => 'Motivo que escribio quien corrigio. Sale en tu exportacion porque son tus datos; no entra en el registro de auditoria.',
+                'corrected_by_user_uuid' => 'Quien corrigio.',
+                'corrected_at' => 'Cuando se corrigio.',
+            ],
+        ],
+
         'employment_contracts' => [
             'summary' => 'Las condiciones de jornada contratadas, con su historia: cuando cambia una jornada se abre una fila nueva y la anterior se cierra. Es la cifra contra la que se miden las horas trabajadas.',
             'columns' => [

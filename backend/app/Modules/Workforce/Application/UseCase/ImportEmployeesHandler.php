@@ -81,6 +81,6 @@ final readonly class ImportEmployeesHandler
             throw new ImportTooLarge($maxRows);
         }
 
-        return $this->apply->handle($report);
+        return $this->apply->handle($report, $command->importedByUserId);
     }
 }

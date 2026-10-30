@@ -49,6 +49,17 @@ final readonly class EmployeeSnapshot
          * jornada posterior.
          */
         public ?string $terminatedOn = null,
+        /**
+         * Los periodos de alta de la persona, del mas antiguo al mas reciente
+         * (RN-27, ADR-062 §11). El ultimo es el que proyectan `hiredOn` y
+         * `terminatedOn`. Lo usa el alta manual de tramos para no anotar nada
+         * en el hueco entre una baja y una readmision; el fichaje no lo mira.
+         * Vacio si quien construye la instantanea no los conoce: entonces
+         * cuentan solo las dos fechas de arriba, como antes de la 2.3.0.
+         *
+         * @var list<EmploymentPeriod>
+         */
+        public array $employmentPeriods = [],
     ) {
         if ($employeeUuid === '') {
             throw new InvalidArgumentException('EmployeeSnapshot necesita el UUID del empleado.');

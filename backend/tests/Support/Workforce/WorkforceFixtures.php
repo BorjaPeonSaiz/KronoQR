@@ -72,24 +72,49 @@ final class WorkforceFixtures
         ?string $firstName = null,
         ?string $lastName = null,
         ?string $employeeCode = null,
+        string $hiredAt = '2026-01-01',
+        string $terminatedAt = '2026-06-30',
     ): string {
         $uuid = Str::uuid7()->toString();
 
-        Employee::query()->create([
-            'uuid' => $uuid,
-            'site_id' => $siteId,
-            'department_id' => $departmentId,
-            'first_name' => $firstName ?? 'Persona',
-            'last_name' => $lastName ?? 'De Prueba',
-            'employee_code' => $employeeCode ?? 'E'.Str::upper(Str::random(9)),
-            'email' => null,
-            'status' => $status,
-            'hired_at' => '2026-01-01',
-            'terminated_at' => $status === 'terminated' ? '2026-06-30' : null,
-            'locale' => 'es',
-        ]);
+        // Con su periodo de alta en la misma transaccion (RN-27, ADR-062 §1): el
+        // disparador diferido exige que la ficha coincida con su periodo.
+        DB::transaction(static function () use ($uuid, $siteId, $departmentId, $status, $firstName, $lastName, $employeeCode, $hiredAt, $terminatedAt): void {
+            Employee::query()->create([
+                'uuid' => $uuid,
+                'site_id' => $siteId,
+                'department_id' => $departmentId,
+                'first_name' => $firstName ?? 'Persona',
+                'last_name' => $lastName ?? 'De Prueba',
+                'employee_code' => $employeeCode ?? 'E'.Str::upper(Str::random(9)),
+                'email' => null,
+                'status' => $status,
+                'hired_at' => $hiredAt,
+                'terminated_at' => $status === 'terminated' ? $terminatedAt : null,
+                'locale' => 'es',
+            ]);
+
+            self::openEmploymentPeriods();
+        });
 
         return $uuid;
+    }
+
+    /**
+     * Abre el periodo de alta de cada ficha que aun no tiene ninguno, con sus
+     * mismas fechas y estado (RN-27). Para las pruebas que escriben `employees`
+     * con el constructor de consultas: se llama en la misma transaccion.
+     */
+    public static function openEmploymentPeriods(): void
+    {
+        DB::statement(<<<'SQL'
+            INSERT INTO employment_periods (uuid, employee_id, hired_on, terminated_on, offboarded_at)
+            SELECT gen_random_uuid(), e.id, e.hired_at, e.terminated_at,
+                   CASE WHEN e.status = 'terminated' THEN now() END
+              FROM employees e
+             WHERE NOT EXISTS (SELECT 1 FROM employment_periods p WHERE p.employee_id = e.id)
+             ORDER BY e.id
+        SQL);
     }
 
     /**
@@ -102,12 +127,21 @@ final class WorkforceFixtures
      */
     public static function terminate(string $employeeUuid): void
     {
-        Employee::query()
-            ->where('uuid', $employeeUuid)
-            ->update([
-                'status' => 'terminated',
-                'terminated_at' => '2026-06-30',
-            ]);
+        DB::transaction(static function () use ($employeeUuid): void {
+            Employee::query()
+                ->where('uuid', $employeeUuid)
+                ->update([
+                    'status' => 'terminated',
+                    'terminated_at' => '2026-06-30',
+                ]);
+
+            // Y su periodo en curso, como la baja del repositorio (RN-27).
+            DB::update(
+                'UPDATE employment_periods SET terminated_on = ?, offboarded_at = now()'
+                .' WHERE offboarded_at IS NULL AND employee_id = (SELECT id FROM employees WHERE uuid = ?)',
+                ['2026-06-30', $employeeUuid],
+            );
+        });
     }
 
     /**

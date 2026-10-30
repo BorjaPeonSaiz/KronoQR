@@ -203,7 +203,9 @@ use App\Modules\Shared\Application\Port\UuidGenerator;
 use App\Modules\Shared\Application\Port\WeeklySummaryPreference;
 use App\Modules\Shared\Infrastructure\GeneratedFiles\GeneratedFileAreas;
 use App\Modules\Workforce\Domain\Event\EmployeeHired;
+use App\Modules\Workforce\Domain\Event\EmployeeRehired;
 use App\Modules\Workforce\Domain\Event\EmployeesImported;
+use App\Modules\Workforce\Domain\Event\EmployeesRehired;
 use App\Support\Locale\NegotiableLocales;
 use App\Support\Resilience\DependencyFailure;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -1812,6 +1814,8 @@ final class ProductServiceProvider extends ServiceProvider
         // sus filas, que llegan igualmente como `EmployeeHired` y el listener
         // descarta por `viaImport` (ADR-010).
         Event::listen(EmployeesImported::class, [ObservePlanLimits::class, 'onEmployeesImported']);
+        Event::listen(EmployeeRehired::class, [ObservePlanLimits::class, 'onEmployeeRehired']);
+        Event::listen(EmployeesRehired::class, [ObservePlanLimits::class, 'onEmployeesRehired']);
         Event::listen(DeviceTokenIssued::class, [ObservePlanLimits::class, 'onDeviceTokenIssued']);
 
         // RF-ID-10, RF-PD-11: la baja de una cuenta de gestion retira, en su

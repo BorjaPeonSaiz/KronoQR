@@ -211,12 +211,16 @@ final readonly class PlanEmployeeImport
         $employee = self::employeeFrom($fields);
 
         $match = $this->matchOf($employee);
+        $leaver = $match->employee?->status === EmploymentStatus::TERMINATED ? $match->employee : null;
 
         $errors = [
             ...$this->errorsOf($employee, $departments, $seen, $seenEmails),
             ...$match->errors,
-            ...self::terminationErrors($match),
         ];
+
+        if ($leaver instanceof Employee) {
+            $errors = self::rehireErrors($errors, $leaver, $employee);
+        }
 
         if ($errors !== []) {
             return ImportRow::rejected($line, $this->labelOf($employee), $errors);
@@ -238,6 +242,16 @@ final readonly class PlanEmployeeImport
         }
 
         $existing = $match->employee;
+
+        if ($leaver instanceof Employee) {
+            return ImportRow::rehire(
+                $line,
+                $employee,
+                $leaver->uuid,
+                array_values(array_intersect($this->changesFor($leaver, $employee, $departments), ['department_id', 'locale'])),
+                $localeWarnings,
+            );
+        }
 
         return $existing instanceof Employee
             ? ImportRow::matched(
@@ -395,27 +409,42 @@ final readonly class PlanEmployeeImport
     }
 
     /**
-     * **La linea de una persona dada de baja se rechaza** (`employee_terminated`,
-     * RN-14, ADR-046 §5).
+     * **La linea de una persona dada de baja propone su readmision** (RN-27,
+     * ADR-062 §6). Hasta la 2.2.x se rechazaba con `employee_terminated`.
      *
-     * La importacion no modifica la ficha de una baja ni la da de alta otra vez.
-     * Antes esa linea salia como `update`, la aplicacion la mandaba a la
-     * modificacion, el dominio la rechazaba con `EmployeeAlreadyTerminated` y el
-     * lote entero caia con un `409` que no nombraba ninguna linea, despues de que
-     * quien importa hubiera revisado un informe que decia que todo iba bien.
+     * La fecha de alta de la linea es la de la readmision, asi que es
+     * obligatoria (`rehire_requires_hired_at`, que sustituye a
+     * `missing_hired_at` en esta linea) y posterior a la fecha de cese
+     * (`rehire_not_after_termination`). La reimportacion del fichero de
+     * plantilla de siempre, con la fecha de alta original, sigue sin tocar a
+     * nadie: esa fecha no es posterior al cese y la linea se rechaza.
      *
      * Si la baja se registra **entre** esta comprobacion y la aplicacion, la
      * linea llega como `update` y la aplicacion entera responde `409` sin
-     * escribir nada: se aplica exactamente lo que se reviso, y si el estado
-     * cambio hay que volver a comprobar.
+     * escribir nada (ADR-046 §5); si alguien la readmite por otra via en ese
+     * hueco, la linea llega como `rehire` y responde `409` igual.
      *
+     * @param  list<ImportMessage>  $errors
      * @return list<ImportMessage>
      */
-    private static function terminationErrors(ImportMatch $match): array
+    private static function rehireErrors(array $errors, Employee $leaver, ImportedEmployee $employee): array
     {
-        return $match->employee?->status === EmploymentStatus::TERMINATED
-            ? [ImportMessage::of(ImportMessageCode::EMPLOYEE_TERMINATED)]
-            : [];
+        $errors = array_values(array_filter(
+            $errors,
+            static fn (ImportMessage $error): bool => $error->code !== ImportMessageCode::MISSING_HIRED_AT,
+        ));
+
+        $date = $employee->hiredAt === null ? null : self::parseDate($employee->hiredAt);
+
+        if ($employee->hiredAt === null) {
+            return [...$errors, ImportMessage::of(ImportMessageCode::REHIRE_REQUIRES_HIRED_AT, self::FIELD_HIRED_AT)];
+        }
+
+        $terminatedOn = $leaver->terminatedAt?->format('Y-m-d');
+
+        return $date instanceof DateTimeImmutable && $terminatedOn !== null && $date->format('Y-m-d') <= $terminatedOn
+            ? [...$errors, ImportMessage::of(ImportMessageCode::REHIRE_NOT_AFTER_TERMINATION, self::FIELD_HIRED_AT)]
+            : $errors;
     }
 
     /**

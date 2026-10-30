@@ -72,6 +72,33 @@ final readonly class ImportRow
         );
     }
 
+    /**
+     * La linea de una persona **de baja**: se propone su readmision en su ficha
+     * (RN-27, ADR-062 §6), con el aviso `rehire_proposed`. `$changes` solo
+     * puede llevar `department_id` y `locale`: nombre, documento y codigo no
+     * cambian en una readmision.
+     *
+     * @param  list<string>  $changes
+     * @param  list<ImportMessage>  $messages
+     */
+    public static function rehire(
+        int $line,
+        ImportedEmployee $employee,
+        string $employeeUuid,
+        array $changes,
+        array $messages = [],
+    ): self {
+        return new self(
+            $line,
+            $employee->label(),
+            ImportOutcome::REHIRE,
+            $employeeUuid,
+            $changes,
+            [ImportMessage::of(ImportMessageCode::REHIRE_PROPOSED), ...$messages],
+            $employee,
+        );
+    }
+
     /** La misma linea, ya aplicada, con el UUID de la persona creada. */
     public function appliedAs(string $employeeUuid): self
     {

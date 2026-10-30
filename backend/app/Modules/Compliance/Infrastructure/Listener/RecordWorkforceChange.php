@@ -20,6 +20,8 @@ use App\Modules\Workforce\Domain\Event\EmployeeOffboarded;
 use App\Modules\Workforce\Domain\Event\EmployeeOffboardingCancelled;
 use App\Modules\Workforce\Domain\Event\EmployeeOffboardingScheduled;
 use App\Modules\Workforce\Domain\Event\EmployeeProfileUpdated;
+use App\Modules\Workforce\Domain\Event\EmployeeRehired;
+use App\Modules\Workforce\Domain\Event\TerminationDateCorrected;
 use DateTimeImmutable;
 
 /**
@@ -169,6 +171,44 @@ final readonly class RecordWorkforceChange
         $this->record(AuditAction::EmployeeOffboardingCancelled, AuditSubject::of('employee'), [
             'employee_uuid' => $event->employeeUuid,
             'terminated_on' => $event->terminatedOn,
+        ], $event->occurredAt());
+    }
+
+    /**
+     * Readmision (RN-27, ADR-062 §9): el periodo nuevo, su fecha de alta y el
+     * departamento con el que vuelve. El anterior solo si cambia, como en
+     * `employee.updated`.
+     */
+    public function rehired(EmployeeRehired $event): void
+    {
+        $payload = [
+            'employee_uuid' => $event->employeeUuid,
+            'employment_period_uuid' => $event->employmentPeriodUuid,
+            'hired_at' => $event->hiredOn,
+            'department_id' => $event->departmentId,
+            'pin_reset' => $event->pinReset,
+            'via_import' => $event->viaImport,
+        ];
+
+        if ($event->departmentChanged()) {
+            $payload['previous_department_id'] = $event->previousDepartmentId;
+        }
+
+        $this->record(AuditAction::EmployeeRehired, AuditSubject::of('employee'), $payload, $event->occurredAt());
+    }
+
+    /**
+     * Correccion de la fecha de cese (RN-27, RL-04, ADR-062 §9): las dos fechas
+     * y la fila de la correccion, **nunca el motivo** (regla dura 21).
+     */
+    public function terminationDateCorrected(TerminationDateCorrected $event): void
+    {
+        $this->record(AuditAction::EmployeeTerminationDateCorrected, AuditSubject::of('employee'), [
+            'employee_uuid' => $event->employeeUuid,
+            'employment_period_uuid' => $event->employmentPeriodUuid,
+            'previous_terminated_on' => $event->previousTerminatedOn,
+            'terminated_on' => $event->terminatedOn,
+            'correction_id' => $event->correctionId,
         ], $event->occurredAt());
     }
 

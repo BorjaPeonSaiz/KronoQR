@@ -13,10 +13,12 @@ use App\Modules\Workforce\Application\Command\PinProvisioning;
 use App\Modules\Workforce\Application\Command\RegisterEmployeeCommand;
 use App\Modules\Workforce\Application\Port\EmployeeCodeGenerator;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
+use App\Modules\Workforce\Application\Port\PinMaterial;
 use App\Modules\Workforce\Application\Port\SiteRepository;
 use App\Modules\Workforce\Application\Port\WorkforceEventPublisher;
 use App\Modules\Workforce\Domain\Event\EmployeeHired;
 use App\Modules\Workforce\Domain\Exception\EmployeeCodeAlreadyTaken;
+use App\Modules\Workforce\Domain\Exception\EmployeeNationalIdAlreadyTaken;
 use App\Modules\Workforce\Domain\Model\Employee;
 use App\Modules\Workforce\Domain\Model\Site;
 use App\Modules\Workforce\Domain\ValueObject\EmployeeCode;
@@ -103,6 +105,20 @@ final readonly class RegisterEmployeeHandler
         // deja una importacion de 500 altas sin ningun bcrypt.
         $material = $command->pin === PinProvisioning::IssueNow ? $this->pins->freshMaterial() : null;
 
+        try {
+            return $this->register($command, $siteId, $material);
+        } catch (EmployeeNationalIdAlreadyTaken $taken) {
+            // RN-27: si el documento es de una persona de baja con la ficha sin
+            // minimizar, el `409` la ofrece para readmitirla. Se busca despues de
+            // que la transaccion del alta se haya deshecho.
+            $rehirable = $command->nationalId === null ? null : $this->employees->rehirableUuidByNationalId($command->nationalId);
+
+            throw $rehirable === null ? $taken : EmployeeNationalIdAlreadyTaken::rehirable($rehirable);
+        }
+    }
+
+    private function register(RegisterEmployeeCommand $command, int $siteId, ?PinMaterial $material): RegisteredEmployee
+    {
         return $this->retry->run('employee.register', function () use ($command, $siteId, $material): RegisteredEmployee {
             // La insercion va antes de la cadena (ADR-046 §1.2): toma
             // `FOR KEY SHARE` sobre el centro y el departamento —filas padre— y

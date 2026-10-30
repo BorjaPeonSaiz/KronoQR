@@ -6,9 +6,12 @@ namespace App\Modules\Workforce\Domain\Model;
 
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Workforce\Domain\Exception\EmployeeAlreadyTerminated;
+use App\Modules\Workforce\Domain\Exception\EmployeeNotTerminated;
 use App\Modules\Workforce\Domain\Exception\EmployeeRecordMinimised;
 use App\Modules\Workforce\Domain\Exception\ImmediateOffboardingNotDue;
 use App\Modules\Workforce\Domain\Exception\InvalidEmploymentPeriod;
+use App\Modules\Workforce\Domain\Exception\InvalidRehireDate;
+use App\Modules\Workforce\Domain\Exception\MinimisedEmploymentHistory;
 use App\Modules\Workforce\Domain\Exception\OffboardingNotScheduled;
 use App\Modules\Workforce\Domain\Exception\ScheduledOffboardingDue;
 use App\Modules\Workforce\Domain\Exception\ScheduledOffboardingNotDue;
@@ -335,6 +338,88 @@ final readonly class Employee
         return $this->isOffboardingScheduled()
             && $this->terminatedAt instanceof DateTimeImmutable
             && self::civilDate($this->terminatedAt) < self::civilDate($today);
+    }
+
+    /**
+     * Readmision (RN-27, ADR-062 §6): la persona de baja vuelve a estar en alta
+     * **en esta misma ficha**, con un periodo nuevo que empieza en `$hiredOn`.
+     * Nombre, documento y codigo no cambian; departamento e idioma solo si se
+     * dan. La baja anterior no se deshace: queda en su periodo.
+     *
+     * La fecha de alta es **posterior** a la fecha de cese del periodo anterior,
+     * sin compartir dia. Una ficha minimizada no se readmite: ya no conserva el
+     * documento con el que reconocer a la persona (ADR-060).
+     *
+     * @throws MinimisedEmploymentHistory
+     * @throws EmployeeNotTerminated
+     * @throws InvalidRehireDate
+     */
+    public function rehire(
+        DateTimeImmutable $hiredOn,
+        ?int $departmentId = null,
+        bool $departmentGiven = false,
+        ?string $locale = null,
+    ): self {
+        $this->refuseIfMinimised();
+
+        if ($this->status !== EmploymentStatus::TERMINATED || ! $this->terminatedAt instanceof DateTimeImmutable) {
+            throw EmployeeNotTerminated::withUuid($this->uuid);
+        }
+
+        $hiring = self::civilDate($hiredOn);
+        $termination = self::civilDate($this->terminatedAt);
+
+        if ($hiring <= $termination) {
+            throw InvalidRehireDate::notAfterTermination($hiring, $termination);
+        }
+
+        return new self(
+            uuid: $this->uuid,
+            code: $this->code,
+            firstName: $this->firstName,
+            lastName: $this->lastName,
+            email: $this->email,
+            siteId: $this->siteId,
+            departmentId: $departmentGiven ? $departmentId : $this->departmentId,
+            status: EmploymentStatus::ACTIVE,
+            hiredAt: $hiredOn->setTime(0, 0),
+            terminatedAt: null,
+            locale: $locale ?? $this->locale,
+            teleworking: $this->teleworking,
+        );
+    }
+
+    /**
+     * La fecha de cese del periodo en curso, corregida (RN-27, ADR-062 §7). Solo
+     * con la baja efectiva: una programada se reprograma con
+     * {@see self::offboard()}. Los limites del periodo los comprueba
+     * {@see TerminationDateCorrection}; aqui se garantiza que la ficha sigue de
+     * baja y que el cese no queda antes del alta.
+     *
+     * @throws MinimisedEmploymentHistory
+     * @throws InvalidEmploymentPeriod
+     */
+    public function withCorrectedTermination(DateTimeImmutable $terminatedOn): self
+    {
+        $this->refuseIfMinimised();
+
+        if ($this->status !== EmploymentStatus::TERMINATED) {
+            throw new InvalidArgumentException('Solo se corrige la fecha de cese de una baja efectiva (RN-27).');
+        }
+
+        return $this->with(status: EmploymentStatus::TERMINATED, terminatedAt: $terminatedOn->setTime(0, 0), terminatedAtGiven: true);
+    }
+
+    /**
+     * Una ficha minimizada no cambia su vida laboral (ADR-060, RN-27).
+     *
+     * @throws MinimisedEmploymentHistory
+     */
+    public function refuseIfMinimised(): void
+    {
+        if ($this->anonymizedAt instanceof DateTimeImmutable) {
+            throw MinimisedEmploymentHistory::withUuid($this->uuid, self::civilDate($this->anonymizedAt));
+        }
     }
 
     /**

@@ -43,9 +43,9 @@ function tokenDeLaBajaConFecha(): string
  * Una persona en alta desde el 2026-01-01 (`WorkforceFixtures`), con una tarjeta
  * activa, en un centro de la zona indicada.
  */
-function personaParaLaBajaConFecha(string $timezone = 'Europe/Madrid'): string
+function personaParaLaBajaConFecha(string $timezone = 'Europe/Madrid', string $alta = '2026-01-01'): string
 {
-    $uuid = WorkforceFixtures::employee(WorkforceFixtures::site('Hotel de la fecha de cese', $timezone));
+    $uuid = WorkforceFixtures::employee(WorkforceFixtures::site('Hotel de la fecha de cese', $timezone), hiredAt: $alta);
 
     /** @var int $id */
     $id = DB::table('employees')->where('uuid', $uuid)->value('id');
@@ -157,8 +157,8 @@ it('resuelve hoy con la fecha civil del centro y no con la UTC', function (strin
 
 it('a una persona que aun no ha empezado programa el cese en su alta y solo con aplicar ya la da de baja sin efectos', function (): void {
     FrozenTime::at('2026-10-02 10:00:00');
-    $persona = personaParaLaBajaConFecha();
-    DB::table('employees')->where('uuid', $persona)->update(['hired_at' => '2026-10-15']);
+    // El alta futura desde el alta: la base no deja moverla despues (ADR-062 §2).
+    $persona = personaParaLaBajaConFecha(alta: '2026-10-15');
     $token = tokenDeLaBajaConFecha();
 
     Api::as($token)

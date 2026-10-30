@@ -11,6 +11,7 @@ use App\Modules\Attendance\Domain\ValueObject\FutureMark;
 use App\Modules\Attendance\Domain\ValueObject\ShiftEntryTimes;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
 use App\Modules\Shared\Domain\ValueObject\EmployeeSnapshot;
+use App\Modules\Shared\Domain\ValueObject\EmploymentPeriod;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -81,6 +82,12 @@ final readonly class ManualEntryEligibility
      */
     public function assertWorkDateAllowed(WorkDate $workDate): void
     {
+        if (\count($this->employee->employmentPeriods) > 1) {
+            $this->assertWithinHistory($workDate->isoDate, $this->employee->employmentPeriods);
+
+            return;
+        }
+
         $hiredOn = $this->employee->hiredOn;
         $terminatedOn = $this->employee->terminatedOn;
 
@@ -103,6 +110,51 @@ final readonly class ManualEntryEligibility
         if ($workDate->isoDate < $hiredOn || $workDate->isoDate > $terminatedOn) {
             throw WorkDateOutsideEmployment::forPeriod($workDate->isoDate, $hiredOn, $terminatedOn);
         }
+    }
+
+    /**
+     * La jornada de una persona **readmitida** (RN-27): cae en alguno de sus
+     * periodos de alta. Lo que queda fuera se rechaza con el limite que lo deja
+     * fuera:
+     *
+     * - despues del ultimo cese, como con una sola baja: en el periodo de la
+     *   ficha si esta de baja, y despues del cese programado si no;
+     * - en el **hueco** entre una baja y la readmision siguiente;
+     * - antes del primer alta, solo si esta de baja, como hasta ahora.
+     *
+     * @param  non-empty-list<EmploymentPeriod>  $periods
+     *
+     * @throws WorkDateOutsideEmployment
+     */
+    private function assertWithinHistory(string $date, array $periods): void
+    {
+        $previous = null;
+
+        foreach ($periods as $period) {
+            if ($period->covers($date)) {
+                return;
+            }
+
+            if ($previous instanceof EmploymentPeriod && $previous->gapBefore($period, $date)) {
+                throw WorkDateOutsideEmployment::betweenPeriods($date, (string) $previous->terminatedOn, $period->hiredOn);
+            }
+
+            $previous = $period;
+        }
+
+        $first = $periods[0];
+        $last = $periods[\count($periods) - 1];
+        $terminated = $this->employee->status === EmploymentStatus::TERMINATED;
+
+        if ($date < $first->hiredOn && ! $terminated) {
+            return;
+        }
+
+        $lastTermination = (string) $last->terminatedOn;
+
+        throw $terminated
+            ? WorkDateOutsideEmployment::forPeriod($date, $first->hiredOn, $lastTermination)
+            : WorkDateOutsideEmployment::afterTermination($date, $lastTermination);
     }
 
     /**

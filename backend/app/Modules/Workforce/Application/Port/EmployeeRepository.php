@@ -9,7 +9,11 @@ use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Workforce\Domain\Exception\EmployeeAlreadyTerminated;
 use App\Modules\Workforce\Domain\Exception\EmployeeEmailAlreadyTaken;
 use App\Modules\Workforce\Domain\Exception\EmployeeNationalIdAlreadyTaken;
+use App\Modules\Workforce\Domain\Exception\EmployeeNotTerminated;
 use App\Modules\Workforce\Domain\Model\Employee;
+use App\Modules\Workforce\Domain\Model\EmploymentHistory;
+use App\Modules\Workforce\Domain\Model\TerminationDateCorrection;
+use DateTimeImmutable;
 
 /**
  * La plantilla, vista por los casos de uso de este modulo.
@@ -101,6 +105,52 @@ interface EmployeeRepository
      * @throws EmployeeAlreadyTerminated
      */
     public function saveTermination(Employee $employee): void;
+
+    /**
+     * Las fichas de esos UUID, **bloqueadas** como {@see self::findForUpdate()} y
+     * en orden de `id`, para que dos lotes que comparten personas las tomen en el
+     * mismo orden (ADR-062 §6). Las que no existen no aparecen.
+     *
+     * @param  list<string>  $uuids
+     * @return array<string, Employee> indexado por `uuid`
+     */
+    public function findManyForUpdate(array $uuids): array;
+
+    /**
+     * Los periodos de alta de la persona, del mas antiguo al mas reciente
+     * (RN-27). Vacia si no existe.
+     */
+    public function employmentHistory(string $uuid): EmploymentHistory;
+
+    /**
+     * Escribe la readmision (RN-27, ADR-062 §6): el periodo nuevo, con
+     * `$periodUuid`, y la proyeccion en la ficha —`status`, `hired_at`,
+     * `terminated_at`, `department_id` y `locale`— en la misma transaccion. Con
+     * el predicado `status = 'terminated'`: cero filas es que otra escritura la
+     * readmitio antes.
+     *
+     * @throws EmployeeNotTerminated
+     */
+    public function saveRehire(Employee $employee, string $periodUuid, ?int $createdByUserId): void;
+
+    /**
+     * Escribe la correccion de la fecha de cese (RN-27, ADR-062 §7): la fila de
+     * `employment_period_corrections`, la fecha nueva del periodo y, si es el
+     * periodo en curso, la de la ficha. Devuelve el `id` de la correccion.
+     */
+    public function saveTerminationCorrection(
+        Employee $employee,
+        TerminationDateCorrection $correction,
+        int $correctedByUserId,
+        DateTimeImmutable $correctedAt,
+    ): int;
+
+    /**
+     * La persona **de baja y con la ficha sin minimizar** que tiene ese
+     * documento, o `null` (RN-27): el `409` del alta la ofrece para readmitirla.
+     * El documento se hashea en la sentencia y no sale de ella (RL-08).
+     */
+    public function rehirableUuidByNationalId(string $nationalId): ?string;
 
     /**
      * Las bajas programadas **vencidas** (RN-14, ADR-062 §4): personas que no

@@ -80,6 +80,8 @@ final class ImportEmployeesRequest extends FormRequest
             throw new RuntimeException('El fichero subido no esta accesible en disco.');
         }
 
+        $identifier = $this->user()?->getAuthIdentifier();
+
         return new ImportEmployeesCommand(
             // La ruta del temporal de la peticion: se lee en streaming desde ahi
             // y PHP lo borra al terminar. El producto NO lo guarda entre las dos
@@ -88,6 +90,7 @@ final class ImportEmployeesRequest extends FormRequest
             path: $path,
             apply: $this->string('mode')->value() === 'apply',
             confirmChecksum: $this->optionalString('confirm_checksum'),
+            importedByUserId: is_numeric($identifier) ? (int) $identifier : null,
         );
     }
 

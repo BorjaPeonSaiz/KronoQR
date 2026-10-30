@@ -6,14 +6,18 @@ namespace App\Modules\Workforce\Application\UseCase;
 
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\LocalePolicyProvider;
+use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Workforce\Application\Command\PinProvisioning;
 use App\Modules\Workforce\Application\Command\RegisterEmployeeCommand;
+use App\Modules\Workforce\Application\Command\RehireEmployeeCommand;
 use App\Modules\Workforce\Application\Command\UpdateEmployeeCommand;
 use App\Modules\Workforce\Application\Port\EmployeeImportDirectory;
+use App\Modules\Workforce\Application\Port\EmployeeRepository;
 use App\Modules\Workforce\Application\Port\ParentRowLocks;
 use App\Modules\Workforce\Application\Port\WorkforceEventPublisher;
 use App\Modules\Workforce\Domain\Event\EmployeesImported;
+use App\Modules\Workforce\Domain\Exception\EmployeeNotTerminated;
 use App\Modules\Workforce\Domain\ValueObject\ImportColumnMap;
 use App\Modules\Workforce\Domain\ValueObject\ImportedEmployee;
 use App\Modules\Workforce\Domain\ValueObject\ImportOutcome;
@@ -100,16 +104,19 @@ final readonly class ApplyEmployeeImport
         private Clock $clock,
         private EmployeeWriteRetry $retry,
         private LocalePolicyProvider $locales,
+        private RehireEmployeeHandler $rehires,
+        private EmployeeRepository $employees,
+        private SerializedLedgerWrite $serialized,
     ) {}
 
-    public function handle(ImportReport $report): ImportReport
+    public function handle(ImportReport $report, ?int $importedByUserId = null): ImportReport
     {
-        return UseCaseInstrumentation::run('workforce.apply_employee_import', fn (): ImportReport => $this->doHandle($report));
+        return UseCaseInstrumentation::run('workforce.apply_employee_import', fn (): ImportReport => $this->doHandle($report, $importedByUserId));
     }
 
-    private function doHandle(ImportReport $report): ImportReport
+    private function doHandle(ImportReport $report, ?int $importedByUserId): ImportReport
     {
-        $applied = $this->retry->run('employee.import', function () use ($report): array {
+        $applied = $this->retry->run('employee.import', function () use ($report, $importedByUserId): array {
             // FILAS PADRE ANTES DEL PRIMER ASIENTO (ADR-046 §1.1 punto 2, §5).
             // El primer alta o modificacion toma la cadena de `audit_log` y no la
             // suelta hasta el commit; a partir de ahi, pedir una fila padre seria
@@ -132,7 +139,7 @@ final readonly class ApplyEmployeeImport
             $departments = $this->directory->departmentsByNormalisedName();
             $this->parentRows->shareDepartments(array_values($departments));
 
-            $rows = $this->applyRows($report, $departments);
+            $rows = $this->applyRows($report, $departments, $importedByUserId);
 
             // El asiento del LOTE va DENTRO de la transaccion, como el de cada
             // alta (regla dura 6, ADR-010): o entran la plantilla y su
@@ -160,6 +167,7 @@ final readonly class ApplyEmployeeImport
                 unchanged: $report->countOf(ImportOutcome::UNCHANGED),
                 rejected: $report->countOf(ImportOutcome::REJECT),
                 occurredAt: $this->clock->now(),
+                rehired: $report->countOf(ImportOutcome::REHIRE),
             ));
 
             return $rows;
@@ -172,7 +180,7 @@ final readonly class ApplyEmployeeImport
      * @param  array<string, int>  $departments
      * @return list<ImportRow>
      */
-    private function applyRows(ImportReport $report, array $departments): array
+    private function applyRows(ImportReport $report, array $departments, ?int $importedByUserId): array
     {
         $rows = [];
 
@@ -180,6 +188,7 @@ final readonly class ApplyEmployeeImport
             $rows[] = match ($row->outcome) {
                 ImportOutcome::CREATE => $this->create($row, $departments),
                 ImportOutcome::UPDATE => $this->modify($row, $departments),
+                ImportOutcome::REHIRE => $this->rehire($row, $departments, $importedByUserId),
                 // `unchanged` y `reject` no escriben: la primera porque no hay
                 // nada que cambiar y la segunda porque no se pudo interpretar.
                 default => $row,
@@ -231,6 +240,47 @@ final readonly class ApplyEmployeeImport
         ));
 
         return $row->appliedAs($registered->employee->uuid);
+    }
+
+    /**
+     * La readmision de una persona de baja (RN-27, ADR-062 §6), por **el mismo
+     * caso de uso** que la individual, con la ficha bloqueada bajo la cadena y
+     * `via_import` en su asiento. Su departamento e idioma cambian solo si la
+     * fila los trae; el contrato, con los terminos del ultimo. El PIN se
+     * conserva: la importacion no emite PIN. Si alguien la readmitio por otra
+     * via despues de comprobar el fichero, `409` y el lote entero revierte.
+     *
+     * @param  array<string, int>  $departments
+     */
+    private function rehire(ImportRow $row, array $departments, ?int $importedByUserId): ImportRow
+    {
+        $employee = $row->employee;
+        $uuid = $row->employeeUuid;
+
+        if (! $employee instanceof ImportedEmployee || $uuid === null) {
+            return $row;
+        }
+
+        $departmentId = $this->departmentIdOf($employee, $departments);
+
+        $command = new RehireEmployeeCommand(
+            uuid: $uuid,
+            hiredAt: self::hiredAtOf($employee),
+            actorUserId: $importedByUserId,
+            departmentId: $departmentId,
+            departmentGiven: $departmentId !== null,
+            locale: $employee->locale,
+            viaImport: true,
+            countedByBatch: true,
+        );
+
+        $this->serialized->withChainLock(function () use ($uuid, $command): void {
+            $locked = $this->employees->findForUpdate($uuid) ?? throw EmployeeNotTerminated::withUuid($uuid);
+
+            $this->rehires->rehireLocked($locked, $command, null);
+        });
+
+        return $row;
     }
 
     /**

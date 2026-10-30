@@ -70,6 +70,7 @@ final class EmployeeImportResource extends JsonResource
                 'update' => $report->countOf(ImportOutcome::UPDATE),
                 'unchanged' => $report->countOf(ImportOutcome::UNCHANGED),
                 'reject' => $report->countOf(ImportOutcome::REJECT),
+                'rehire' => $report->countOf(ImportOutcome::REHIRE),
             ],
             'rows' => array_map(self::row(...), $report->rows),
             'truncated' => $report->truncated,
