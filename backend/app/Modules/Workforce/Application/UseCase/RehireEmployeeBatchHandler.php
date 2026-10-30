@@ -15,7 +15,7 @@ use App\Modules\Workforce\Application\Port\WorkforceEventPublisher;
 use App\Modules\Workforce\Domain\Event\EmployeesRehired;
 use App\Modules\Workforce\Domain\Exception\EmployeeNotTerminated;
 use App\Modules\Workforce\Domain\Exception\InvalidRehireDate;
-use App\Modules\Workforce\Domain\Exception\MinimisedEmploymentHistory;
+use App\Modules\Workforce\Domain\Exception\EmployeeRecordMinimised;
 use App\Modules\Workforce\Domain\Exception\RehireBatchRejected;
 use App\Modules\Workforce\Domain\Model\Employee;
 use DateTimeImmutable;
@@ -123,8 +123,8 @@ final readonly class RehireEmployeeBatchHandler
             $employee->rehire(new DateTimeImmutable($command->hiredAt));
         } catch (EmployeeNotTerminated $exception) {
             return ['key' => EmployeeNotTerminated::TRANSLATION_KEY, 'parameters' => [], 'message' => $exception->getMessage()];
-        } catch (MinimisedEmploymentHistory $exception) {
-            return ['key' => MinimisedEmploymentHistory::TRANSLATION_KEY, 'parameters' => $exception->parameters, 'message' => $exception->getMessage()];
+        } catch (EmployeeRecordMinimised $exception) {
+            return ['key' => EmployeeRecordMinimised::TRANSLATION_KEY, 'parameters' => $exception->parameters, 'message' => $exception->getMessage()];
         } catch (InvalidRehireDate $exception) {
             return ['key' => $exception->translationKey, 'parameters' => $exception->parameters, 'message' => $exception->getMessage()];
         }

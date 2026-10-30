@@ -271,7 +271,7 @@ it('una ficha minimizada no admite ausencias ni contratos: 409 con el motivo tra
     ]);
 
     foreach ([$ausencia, $contrato] as $respuesta) {
-        $respuesta->assertValidResponse(409);
+        $respuesta->assertValidResponse(409)->assertJsonPath('type', 'urn:kronoqr:problem:employee-record-minimised');
 
         expect($respuesta->json('detail'))->toBe(str_replace(':anonymized_on', $fecha, $texto));
     }
@@ -279,7 +279,7 @@ it('una ficha minimizada no admite ausencias ni contratos: 409 con el motivo tra
     expect(DB::table('absences')->where('employee_id', $ficha['id'])->count())->toBe(0)
         ->and(DB::table('employment_contracts')->where('employee_id', $ficha['id'])->count())->toBe(0);
 })->with([
-    'en español' => ['es', 'La ficha de esta persona se minimizó el :anonymized_on al vencer su plazo de conservación: ya no admite contratos ni ausencias.'],
+    'en español' => ['es', 'La ficha de esta persona se minimizó el :anonymized_on al vencer su plazo de conservación: ya no admite contratos, ausencias, readmisión ni corrección de su fecha de cese. Quien vuelve se da de alta como persona nueva.'],
 ])->group('RL-11', 'RF-GP-02', 'RF-GP-04');
 
 it('el portal da el rechazo generico con el codigo antiguo', function (): void {

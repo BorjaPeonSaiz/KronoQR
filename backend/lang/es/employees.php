@@ -32,12 +32,10 @@ return [
             .'puede cambiar. Con esa misma fecha, la baja se aplica en el acto.',
 
         'record_minimised' => 'La ficha de esta persona se minimizó el :anonymized_on al vencer su plazo de '
-            .'conservación: ya no admite contratos ni ausencias.',
+            .'conservación: ya no admite contratos, ausencias, readmisión ni corrección de su fecha de cese. Quien '
+            .'vuelve se da de alta como persona nueva.',
         'employee_not_terminated' => 'Esta persona no está de baja y no se puede dar de alta de nuevo. Si tiene una '
             .'baja programada, anúlala o espera a que se aplique.',
-
-        'employment_history_minimised' => 'La ficha de esta persona se minimizó el :anonymized_on al vencer su plazo '
-            .'de conservación: no se readmite ni se corrige. Quien vuelve se da de alta como persona nueva.',
 
         'offboarding_not_effective' => 'Este periodo no tiene la baja efectiva. Una baja programada se cambia de fecha '
             .'desde la baja.',

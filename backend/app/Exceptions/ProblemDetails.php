@@ -273,9 +273,9 @@ final class ProblemDetails
     public const string TYPE_EMPLOYEE_NOT_TERMINATED = 'urn:kronoqr:problem:employee-not-terminated';
 
     /**
-     * La ficha esta minimizada por retencion (ADR-060) y su vida laboral ya no
-     * cambia: ni readmision ni correccion de la fecha de cese (RN-27). Quien
-     * vuelve es un alta nueva.
+     * La ficha esta minimizada por retencion (ADR-060): no admite contratos ni
+     * ausencias nuevos, y su vida laboral ya no cambia: ni readmision ni
+     * correccion de la fecha de cese (RN-27). Quien vuelve es un alta nueva.
      */
     public const string TYPE_EMPLOYEE_RECORD_MINIMISED = 'urn:kronoqr:problem:employee-record-minimised';
 

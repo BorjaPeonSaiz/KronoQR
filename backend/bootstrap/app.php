@@ -86,7 +86,6 @@ use App\Modules\Workforce\Domain\Exception\InvalidEmploymentContract;
 use App\Modules\Workforce\Domain\Exception\InvalidEmploymentPeriod;
 use App\Modules\Workforce\Domain\Exception\InvalidRehireDate;
 use App\Modules\Workforce\Domain\Exception\InvalidTerminationCorrection;
-use App\Modules\Workforce\Domain\Exception\MinimisedEmploymentHistory;
 use App\Modules\Workforce\Domain\Exception\OffboardingNotEffective;
 use App\Modules\Workforce\Domain\Exception\OffboardingNotScheduled;
 use App\Modules\Workforce\Domain\Exception\RehireBatchRejected;
@@ -670,9 +669,6 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(static fn (EmployeeNotTerminated $exception): mixed => ProblemDetails::employeeNotTerminated(
             ProblemDetails::translated(EmployeeNotTerminated::TRANSLATION_KEY, [], $exception->getMessage()),
         ));
-        $exceptions->render(static fn (MinimisedEmploymentHistory $exception): mixed => ProblemDetails::employeeRecordMinimised(
-            ProblemDetails::translated(MinimisedEmploymentHistory::TRANSLATION_KEY, $exception->parameters, $exception->getMessage()),
-        ));
         $exceptions->render(static fn (OffboardingNotEffective $exception): mixed => ProblemDetails::offboardingNotEffective(
             ProblemDetails::translated(OffboardingNotEffective::TRANSLATION_KEY, [], $exception->getMessage()),
         ));
@@ -717,11 +713,12 @@ return Application::configure(basePath: dirname(__DIR__))
 
         /*
          * La ficha esta minimizada por retencion y no admite contratos ni
-         * ausencias nuevos (ADR-060): `409` con el `detail` en el idioma
-         * negociado. Antes que `WorkforceConflict`, su clase madre, cuyo
+         * ausencias nuevos, ni readmision ni correccion de su cese (ADR-060,
+         * RN-27): `409` `employee-record-minimised`, con el `detail` en el
+         * idioma negociado. Antes que `WorkforceConflict`, su clase madre, cuyo
          * mensaje es el tecnico del log.
          */
-        $exceptions->render(static fn (EmployeeRecordMinimised $exception): mixed => ProblemDetails::conflict(
+        $exceptions->render(static fn (EmployeeRecordMinimised $exception): mixed => ProblemDetails::employeeRecordMinimised(
             ProblemDetails::translated($exception->translationKey, $exception->parameters, $exception->getMessage()),
         ));
 

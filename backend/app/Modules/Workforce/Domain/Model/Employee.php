@@ -11,7 +11,6 @@ use App\Modules\Workforce\Domain\Exception\EmployeeRecordMinimised;
 use App\Modules\Workforce\Domain\Exception\ImmediateOffboardingNotDue;
 use App\Modules\Workforce\Domain\Exception\InvalidEmploymentPeriod;
 use App\Modules\Workforce\Domain\Exception\InvalidRehireDate;
-use App\Modules\Workforce\Domain\Exception\MinimisedEmploymentHistory;
 use App\Modules\Workforce\Domain\Exception\OffboardingNotScheduled;
 use App\Modules\Workforce\Domain\Exception\ScheduledOffboardingDue;
 use App\Modules\Workforce\Domain\Exception\ScheduledOffboardingNotDue;
@@ -350,7 +349,7 @@ final readonly class Employee
      * sin compartir dia. Una ficha minimizada no se readmite: ya no conserva el
      * documento con el que reconocer a la persona (ADR-060).
      *
-     * @throws MinimisedEmploymentHistory
+     * @throws EmployeeRecordMinimised
      * @throws EmployeeNotTerminated
      * @throws InvalidRehireDate
      */
@@ -360,7 +359,7 @@ final readonly class Employee
         bool $departmentGiven = false,
         ?string $locale = null,
     ): self {
-        $this->refuseIfMinimised();
+        $this->assertAcceptsPersonnelRecords();
 
         if ($this->status !== EmploymentStatus::TERMINATED || ! $this->terminatedAt instanceof DateTimeImmutable) {
             throw EmployeeNotTerminated::withUuid($this->uuid);
@@ -396,30 +395,18 @@ final readonly class Employee
      * {@see TerminationDateCorrection}; aqui se garantiza que la ficha sigue de
      * baja y que el cese no queda antes del alta.
      *
-     * @throws MinimisedEmploymentHistory
+     * @throws EmployeeRecordMinimised
      * @throws InvalidEmploymentPeriod
      */
     public function withCorrectedTermination(DateTimeImmutable $terminatedOn): self
     {
-        $this->refuseIfMinimised();
+        $this->assertAcceptsPersonnelRecords();
 
         if ($this->status !== EmploymentStatus::TERMINATED) {
             throw new InvalidArgumentException('Solo se corrige la fecha de cese de una baja efectiva (RN-27).');
         }
 
         return $this->with(status: EmploymentStatus::TERMINATED, terminatedAt: $terminatedOn->setTime(0, 0), terminatedAtGiven: true);
-    }
-
-    /**
-     * Una ficha minimizada no cambia su vida laboral (ADR-060, RN-27).
-     *
-     * @throws MinimisedEmploymentHistory
-     */
-    public function refuseIfMinimised(): void
-    {
-        if ($this->anonymizedAt instanceof DateTimeImmutable) {
-            throw MinimisedEmploymentHistory::withUuid($this->uuid, self::civilDate($this->anonymizedAt));
-        }
     }
 
     /**
@@ -481,9 +468,11 @@ final readonly class Employee
     }
 
     /**
-     * Una ficha minimizada no admite contratos ni ausencias nuevos (ADR-060):
-     * la minimizacion borro los suyos y lo que se registrara seria un dato
-     * personal nuevo de alguien cuyo plazo ya vencio.
+     * **La unica guarda de ficha minimizada** (ADR-060). Una ficha minimizada
+     * no admite contratos ni ausencias nuevos —la minimizacion borro los suyos y
+     * lo que se registrara seria un dato personal nuevo de alguien cuyo plazo ya
+     * vencio— ni cambia su vida laboral: no se readmite ni se corrige su fecha
+     * de cese (RN-27). Quien vuelve es un alta nueva.
      *
      * @throws EmployeeRecordMinimised
      */

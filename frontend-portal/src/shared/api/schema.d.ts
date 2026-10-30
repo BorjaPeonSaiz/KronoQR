@@ -17416,7 +17416,9 @@ export interface operations {
              *     Tambien `409` si la ficha esta **minimizada por retencion**
              *     (`anonymized_at` no nulo, ADR-060): ya no admite contratos. El
              *     `detail` lo dice en el idioma negociado, con la fecha de la
-             *     minimizacion.
+             *     minimizacion. Su `type` es
+             *     `urn:kronoqr:problem:employee-record-minimised`, el mismo que en la
+             *     readmision y en la correccion de la fecha de cese.
              */
             409: {
                 headers: {
@@ -20927,7 +20929,9 @@ export interface operations {
              *     Tambien `409` si la ficha esta **minimizada por retencion**
              *     (`anonymized_at` no nulo, ADR-060): ya no admite ausencias. El
              *     `detail` lo dice en el idioma negociado, con la fecha de la
-             *     minimizacion.
+             *     minimizacion. Su `type` es
+             *     `urn:kronoqr:problem:employee-record-minimised`, el mismo que en la
+             *     readmision y en la correccion de la fecha de cese.
              */
             409: {
                 headers: {

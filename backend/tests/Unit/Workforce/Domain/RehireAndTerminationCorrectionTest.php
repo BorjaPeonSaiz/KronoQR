@@ -7,7 +7,7 @@ use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Workforce\Domain\Exception\EmployeeNotTerminated;
 use App\Modules\Workforce\Domain\Exception\InvalidRehireDate;
 use App\Modules\Workforce\Domain\Exception\InvalidTerminationCorrection;
-use App\Modules\Workforce\Domain\Exception\MinimisedEmploymentHistory;
+use App\Modules\Workforce\Domain\Exception\EmployeeRecordMinimised;
 use App\Modules\Workforce\Domain\Exception\OffboardingNotEffective;
 use App\Modules\Workforce\Domain\Model\Employee;
 use App\Modules\Workforce\Domain\Model\EmploymentHistory;
@@ -86,7 +86,7 @@ it('no readmite a quien no esta de baja, tampoco con la baja solo programada', f
 
 it('no readmite una ficha minimizada por retencion', function (): void {
     expect(fn (): Employee => fichaDeLaReadmision(anonymizedAt: '2031-01-15')->rehire(new DateTimeImmutable('2031-04-01')))
-        ->toThrow(MinimisedEmploymentHistory::class);
+        ->toThrow(EmployeeRecordMinimised::class);
 })->group('RN-27', 'RL-11');
 
 it('corrige el cese de la ficha de baja y la deja de baja', function (): void {

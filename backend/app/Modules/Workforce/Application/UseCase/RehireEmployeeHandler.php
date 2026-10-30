@@ -18,7 +18,7 @@ use App\Modules\Workforce\Application\Port\WorkforceEventPublisher;
 use App\Modules\Workforce\Domain\Event\EmployeeRehired;
 use App\Modules\Workforce\Domain\Exception\EmployeeNotTerminated;
 use App\Modules\Workforce\Domain\Exception\InvalidRehireDate;
-use App\Modules\Workforce\Domain\Exception\MinimisedEmploymentHistory;
+use App\Modules\Workforce\Domain\Exception\EmployeeRecordMinimised;
 use App\Modules\Workforce\Domain\Model\Employee;
 use App\Modules\Workforce\Domain\Model\EmploymentContract;
 use DateTimeImmutable;
@@ -66,7 +66,7 @@ final readonly class RehireEmployeeHandler
      * `null` si la persona no existe.
      *
      * @throws EmployeeNotTerminated
-     * @throws MinimisedEmploymentHistory
+     * @throws EmployeeRecordMinimised
      * @throws InvalidRehireDate
      */
     public function handle(RehireEmployeeCommand $command): ?RehiredEmployee
@@ -106,7 +106,7 @@ final readonly class RehireEmployeeHandler
      * importacion, para que los tres caminos escriban exactamente lo mismo.
      *
      * @throws EmployeeNotTerminated
-     * @throws MinimisedEmploymentHistory
+     * @throws EmployeeRecordMinimised
      * @throws InvalidRehireDate
      */
     public function rehireLocked(Employee $employee, RehireEmployeeCommand $command, ?PinMaterial $material): RehiredEmployee

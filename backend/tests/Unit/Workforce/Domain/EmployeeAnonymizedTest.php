@@ -126,7 +126,7 @@ it('una ficha minimizada no admite contratos ni ausencias, con un conflicto trad
             ->and($minimised->parameters)->toBe(['anonymized_on' => '2026-10-21'])
             ->and($minimised->getMessage())->toBe(
                 'The personnel record 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90 was minimised by retention on 2026-10-21 '
-                .'(ADR-060): it takes no new contracts or absences.',
+                .'(ADR-060): it takes no new contracts, absences, rehiring nor termination date corrections.',
             );
     }
 })->group('RL-11', 'RF-GP-02', 'RF-GP-04');

@@ -15,7 +15,7 @@ use App\Modules\Workforce\Application\Port\SiteRepository;
 use App\Modules\Workforce\Application\Port\WorkforceEventPublisher;
 use App\Modules\Workforce\Domain\Event\TerminationDateCorrected;
 use App\Modules\Workforce\Domain\Exception\InvalidTerminationCorrection;
-use App\Modules\Workforce\Domain\Exception\MinimisedEmploymentHistory;
+use App\Modules\Workforce\Domain\Exception\EmployeeRecordMinimised;
 use App\Modules\Workforce\Domain\Exception\OffboardingNotEffective;
 use App\Modules\Workforce\Domain\Model\Employee;
 use App\Modules\Workforce\Domain\Model\Site;
@@ -56,7 +56,7 @@ final readonly class CorrectTerminationDateHandler
      *
      * @throws OffboardingNotEffective
      * @throws InvalidTerminationCorrection
-     * @throws MinimisedEmploymentHistory
+     * @throws EmployeeRecordMinimised
      * @throws InstallationSiteMissing
      */
     public function handle(CorrectTerminationDateCommand $command): ?CorrectedTerminationDate
@@ -84,7 +84,7 @@ final readonly class CorrectTerminationDateHandler
                 return null;
             }
 
-            $employee->refuseIfMinimised();
+            $employee->assertAcceptsPersonnelRecords();
 
             $correction = TerminationDateCorrection::propose($history, $period, $command->terminatedAt, $today, $command->reason);
 
