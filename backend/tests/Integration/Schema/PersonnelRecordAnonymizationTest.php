@@ -404,3 +404,36 @@ it('sustituye el motivo de corregir la fecha de cese de sus periodos y conserva 
         ->and($correccion->corrected_by_user_id)->toBe($rrhh->id)
         ->and(DB::table('employees')->where('id', $ficha['id'])->value('anonymized_at'))->not->toBeNull();
 })->group('RL-11', 'RL-08', 'RN-27');
+
+it('una ficha minimizada no recibe periodos, ni cambia los suyos, ni admite correcciones de su cese', function (): void {
+    // ADR-060, ADR-062 §6 y §7: la misma regla que el dominio, en el motor.
+    $ficha = fichaDeBaja();
+    $rrhh = ManagementUsers::withRole(UserRole::RRHH);
+
+    $periodo = (int) DB::table('employment_periods')->insertGetId([
+        'uuid' => Str::uuid7()->toString(),
+        'employee_id' => $ficha['id'],
+        'hired_on' => '2010-01-01',
+        'terminated_on' => '2015-06-30',
+        'offboarded_at' => '2015-07-01 00:00:00+00',
+    ]);
+
+    fichaMinimizar(fichaCorte());
+
+    expect(fichaRechazo(static fn () => DB::table('employment_periods')->insert([
+        'uuid' => Str::uuid7()->toString(),
+        'employee_id' => $ficha['id'],
+        'hired_on' => '2026-01-01',
+    ])))->toBe('42501')
+        ->and(fichaRechazo(static fn () => DB::table('employment_periods')->where('id', $periodo)->update(['terminated_on' => '2015-06-20'])))->toBe('42501')
+        ->and(fichaRechazo(static fn () => DB::table('employment_period_corrections')->insert([
+            'employment_period_id' => $periodo,
+            'previous_terminated_on' => '2015-06-30',
+            'terminated_on' => '2015-06-20',
+            'reason' => 'Correccion de una ficha ya minimizada',
+            'corrected_by_user_id' => $rrhh->id,
+            'corrected_at' => '2026-10-30 09:00:00+00',
+        ])))->toBe('42501')
+        ->and(DB::table('employment_periods')->where('employee_id', $ficha['id'])->pluck('terminated_on')->all())->toBe(['2015-06-30'])
+        ->and(DB::table('employment_period_corrections')->where('employment_period_id', $periodo)->count())->toBe(0);
+})->group('RL-11', 'RS-07', 'RN-27');
