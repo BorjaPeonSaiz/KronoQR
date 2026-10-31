@@ -487,3 +487,136 @@ describe('EmployeesImportStep: filas que readmiten (RN-27)', () => {
     expect(wrapper.find('[role="alert"]').text()).toContain(es.errors.network.title)
   })
 })
+
+describe('EmployeesImportStep: el 409 de huella distinta al aplicar (RF-GP-05, RN-27, ADR-046)', () => {
+  const PRIMERA = employeeImportReport({
+    file: { sha256: 'a'.repeat(64), rows: 2, warnings: [] },
+    rehire_digest: 'c'.repeat(64),
+  })
+  const SEGUNDA = employeeImportReport({
+    file: { sha256: 'b'.repeat(64), rows: 2, warnings: [] },
+    rehire_digest: 'd'.repeat(64),
+  })
+
+  interface Aplicacion {
+    checksum: FormDataEntryValue | null
+    digest: FormDataEntryValue | null
+  }
+
+  /** Valida con `validaciones` en orden; la primera aplicacion responde `primera`, las demas aplican. */
+  function servidor(primera: Response, ...validaciones: ReturnType<typeof employeeImportReport>[]) {
+    const aplicaciones: Aplicacion[] = []
+    const pendientes = [...validaciones]
+
+    stubFetch(async (_url, init) => {
+      const body = init?.body as FormData
+
+      if (body.get('mode') === 'apply') {
+        aplicaciones.push({
+          checksum: body.get('confirm_checksum'),
+          digest: body.get('confirm_rehire_digest'),
+        })
+
+        return aplicaciones.length === 1
+          ? primera
+          : jsonResponse(employeeImportReport({ mode: 'apply' }))
+      }
+
+      return jsonResponse(pendientes.shift() ?? SEGUNDA)
+    })
+
+    return aplicaciones
+  }
+
+  async function validarYAplicar() {
+    const wrapper = await mountView(EmployeesImportStep, { pinia: createTestPinia() })
+
+    await selectFile(wrapper)
+    await wrapper.find('[data-test="validate"]').trigger('click')
+    await settle()
+    await wrapper.find('[data-test="apply"]').trigger('click')
+    await settle()
+
+    return wrapper
+  }
+
+  it.each([
+    { causa: 'otro fichero o readmisiones distintas', type: 'urn:kronoqr:problem:conflict' },
+    { causa: 'una baja durante la aplicacion', type: 'urn:kronoqr:problem:employee-terminated' },
+    { causa: 'una readmision por otra via', type: 'urn:kronoqr:problem:employee-not-terminated' },
+  ])('con el 409 de $causa no deja aplicar el informe viejo y pide validar', async ({ type }) => {
+    servidor(problemResponse(409, type), PRIMERA)
+
+    const wrapper = await validarYAplicar()
+
+    expect(wrapper.find('[data-test="import-stale"]').text()).toContain(
+      es.onboarding.steps.employees.stale.title,
+    )
+    expect(wrapper.find('[data-test="apply"]').exists()).toBe(false)
+  })
+
+  it('tras el 409 aplica con la huella y el rehire_digest de la validacion nueva, nunca con los viejos', async () => {
+    const aplicaciones = servidor(
+      problemResponse(409, 'urn:kronoqr:problem:conflict'),
+      PRIMERA,
+      SEGUNDA,
+    )
+
+    const wrapper = await validarYAplicar()
+
+    await wrapper.find('[data-test="validate"]').trigger('click')
+    await settle()
+    await wrapper.find('[data-test="apply"]').trigger('click')
+    await settle()
+
+    expect(aplicaciones).toEqual([
+      { checksum: 'a'.repeat(64), digest: 'c'.repeat(64) },
+      { checksum: 'b'.repeat(64), digest: 'd'.repeat(64) },
+    ])
+    expect(wrapper.find('[data-test="import-stale"]').exists()).toBe(false)
+  })
+
+  it('si la validacion nueva ya no readmite a nadie, la aplicacion va sin rehire_digest', async () => {
+    const sinReadmisiones = employeeImportReport({
+      file: { sha256: 'b'.repeat(64), rows: 2, warnings: [] },
+    })
+    const aplicaciones = servidor(
+      problemResponse(409, 'urn:kronoqr:problem:conflict'),
+      PRIMERA,
+      sinReadmisiones,
+    )
+
+    const wrapper = await validarYAplicar()
+
+    await wrapper.find('[data-test="validate"]').trigger('click')
+    await settle()
+    await wrapper.find('[data-test="apply"]').trigger('click')
+    await settle()
+
+    expect(aplicaciones[1]).toEqual({ checksum: 'b'.repeat(64), digest: null })
+  })
+
+  it.each([
+    { status: 422, type: 'urn:kronoqr:problem:validation-failed' },
+    { status: 503, type: 'urn:kronoqr:problem:dependency-unavailable' },
+  ])(
+    'un $status al aplicar no es el aviso de huella distinta: conserva el informe y deja reintentar',
+    async ({ status, type }) => {
+      const aplicaciones = servidor(problemResponse(status, type), PRIMERA)
+
+      const wrapper = await validarYAplicar()
+
+      expect(wrapper.find('[data-test="import-stale"]').exists()).toBe(false)
+      expect(wrapper.find('[role="alert"]').exists()).toBe(true)
+      expect(wrapper.find('[data-test="import-row-2"]').exists()).toBe(true)
+
+      await wrapper.find('[data-test="apply"]').trigger('click')
+      await settle()
+
+      expect(aplicaciones).toEqual([
+        { checksum: 'a'.repeat(64), digest: 'c'.repeat(64) },
+        { checksum: 'a'.repeat(64), digest: 'c'.repeat(64) },
+      ])
+    },
+  )
+})
