@@ -441,7 +441,10 @@ describe('EmployeesImportStep: filas que readmiten (RN-27)', () => {
         : jsonResponse(rehireReport())
     })
 
-    const wrapper = await mountView(EmployeesImportStep, { pinia: createTestPinia() })
+    const wrapper = await mountView(EmployeesImportStep, {
+      pinia: createTestPinia(),
+      attachTo: document.body,
+    })
 
     await selectFile(wrapper)
     await wrapper.find('[data-test="validate"]').trigger('click')
@@ -457,12 +460,16 @@ describe('EmployeesImportStep: filas que readmiten (RN-27)', () => {
     // El informe viejo ya no vale: «Aplicar» desaparece hasta que se vuelva a validar.
     expect(wrapper.find('[data-test="apply"]').exists()).toBe(false)
     expect(wrapper.find('[data-test="import-row-2"]').exists()).toBe(false)
+    // Y el foco no se pierde con el boton: pasa a «Validar», lo siguiente que hay que hacer.
+    expect(document.activeElement).toBe(wrapper.find('[data-test="validate"]').element)
 
     await wrapper.find('[data-test="validate"]').trigger('click')
     await settle()
 
     expect(wrapper.find('[data-test="import-stale"]').exists()).toBe(false)
     expect(wrapper.find('[data-test="apply"]').exists()).toBe(true)
+
+    wrapper.unmount()
   })
 
   it('un fallo de red no es el aviso de resumen obsoleto: es el aviso general', async () => {

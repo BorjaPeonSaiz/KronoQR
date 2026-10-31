@@ -25,7 +25,12 @@ const noted = ref(false)
   <BaseDialog :title="t('employees.rehire.pins.heading')" size="wide" :dismissible="false">
     <p class="max-w-prose text-kq-text-muted">{{ t('employees.rehire.pins.explanation') }}</p>
 
-    <div tabindex="0" role="region" :aria-label="t('employees.rehire.pins.caption')" class="mt-4">
+    <div
+      tabindex="0"
+      role="region"
+      :aria-label="t('employees.rehire.pins.caption')"
+      class="mt-4 overflow-x-auto"
+    >
       <table class="w-full border-collapse text-left">
         <caption class="sr-only">
           {{
@@ -59,6 +64,9 @@ const noted = ref(false)
     </p>
     <p class="mt-3 text-sm text-kq-text-muted">{{ t('pin.reveal.handDelivery') }}</p>
     <p class="mt-1 text-sm text-kq-text-muted">{{ t('employees.rehire.pins.deliveryLater') }}</p>
+    <p class="mt-1 text-sm text-kq-text-muted" data-test="batch-pins-next">
+      {{ t('employees.rehire.pins.next') }}
+    </p>
 
     <label class="mt-4 flex items-start gap-2">
       <input v-model="noted" type="checkbox" class="mt-1" data-test="batch-pins-noted" />

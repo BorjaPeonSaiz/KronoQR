@@ -251,7 +251,8 @@ test(
     await page.goto('/employees?status=terminated')
 
     await expect(page.getByTestId('employee-row')).toHaveCount(3)
-    await expect(page.getByTestId('rehire-selected')).toHaveAttribute('aria-disabled', 'true')
+    // Sin nadie marcado no hay nada que hacer: el boton del lote aparece con la primera casilla.
+    await expect(page.getByTestId('rehire-selected')).toHaveCount(0)
 
     // Un boton por fila y seleccion multiple con casilla de cabecera.
     await expect(page.getByTestId('rehire-row')).toHaveCount(3)

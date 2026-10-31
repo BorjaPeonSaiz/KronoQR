@@ -15,7 +15,7 @@
 import { announce } from '@kronoqr/web-kit/announcer'
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import { downloadDocument } from '@kronoqr/web-kit/downloadDocument'
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
 import { CREDENTIALS_MANAGE } from '@/features/auth/abilities'
@@ -38,6 +38,7 @@ const busy = ref(false)
 const error = ref<unknown>(null)
 /** `printed`: se genero el PDF. `nothing`: el lote respondio 204 (no habia nada pendiente). */
 const outcome = ref<'printed' | 'nothing' | null>(null)
+const closeButton = ref<HTMLButtonElement | null>(null)
 
 async function print(): Promise<void> {
   busy.value = true
@@ -59,6 +60,11 @@ async function print(): Promise<void> {
       outcome.value = 'printed'
       announce(t('employees.rehire.card.announcePrinted'))
     }
+
+    // El boton de imprimir desaparece al imprimir y con el se iria el foco: pasa a «Cerrar»,
+    // que es lo unico que queda por hacer.
+    await nextTick()
+    closeButton.value?.focus()
   } catch (caught) {
     error.value = caught
   } finally {
@@ -119,25 +125,24 @@ async function print(): Promise<void> {
 
     <ErrorNotice v-if="error !== null" :error="error" class="mt-4" />
 
-    <p v-if="outcome === null" class="mt-4 text-sm text-kq-text-muted">
+    <p v-if="outcome === null && mayPrint" class="mt-4 text-sm text-kq-text-muted">
       {{ t('employees.rehire.card.later') }}
-      <RouterLink
-        v-if="mayPrint"
-        :to="{ name: 'credentials' }"
-        class="text-kq-primary-strong underline"
-      >
+      <RouterLink :to="{ name: 'credentials' }" class="text-kq-primary-strong underline">
         {{ t('employees.rehire.card.laterLink') }}
       </RouterLink>
     </p>
 
     <template #actions>
       <button
+        ref="closeButton"
         type="button"
         data-test="rehire-card-close"
         class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-4 py-2 text-kq-text hover:bg-kq-surface-alt"
         @click="emit('done')"
       >
-        {{ outcome === null ? t('employees.rehire.card.printLater') : t('common.close') }}
+        {{
+          outcome === null && mayPrint ? t('employees.rehire.card.printLater') : t('common.close')
+        }}
       </button>
       <button
         v-if="mayPrint && outcome === null"

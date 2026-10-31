@@ -27,7 +27,7 @@
 // «que hacer» (`messageAdvice`) debajo del texto del servidor.
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import { isApiError } from '@kronoqr/web-kit/http'
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { EmployeeImportReport } from '@/shared/api/types'
 import { importEmployees } from '../employeeImport.api'
@@ -44,6 +44,7 @@ const finishing = ref(false)
 const error = ref<unknown>(null)
 /** El `409` de `apply`: lo revisado ya no es lo que se aplicaria. No se ha escrito nada. */
 const stale = ref(false)
+const validateButton = ref<HTMLButtonElement | null>(null)
 
 /** Codigos de la readmision con «que hacer» propio (`onboarding.steps.employees.messageAdvice`). */
 const REHIRE_ADVICE_CODES: readonly string[] = [
@@ -116,6 +117,10 @@ async function apply(): Promise<void> {
       // no pueda volver a enviar la huella vieja, y se pide validar de nuevo.
       stale.value = true
       report.value = null
+      // «Aplicar» desaparece con el informe y con el se iria el foco: pasa a «Validar», que es
+      // lo siguiente que hay que hacer.
+      await nextTick()
+      validateButton.value?.focus()
     } else {
       error.value = caught
     }
@@ -174,6 +179,7 @@ async function finish(state: 'completed' | 'skipped'): Promise<void> {
 
     <div class="flex gap-3">
       <button
+        ref="validateButton"
         v-aria-disabled.reason="!canValidate"
         type="button"
         :aria-busy="validating"

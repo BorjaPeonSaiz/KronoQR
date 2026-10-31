@@ -75,6 +75,9 @@ async function registerDelivery(): Promise<void> {
 
     <p class="mt-3 text-sm text-kq-text-muted">{{ t('pin.reveal.handDelivery') }}</p>
 
+    <!-- Lo que viene despues, si quien lo abre tiene algo que contar (p. ej. la tarjeta de una readmision). -->
+    <slot />
+
     <ErrorNotice v-if="error !== null" :error="error" class="mt-4" />
 
     <label class="mt-4 flex items-start gap-2">

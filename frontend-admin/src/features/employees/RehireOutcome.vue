@@ -10,6 +10,7 @@
 // El padre le pasa el resultado y lo suelta en `done`: al soltarlo, los PIN en claro
 // dejan de existir en el navegador. Este componente no guarda nada.
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { usePersonName } from '@/shared/people/personName'
 import type { RehiredEmployee } from '@/shared/api/types'
 import PinRevealDialog from './PinRevealDialog.vue'
@@ -26,6 +27,7 @@ const emit = defineEmits<{
   pinDelivered: []
 }>()
 
+const { t } = useI18n()
 const { personName } = usePersonName()
 
 function nameOf(result: RehiredEmployee): string {
@@ -79,7 +81,11 @@ function onPinDelivered(): void {
       :employee-code="singleResult.employee.employee_code"
       @acknowledged="pinsAcknowledged = true"
       @delivered="onPinDelivered"
-    />
+    >
+      <p class="mt-1 text-sm text-kq-text-muted" data-test="pin-next">
+        {{ t('employees.rehire.pins.next') }}
+      </p>
+    </PinRevealDialog>
     <RehirePinsDialog v-else :rows="pinRows" @acknowledged="pinsAcknowledged = true" />
   </template>
   <RehireCardDialog v-else :items="cards" @done="emit('done')" />

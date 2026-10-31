@@ -53,7 +53,11 @@ function pdf(): Response {
   })
 }
 
-async function mountOutcome(results: RehiredEmployee[], abilities?: string[]) {
+async function mountOutcome(
+  results: RehiredEmployee[],
+  abilities?: string[],
+  attachTo?: HTMLElement,
+) {
   const pinia = createTestPinia()
 
   if (abilities !== undefined) {
@@ -64,7 +68,7 @@ async function mountOutcome(results: RehiredEmployee[], abilities?: string[]) {
     session.status = 'authenticated'
   }
 
-  const wrapper = await mountView(RehireOutcome, { props: { results }, pinia })
+  const wrapper = await mountView(RehireOutcome, { props: { results }, pinia, attachTo })
 
   await settle(1)
 
@@ -138,6 +142,23 @@ describe('RehireOutcome: una persona', () => {
     expect(wrapper.find('[data-test="rehire-card-no-ability"]').text()).toBe(
       es.employees.rehire.card.noAbility,
     )
+    // No puede imprimir: ni «Imprimir más tarde» (no es suyo) ni «puedes imprimirlas desde Credenciales».
+    expect(wrapper.find('[data-test="rehire-card-close"]').text()).toBe(es.common.close)
+    expect(wrapper.text()).not.toContain(es.employees.rehire.card.later)
+  })
+
+  it('al imprimir, el foco pasa a «Cerrar» en vez de perderse con el boton que desaparece', async () => {
+    stubFetch(() => pdf())
+
+    const wrapper = await mountOutcome([rehired()], ['credentials:*'], document.body)
+
+    await wrapper.find('[data-test="rehire-card-print"]').trigger('click')
+    await settle()
+
+    expect(document.activeElement).toBe(wrapper.find('[data-test="rehire-card-close"]').element)
+    expect(wrapper.find('[data-test="rehire-card-close"]').text()).toBe(es.common.close)
+
+    wrapper.unmount()
   })
 
   it('un fallo al imprimir cuenta que ha pasado y deja volver a intentarlo', async () => {
@@ -162,6 +183,8 @@ describe('RehireOutcome: una persona', () => {
 
     expect(wrapper.find('[data-test="pin-value"]').text()).toBe('483920')
     expect(wrapper.text()).toContain(es.pin.reveal.onlyOnce)
+    // Dice que la tarjeta viene despues: quien lo ve no cree que ya esta todo hecho.
+    expect(wrapper.find('[data-test="pin-next"]').text()).toBe(es.employees.rehire.pins.next)
     expect(wrapper.find('[data-test="rehire-card-print"]').exists()).toBe(false)
 
     await buttonWith(wrapper, es.pin.reveal.acknowledge).trigger('click')
@@ -206,6 +229,8 @@ describe('RehireOutcome: varias personas', () => {
     )
 
     const values = wrapper.findAll('[data-test="batch-pin-value"]').map((cell) => cell.text())
+
+    expect(wrapper.find('[data-test="batch-pins-next"]').text()).toBe(es.employees.rehire.pins.next)
 
     expect(values).toEqual(['483920', '117205'])
     expect(wrapper.text()).toContain(es.pin.reveal.onlyOnce)

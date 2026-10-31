@@ -18,7 +18,7 @@ import EmptyState from '@kronoqr/web-kit/components/EmptyState.vue'
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
 import { FALLBACK_TIMEZONE } from '@kronoqr/web-kit/datetime'
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AuditNotice from '@/shared/ui/AuditNotice.vue'
 import { usePersonName } from '@/shared/people/personName'
@@ -302,6 +302,7 @@ function canRehire(employee: Employee): boolean {
 /** uuid -> ficha, en el orden en que se fueron marcando (el orden de la peticion). */
 const selection = ref(new Map<string, Employee>())
 const selectionLimitReached = ref(false)
+const selectAllBox = ref<HTMLInputElement | null>(null)
 
 const selectedPeople = computed(() => [...selection.value.values()])
 const rehirableRows = computed(() => rows.value.filter(canRehire))
@@ -351,6 +352,14 @@ function toggleAllRows(selected: boolean): void {
 function clearSelection(): void {
   selection.value = new Map()
   selectionLimitReached.value = false
+}
+
+/** «Quitar la selección» desaparece al pulsarlo: el foco pasa a la casilla de cabecera, no a `<body>`. */
+async function onClearSelection(): Promise<void> {
+  clearSelection()
+  announce(t('employees.announce.selected', 0))
+  await nextTick()
+  selectAllBox.value?.focus()
 }
 
 // Salir del filtro «De baja» descarta la seleccion: ya no se ve lo que se habia marcado.
@@ -548,11 +557,12 @@ const selectClass =
         <p v-if="selection.size > 0" class="font-medium" data-test="selection-summary">
           {{ t('employees.selection.summary', selection.size) }}
         </p>
+        <!-- Sin nadie marcado no hay nada que hacer: el boton aparece con la primera casilla. -->
         <button
-          v-aria-disabled.reason="selection.size === 0"
+          v-if="selection.size > 0"
           type="button"
           data-test="rehire-selected"
-          class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary aria-disabled:opacity-60"
+          class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary"
           @click="rehiringBatch = true"
         >
           {{ t('employees.actions.rehireSelected', { count: selection.size }) }}
@@ -561,7 +571,8 @@ const selectClass =
           v-if="selection.size > 0"
           type="button"
           class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text hover:bg-kq-surface-alt"
-          @click="clearSelection"
+          data-test="selection-clear"
+          @click="onClearSelection"
         >
           {{ t('employees.selection.clear') }}
         </button>
@@ -591,6 +602,7 @@ const selectClass =
             <tr>
               <th v-if="terminatedView" scope="col" class="px-3 py-2">
                 <input
+                  ref="selectAllBox"
                   type="checkbox"
                   data-test="select-all"
                   :checked="allRowsSelected"

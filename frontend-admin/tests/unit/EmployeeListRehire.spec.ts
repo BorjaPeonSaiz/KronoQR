@@ -101,7 +101,7 @@ function stubApi(
   return calls
 }
 
-async function mountList(status: string | null = 'terminated') {
+async function mountList(status: string | null = 'terminated', attachTo?: HTMLElement) {
   const router = createTestRouter()
   const pinia = createTestPinia()
   const session = useSessionStore()
@@ -112,7 +112,7 @@ async function mountList(status: string | null = 'terminated') {
 
   await router.push(status === null ? '/employees' : `/employees?status=${status}`)
 
-  const wrapper = await mountView(EmployeeListView, { router, pinia })
+  const wrapper = await mountView(EmployeeListView, { router, pinia, attachTo })
 
   await settle()
 
@@ -199,12 +199,17 @@ describe('Plantilla con el filtro «De baja» (RN-27)', () => {
     expect(announcement.value).toBe(es.employees.announce.rehired)
   })
 
-  it('«Dar de alta de nuevo a la selección» no se puede usar sin marcar a nadie', async () => {
+  it('«Dar de alta de nuevo a la selección» no se muestra sin marcar a nadie: aparece con la primera casilla', async () => {
     stubApi([former(A, 'Ana')])
 
     const wrapper = await mountList()
 
-    expect(wrapper.find('[data-test="rehire-selected"]').attributes('aria-disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="rehire-selected"]').exists()).toBe(false)
+
+    await wrapper.find('[data-test="select-row"]').setValue(true)
+    await settle(1)
+
+    expect(wrapper.find('[data-test="rehire-selected"]').exists()).toBe(true)
   })
 
   it('marca varias personas, lo anuncia y envia una sola peticion con fecha comun', async () => {
@@ -281,7 +286,7 @@ describe('Plantilla con el filtro «De baja» (RN-27)', () => {
   it('«Quitar la selección» la vacia', async () => {
     stubApi([former(A, 'Ana')])
 
-    const wrapper = await mountList()
+    const wrapper = await mountList('terminated', document.body)
 
     await wrapper.find('[data-test="select-row"]').setValue(true)
     await settle(1)
@@ -289,6 +294,11 @@ describe('Plantilla con el filtro «De baja» (RN-27)', () => {
     await settle(1)
 
     expect(wrapper.find('[data-test="selection-summary"]').exists()).toBe(false)
+    // El boton que se pulso desaparece: se anuncia y el foco no se pierde en <body>.
+    expect(announcement.value).toBe('0 personas seleccionadas.')
+    expect(document.activeElement).toBe(wrapper.find('[data-test="select-all"]').element)
+
+    wrapper.unmount()
   })
 
   it('todo o nada: el error por posicion dice a quien, no escribe nada y conserva la seleccion', async () => {
