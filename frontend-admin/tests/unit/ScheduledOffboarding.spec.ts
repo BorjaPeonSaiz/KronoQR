@@ -128,6 +128,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView')
   vi.useRealTimers()
   vi.unstubAllGlobals()
 })
@@ -195,6 +196,14 @@ describe('baja programada en la ficha (RN-14, RF-GP-03)', () => {
   })
 
   it('si otra persona ya la anulo, cierra, lo explica en la ficha y la recarga', async () => {
+    // El aviso esta arriba y la accion se hizo abajo: se trae a la vista.
+    const reveal = vi.fn()
+
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: reveal,
+    })
+
     const { wrapper } = await mountDetail(scheduled(), (url, init) =>
       url.endsWith('/offboard/cancel') && init?.method === 'POST'
         ? problemResponse(409, 'urn:kronoqr:problem:offboarding-not-scheduled')
@@ -211,6 +220,7 @@ describe('baja programada en la ficha (RN-14, RF-GP-03)', () => {
       es.employees.problems.offboardingNotScheduled.title,
     )
     expect(wrapper.find('[data-test="employee-conflict"]').attributes('role')).toBe('alert')
+    expect(reveal).toHaveBeenCalledWith({ block: 'nearest', behavior: 'auto' })
   })
 
   it('cambiar la fecha parte de la programada y no deja confirmar si no cambia nada', async () => {
@@ -237,6 +247,12 @@ describe('baja programada en la ficha (RN-14, RF-GP-03)', () => {
 
     expect(confirm(wrapper).attributes('aria-disabled')).toBeUndefined()
     expect(confirm(wrapper).text()).toBe(es.employees.offboard.confirmReschedule)
+    // Mover una fecha se puede volver a mover o anular: no va en rojo. Y el resultado es informativo.
+    expect(confirm(wrapper).classes()).toContain('bg-kq-primary-strong')
+    expect(confirm(wrapper).classes()).not.toContain('bg-kq-danger')
+    expect(dialog(wrapper).find('[data-test="offboard-outcome-scheduled"]').classes()).toContain(
+      'bg-kq-surface-alt',
+    )
     // «Antes -> despues» de la fecha de cese.
     expect(dialog(wrapper).find('table').text()).toContain('15 nov 2026')
     expect(dialog(wrapper).find('table').text()).toContain('20 nov 2026')
@@ -256,6 +272,8 @@ describe('baja programada en la ficha (RN-14, RF-GP-03)', () => {
     await settle(1)
     await dialog(wrapper).find('[data-test="apply-now"] input').setValue(true)
     await settle(1)
+    // Aplicarla ya si es un acto sin vuelta: vuelve el tono de peligro.
+    expect(confirm(wrapper).classes()).toContain('bg-kq-danger')
     await confirm(wrapper).trigger('click')
     await settle()
 

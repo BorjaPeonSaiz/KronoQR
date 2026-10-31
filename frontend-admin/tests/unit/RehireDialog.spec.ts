@@ -226,7 +226,8 @@ describe('RehireDialog: los dos avisos del propietario (31-10-2026)', () => {
     const warning = wrapper.find('[data-test="rehire-future-warning"]')
 
     expect(warning.text()).toContain('los fichajes anteriores a esa fecha se rechazan')
-    expect(warning.attributes('role')).toBe('status')
+    // El aviso vive dentro de una region viva que ya estaba en el dialogo (se anuncia de forma fiable).
+    expect(warning.element.closest('[role="status"]')).not.toBeNull()
     // Es un aviso, no un bloqueo.
     expect(confirm(wrapper).attributes('aria-disabled')).toBeUndefined()
   })
@@ -248,6 +249,51 @@ describe('RehireDialog: los dos avisos del propietario (31-10-2026)', () => {
     const warning = wrapper.find('[data-test="rehire-recent-warning"]')
 
     expect(warning.text()).toContain('espera a que los quioscos estén sincronizados')
+  })
+
+  it('si coinciden los dos avisos van en UNA caja, dentro de una region viva que ya existia', async () => {
+    stubApi()
+
+    const wrapper = await mountDialog(
+      former({
+        terminated_at: '2026-11-02',
+        offboarding: { state: 'effective', terminated_at: '2026-11-02' },
+      }),
+    )
+
+    // Sin avisos la region existe (para que el lector de pantalla anuncie lo que llegue) y no ocupa sitio.
+    const region = wrapper.find('[data-test="date-warnings"]')
+
+    expect(region.attributes('role')).toBe('status')
+    expect(region.element.children).toHaveLength(0)
+
+    await wrapper.find('input[type="date"]').setValue('2026-12-01')
+    await settle(1)
+
+    expect(region.element.children).toHaveLength(1)
+    expect(region.findAll('p').map((paragraph) => paragraph.attributes('data-test'))).toEqual([
+      'rehire-future-warning',
+      'rehire-recent-warning',
+    ])
+  })
+
+  it('con la fecha rechazada manda el error: los avisos de fecha futura y de sincronizacion se callan', async () => {
+    stubApi()
+
+    const wrapper = await mountDialog(
+      former({
+        terminated_at: '2026-11-02',
+        offboarding: { state: 'effective', terminated_at: '2026-11-02' },
+      }),
+    )
+
+    // Hoy es el dia del cese: el alta no es posterior. Es un error, y la baja de hoy no es el asunto.
+    await wrapper.find('input[type="date"]').setValue('2026-11-02')
+    await settle(1)
+
+    expect(wrapper.find('input[type="date"]').attributes('aria-invalid')).toBe('true')
+    expect(wrapper.find('[data-test="rehire-recent-warning"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="date-warnings"]').element.children).toHaveLength(0)
   })
 
   it('una baja antigua no lleva el aviso de sincronizacion', async () => {

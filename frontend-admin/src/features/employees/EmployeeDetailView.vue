@@ -13,7 +13,7 @@ import FormField from '@kronoqr/web-kit/components/FormField.vue'
 import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
 import { formatCivilDate, formatInstantWithZone } from '@kronoqr/web-kit/datetime'
 import { isApiError } from '@kronoqr/web-kit/http'
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { usePersonName } from '@/shared/people/personName'
 import { useOfferedLocales } from '@/shared/i18n/useOfferedLocales'
@@ -34,6 +34,7 @@ import type {
 import type { Change } from '@/shared/ui/change'
 import ChangePreview from '@/shared/ui/ChangePreview.vue'
 import ConfirmDialog from '@/shared/ui/ConfirmDialog.vue'
+import { revealElement } from '@/shared/ui/revealElement'
 import CancelScheduledOffboardingDialog from './CancelScheduledOffboardingDialog.vue'
 import EmployeeContractsSection from './EmployeeContractsSection.vue'
 import EmploymentPeriodsSection from './EmploymentPeriodsSection.vue'
@@ -424,10 +425,14 @@ function isTerminatedConflict(caught: unknown): boolean {
  * de baja» (ADR-046); la baja programada y la readmision añaden las suyas (ADR-062).
  */
 const conflictKey = ref<EmploymentProblemKey | null>(null)
+const conflictBox = ref<HTMLElement | null>(null)
 
 /** El aviso es un `role="alert"`: el lector de pantalla lo lee solo, sin `announce`. */
 async function reportConflict(key: EmploymentProblemKey = 'employeeTerminated'): Promise<void> {
   conflictKey.value = key
+  // El aviso esta arriba y quien actuo, abajo (la baja es el ultimo apartado): se trae a la vista.
+  await nextTick()
+  revealElement(conflictBox.value)
   await invalidate()
 }
 
@@ -523,6 +528,7 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
 
     <p
       v-if="conflictKey !== null"
+      ref="conflictBox"
       role="alert"
       data-test="employee-conflict"
       class="mt-4 rounded-kq border border-kq-warning bg-kq-warning-soft p-4 text-kq-warning"

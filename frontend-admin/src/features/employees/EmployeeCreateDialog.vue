@@ -25,7 +25,7 @@ import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import FormField from '@kronoqr/web-kit/components/FormField.vue'
 import { formatCivilDate, todayInZone } from '@kronoqr/web-kit/datetime'
 import { isApiError } from '@kronoqr/web-kit/http'
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
 import { useOfferedLocales } from '@/shared/i18n/useOfferedLocales'
@@ -33,6 +33,7 @@ import { useQuery } from '@tanstack/vue-query'
 import { listDepartments } from '@/shared/api/organisation.api'
 import type { CreateEmployeeRequest, EmployeeProvisioned } from '@/shared/api/types'
 import BaseDialog from '@/shared/ui/BaseDialog.vue'
+import { revealElement } from '@/shared/ui/revealElement'
 import TeleworkingCheckbox from './TeleworkingCheckbox.vue'
 import { rehirableEmployeeUuid } from './employmentProblems'
 import { createEmployee } from './employees.api'
@@ -69,6 +70,7 @@ const futureHire = computed(() => isFutureHire(hiredAt.value, today))
 
 /** La persona de baja con ese documento, si el `409` la ofrece (solo a `rrhh+`). */
 const rehirableUuid = computed(() => rehirableEmployeeUuid(error.value))
+const rehirableBox = ref<HTMLElement | null>(null)
 
 function fieldErrors(field: string): readonly string[] {
   return isApiError(error.value) ? (error.value.fieldErrors[field] ?? []) : []
@@ -93,6 +95,12 @@ async function submit(): Promise<void> {
     emit('created', await createEmployee(body))
   } catch (caught) {
     error.value = caught
+
+    if (rehirableUuid.value !== null) {
+      // El aviso esta arriba del formulario y el boton, abajo: se trae a la vista.
+      await nextTick()
+      revealElement(rehirableBox.value)
+    }
   } finally {
     submitting.value = false
   }
@@ -112,6 +120,7 @@ const inputClass =
     >
       <div
         v-if="rehirableUuid !== null"
+        ref="rehirableBox"
         role="alert"
         data-test="rehirable-notice"
         class="rounded-kq border border-kq-warning bg-kq-warning-soft p-4 text-kq-warning sm:col-span-2"

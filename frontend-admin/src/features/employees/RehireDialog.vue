@@ -33,6 +33,7 @@ import type { Change } from '@/shared/ui/change'
 import ChangePreview from '@/shared/ui/ChangePreview.vue'
 import ConfirmDialog from '@/shared/ui/ConfirmDialog.vue'
 import { listEmploymentContracts } from './contracts.api'
+import DateWarnings from './DateWarnings.vue'
 import { addCivilDays } from './employmentDates'
 import { parsePositiveHours, WEEKLY_HOURS_MAX, ANNUAL_HOURS_MAX } from './employmentLimits'
 import EmploymentProblemNotice from './EmploymentProblemNotice.vue'
@@ -114,6 +115,13 @@ const warnings = computed(() =>
     terminatedAt: props.employee.terminated_at,
     today,
   }),
+)
+
+// Con la fecha ya rechazada (no es posterior al cese) los avisos de sincronizacion y de
+// alta futura no hablan de nada que vaya a ocurrir: manda el error, que es lo que hay que arreglar.
+const showFutureWarning = computed(() => warnings.value.futureHire)
+const showRecentWarning = computed(
+  () => warnings.value.recentTermination && !warnings.value.notAfterTermination,
 )
 
 /** El dia siguiente al cese: la primera fecha de alta que admite el servidor. */
@@ -336,23 +344,15 @@ const inputClass =
         />
       </FormField>
 
-      <!-- Los dos avisos del propietario (31-10-2026). -->
-      <p
-        v-if="warnings.futureHire"
-        role="status"
-        data-test="rehire-future-warning"
-        class="rounded-kq-sm border border-kq-warning bg-kq-warning-soft p-3 text-kq-warning sm:col-span-2"
-      >
-        {{ t('employees.rehire.futureHire', { date: date(hiredAt) }) }}
-      </p>
-      <p
-        v-if="warnings.recentTermination"
-        role="status"
-        data-test="rehire-recent-warning"
-        class="rounded-kq-sm border border-kq-warning bg-kq-warning-soft p-3 text-kq-warning sm:col-span-2"
-      >
-        {{ t('employees.rehire.recentTermination') }}
-      </p>
+      <!-- Los dos avisos del propietario (31-10-2026), en una sola caja. -->
+      <DateWarnings class="sm:col-span-2" :visible="showFutureWarning || showRecentWarning">
+        <p v-if="showFutureWarning" data-test="rehire-future-warning">
+          {{ t('employees.rehire.futureHire', { date: date(hiredAt) }) }}
+        </p>
+        <p v-if="showRecentWarning" data-test="rehire-recent-warning">
+          {{ t('employees.rehire.recentTermination') }}
+        </p>
+      </DateWarnings>
 
       <FormField v-slot="field" :label="t('employees.fields.department')">
         <select :id="field.id" v-model="departmentId" :class="inputClass">

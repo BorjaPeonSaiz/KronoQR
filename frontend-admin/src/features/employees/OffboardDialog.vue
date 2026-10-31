@@ -133,6 +133,10 @@ const confirmLabel = computed(() =>
     : t('employees.offboard.confirmAction'),
 )
 
+// Cambiar la fecha de una baja que ya esta programada se puede volver a cambiar o anular: no
+// es un acto sin vuelta y no va en rojo. Programarla por primera vez y aplicarla ya, si.
+const tone = computed(() => (rescheduling && outcome.value === 'scheduled' ? 'normal' : 'danger'))
+
 const title = computed(() =>
   t(rescheduling ? 'employees.offboard.rescheduleHeading' : 'employees.offboard.heading'),
 )
@@ -206,7 +210,7 @@ const inputClass =
   <ConfirmDialog
     :title="title"
     :confirm-label="confirmLabel"
-    tone="danger"
+    :tone="tone"
     size="wide"
     :busy="busy"
     :error="error"
@@ -300,35 +304,37 @@ const inputClass =
       </div>
     </div>
 
-    <p
-      v-if="outcome === 'scheduled'"
-      role="status"
-      data-test="offboard-outcome-scheduled"
-      class="mt-4 rounded-kq-sm border border-kq-warning bg-kq-warning-soft p-3 text-kq-warning"
-    >
-      {{ t('employees.offboard.outcomeScheduled', { date: date(terminatedAt) }) }}
-    </p>
-    <p
-      v-else-if="outcome === 'immediate'"
-      role="status"
-      data-test="offboard-outcome-immediate"
-      class="mt-4 rounded-kq-sm border border-kq-danger bg-kq-danger-soft p-3 text-kq-danger"
-    >
-      {{ t('employees.offboard.outcomeImmediate') }}
-    </p>
-    <p
-      v-else-if="outcome === 'noEffect'"
-      role="status"
-      data-test="offboard-outcome-no-effect"
-      class="mt-4 rounded-kq-sm border border-kq-danger bg-kq-danger-soft p-3 text-kq-danger"
-    >
-      {{ t('employees.offboard.outcomeNoEffect') }}
-    </p>
+    <!-- Lo que va a pasar, segun la fecha. Region viva siempre presente: al cambiar la fecha el
+         lector de pantalla oye el resultado nuevo. Programada es informativo (hoy no cambia nada) y
+         va neutro; lo que no se deshace va en tono de peligro. -->
+    <div role="status" class="mt-4 empty:hidden">
+      <p
+        v-if="outcome === 'scheduled'"
+        data-test="offboard-outcome-scheduled"
+        class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-alt p-3 text-kq-text"
+      >
+        {{ t('employees.offboard.outcomeScheduled', { date: date(terminatedAt) }) }}
+      </p>
+      <p
+        v-else-if="outcome === 'immediate'"
+        data-test="offboard-outcome-immediate"
+        class="rounded-kq-sm border border-kq-danger bg-kq-danger-soft p-3 text-kq-danger"
+      >
+        {{ t('employees.offboard.outcomeImmediate') }}
+      </p>
+      <p
+        v-else-if="outcome === 'noEffect'"
+        data-test="offboard-outcome-no-effect"
+        class="rounded-kq-sm border border-kq-danger bg-kq-danger-soft p-3 text-kq-danger"
+      >
+        {{ t('employees.offboard.outcomeNoEffect') }}
+      </p>
+    </div>
 
     <ChangePreview class="mt-4" :changes="changes" :caption="title" />
 
     <ul v-if="outcome === 'scheduled'" class="mt-4 list-disc pl-5 text-kq-text-muted">
-      <li>{{ t('employees.offboard.scheduledKeepsClocking', { date: date(terminatedAt) }) }}</li>
+      <li>{{ t('employees.offboard.scheduledKeepsClocking') }}</li>
       <li>{{ t('employees.offboard.scheduledApplies') }}</li>
       <li>{{ t('employees.offboard.scheduledCancel') }}</li>
       <li>{{ t('employees.offboard.consequenceHistory') }}</li>

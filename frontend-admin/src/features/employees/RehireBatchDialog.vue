@@ -14,13 +14,15 @@
 import FormField from '@kronoqr/web-kit/components/FormField.vue'
 import { formatCivilDate, todayInZone } from '@kronoqr/web-kit/datetime'
 import { isApiError } from '@kronoqr/web-kit/http'
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { usePersonName } from '@/shared/people/personName'
 import type { Employee, RehiredEmployee } from '@/shared/api/types'
 import type { Change } from '@/shared/ui/change'
 import ChangePreview from '@/shared/ui/ChangePreview.vue'
 import ConfirmDialog from '@/shared/ui/ConfirmDialog.vue'
+import { revealElement } from '@/shared/ui/revealElement'
+import DateWarnings from './DateWarnings.vue'
 import { addCivilDays } from './employmentDates'
 import { rehireEmployees } from './employees.api'
 import { isFutureHire, isRecentTermination } from './rehirePlan'
@@ -46,6 +48,7 @@ const resetPin = ref(false)
 const busy = ref(false)
 const error = ref<unknown>(null)
 const dateInput = ref<HTMLInputElement | null>(null)
+const errorsBox = ref<HTMLElement | null>(null)
 
 function date(value: string | null): string {
   return value === null || value === '' ? t('common.empty') : formatCivilDate(value, locale.value)
@@ -143,6 +146,9 @@ const recentCount = computed(
 
 const futureHire = computed(() => isFutureHire(hiredAt.value, today))
 
+// Mientras alguien de la seleccion no admite la fecha, manda la lista de quien lo impide.
+const showRecentWarning = computed(() => recentCount.value > 0 && tooEarly.value.length === 0)
+
 const confirmDisabled = computed(
   () => hiredAt.value === '' || props.people.length === 0 || tooEarly.value.length > 0,
 )
@@ -196,6 +202,11 @@ async function confirm(): Promise<void> {
 
     if (isApiError(caught) && caught.status === 422 && dateErrors.value.length > 0) {
       dateInput.value?.focus()
+    } else if (serverPositions.value.length > 0) {
+      // La lista de quien lo impide esta en mitad del dialogo y quien confirma esta al final:
+      // se trae a la vista (el lector de pantalla ya la lee, es una alerta).
+      await nextTick()
+      revealElement(errorsBox.value)
     }
   } finally {
     busy.value = false
@@ -264,22 +275,14 @@ const inputClass =
         />
       </FormField>
 
-      <p
-        v-if="futureHire"
-        role="status"
-        data-test="rehire-future-warning"
-        class="rounded-kq-sm border border-kq-warning bg-kq-warning-soft p-3 text-kq-warning"
-      >
-        {{ t('employees.rehire.futureHire', { date: date(hiredAt) }) }}
-      </p>
-      <p
-        v-if="recentCount > 0"
-        role="status"
-        data-test="rehire-recent-warning"
-        class="rounded-kq-sm border border-kq-warning bg-kq-warning-soft p-3 text-kq-warning"
-      >
-        {{ t('employees.rehireBatch.recentTermination', recentCount) }}
-      </p>
+      <DateWarnings :visible="futureHire || showRecentWarning">
+        <p v-if="futureHire" data-test="rehire-future-warning">
+          {{ t('employees.rehire.futureHire', { date: date(hiredAt) }) }}
+        </p>
+        <p v-if="showRecentWarning" data-test="rehire-recent-warning">
+          {{ t('employees.rehireBatch.recentTermination', recentCount) }}
+        </p>
+      </DateWarnings>
 
       <label class="flex items-start gap-2">
         <input v-model="resetPin" type="checkbox" class="mt-1" data-test="rehire-reset-pin" />
@@ -295,6 +298,7 @@ const inputClass =
     <!-- Todo o nada: la lista de quien lo impide, por posicion y con su nombre. -->
     <div
       v-if="positionErrors.length > 0"
+      ref="errorsBox"
       role="alert"
       data-test="rehire-batch-errors"
       class="mt-4 rounded-kq border border-kq-danger bg-kq-danger-soft p-4 text-kq-danger"
