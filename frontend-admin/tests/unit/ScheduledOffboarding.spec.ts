@@ -413,7 +413,7 @@ describe('dar de alta de nuevo desde la ficha (RN-27)', () => {
       offboarding: {
         state: 'effective',
         terminated_at: terminatedAt,
-        offboarded_at: `${terminatedAt}T22:00:04Z`,
+        offboarded_at: instant,
       },
       employment_periods: [
         employmentPeriodRecord({

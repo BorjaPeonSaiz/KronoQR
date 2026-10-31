@@ -3,13 +3,7 @@ import { announcement, clearAnnouncement } from '@kronoqr/web-kit/announcer'
 import RehireDialog from '@/features/employees/RehireDialog.vue'
 import es from '@/shared/i18n/locales/es.json'
 import type { Employee } from '@/shared/api/types'
-import {
-  EMPLOYEE_UUID,
-  employee,
-  employmentContract,
-  employmentPeriodRecord,
-  rehired,
-} from './support/fixtures'
+import { EMPLOYEE_UUID, employee, employmentContract, rehired } from './support/fixtures'
 import { jsonResponse, mountView, problemResponse, settle, stubFetch } from './support/harness'
 
 // «Dar de alta de nuevo» a una persona (RN-27, ADR-062 §6, RF-GP-01, RF-GP-03,
@@ -36,16 +30,19 @@ function former(overrides: Partial<Employee> = {}): Employee {
 interface Calls {
   rehire: Array<Record<string, unknown>>
   urls: string[]
+  /** Toda peticion que salio, GET incluidos. */
+  fetched: string[]
 }
 
 function stubApi(
   extra?: (url: string, init: RequestInit | undefined) => Response | null,
   contracts = [employmentContract({ valid_to: '2026-08-31', is_current: false })],
-  detail?: Employee,
 ): Calls {
-  const calls: Calls = { rehire: [], urls: [] }
+  const calls: Calls = { rehire: [], urls: [], fetched: [] }
 
   stubFetch((url, init) => {
+    calls.fetched.push(url)
+
     const handled = extra?.(url, init) ?? null
 
     if (handled !== null) {
@@ -59,11 +56,6 @@ function stubApi(
           { id: 4, name: 'Cocina' },
         ],
       })
-    }
-
-    // La lista de Plantilla no trae los periodos: el dialogo pide el detalle de la ficha.
-    if (url === `/api/v1/employees/${EMPLOYEE_UUID}` && detail !== undefined) {
-      return jsonResponse(detail)
     }
 
     if (url.endsWith('/contracts')) {
@@ -324,47 +316,32 @@ describe('RehireDialog: los dos avisos del propietario (31-10-2026)', () => {
     expect(wrapper.find('[data-test="date-warnings"]').element.children).toHaveLength(0)
   })
 
-  it('desde la lista pide el detalle y avisa si la baja se hizo efectiva hoy, aunque su cese sea antiguo', async () => {
-    // Cese del 31 de agosto, registrado esta mañana: el cese solo no lo diria.
-    stubApi(undefined, undefined, {
-      ...former(),
-      employment_periods: [
-        employmentPeriodRecord({
-          terminated_at: '2026-08-31',
-          offboarded_at: '2026-11-02T08:00:00Z',
-        }),
-      ],
+  /** Una baja de cese `terminatedAt` que se hizo efectiva en `offboardedAt` (UTC), como la trae el listado. */
+  const offboardedAt = (terminatedAt: string, instant: string) =>
+    former({
+      terminated_at: terminatedAt,
+      offboarding: { state: 'effective', terminated_at: terminatedAt, offboarded_at: instant },
     })
 
-    const wrapper = await mountDialog()
+  it('avisa si la baja se hizo efectiva hoy, aunque su cese sea antiguo, sin pedir mas fichas', async () => {
+    const calls = stubApi()
+
+    // Cese del 31 de agosto, registrado esta mañana: el cese solo no lo diria.
+    const wrapper = await mountDialog(offboardedAt('2026-08-31', '2026-11-02T08:00:00Z'))
 
     expect(wrapper.find('[data-test="rehire-recent-warning"]').text()).toContain(
       'espera a que los quioscos estén sincronizados',
     )
+    // offboarded_at viaja en la propia persona: ninguna peticion de detalle.
+    expect(calls.fetched).not.toContain(`/api/v1/employees/${EMPLOYEE_UUID}`)
   })
 
-  it('con el detalle en la mano manda offboarded_at: un cese de ayer efectivo ayer no avisa', async () => {
-    stubApi(undefined, undefined, {
-      ...former({ terminated_at: '2026-11-01' }),
-      employment_periods: [
-        employmentPeriodRecord({
-          terminated_at: '2026-11-01',
-          offboarded_at: '2026-11-01T22:00:04Z',
-        }),
-      ],
-    })
-
-    const wrapper = await mountDialog(former({ terminated_at: '2026-11-01' }))
-
-    expect(wrapper.find('[data-test="rehire-recent-warning"]').exists()).toBe(false)
-  })
-
-  it('si no llega el detalle aproxima por el cese de hoy o de ayer, que peca de aviso de mas', async () => {
+  it('manda offboarded_at: un cese de ayer efectivo ayer no avisa', async () => {
     stubApi()
 
-    const wrapper = await mountDialog(former({ terminated_at: '2026-11-01' }))
+    const wrapper = await mountDialog(offboardedAt('2026-11-01', '2026-11-01T22:00:04Z'))
 
-    expect(wrapper.find('[data-test="rehire-recent-warning"]').exists()).toBe(true)
+    expect(wrapper.find('[data-test="rehire-recent-warning"]').exists()).toBe(false)
   })
 
   it('una baja antigua no lleva el aviso de sincronizacion', async () => {
@@ -401,6 +378,72 @@ describe('RehireDialog: errores, cada uno con su «que hacer» (RN-27)', () => {
     // El mismo mensaje no se repite en un aviso aparte.
     expect(wrapper.find('[data-test="employment-problem"]').exists()).toBe(false)
     expect(wrapper.emitted('rehired')).toBeUndefined()
+  })
+
+  it('tras un 422 de la fecha, corregirla vuelve a habilitar «Confirmar» y se puede reenviar', async () => {
+    let attempts = 0
+
+    stubApi((url, init) => {
+      if (url.endsWith('/rehire') && init?.method === 'POST') {
+        attempts += 1
+
+        return attempts === 1
+          ? problemResponse(422, 'urn:kronoqr:problem:validation-failed', {
+              errors: { hired_at: ['La fecha de alta no es valida.'] },
+            })
+          : jsonResponse(rehired())
+      }
+
+      return null
+    })
+
+    const wrapper = await mountDialog()
+
+    await confirm(wrapper).trigger('click')
+    await settle()
+
+    // El error del servidor para esa fecha deja el boton parado hasta que se toca el campo...
+    expect(confirm(wrapper).attributes('aria-disabled')).toBeDefined()
+
+    await wrapper.find('input[type="date"]').setValue('2026-11-03')
+    await settle(1)
+
+    // ...y al corregirla se vuelve a poder confirmar.
+    expect(wrapper.find('input[type="date"]').attributes('aria-invalid')).toBeUndefined()
+    expect(confirm(wrapper).attributes('aria-disabled')).toBeUndefined()
+
+    await confirm(wrapper).trigger('click')
+    await settle()
+
+    expect(attempts).toBe(2)
+    expect(wrapper.emitted('rehired')).toHaveLength(1)
+  })
+
+  it('un 422 de un campo que no esta junto a un input (departamento, contrato) sale en el aviso con su nombre', async () => {
+    stubApi((url, init) =>
+      url.endsWith('/rehire') && init?.method === 'POST'
+        ? problemResponse(422, 'urn:kronoqr:problem:validation-failed', {
+            errors: {
+              hired_at: ['Fecha no valida.'],
+              department_id: ['El departamento ya no existe.'],
+              'contract.weekly_hours': ['Las horas no son validas.'],
+            },
+          })
+        : null,
+    )
+
+    const wrapper = await mountDialog()
+
+    await confirm(wrapper).trigger('click')
+    await settle()
+
+    const notice = wrapper.find('[role="alert"]')
+
+    expect(notice.text()).toContain('Departamento: El departamento ya no existe.')
+    expect(notice.text()).toContain('Horas por semana: Las horas no son validas.')
+    // La fecha ya esta junto a su campo: no se repite en el aviso.
+    expect(notice.text()).not.toContain('Fecha no valida.')
+    expect(wrapper.text()).toContain('Fecha no valida.')
   })
 
   it('si la persona ya no esta de baja lo explica, dice que hacer y avisa para releer la ficha', async () => {
@@ -504,14 +547,13 @@ describe('RehireDialog: «hoy» es el del centro a medianoche, tambien la noche 
     'a las $ahora propone $propuesta y una baja efectiva a las $efectiva avisa: $avisa',
     async ({ ahora, propuesta, efectiva, avisa }) => {
       vi.setSystemTime(new Date(ahora))
-      stubApi(undefined, undefined, {
-        ...former(),
-        employment_periods: [
-          employmentPeriodRecord({ terminated_at: '2026-08-31', offboarded_at: efectiva }),
-        ],
-      })
+      stubApi()
 
-      const wrapper = await mountDialog()
+      const wrapper = await mountDialog(
+        former({
+          offboarding: { state: 'effective', terminated_at: '2026-08-31', offboarded_at: efectiva },
+        }),
+      )
 
       expect(wrapper.find<HTMLInputElement>('input[type="date"]').element.value).toBe(propuesta)
       expect(wrapper.find('[data-test="rehire-recent-warning"]').exists()).toBe(avisa)

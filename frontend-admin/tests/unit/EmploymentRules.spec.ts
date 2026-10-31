@@ -87,35 +87,23 @@ describe('avisos de fecha de un alta o una readmision (decision del 31-10-2026)'
 
   it('la baja efectiva hoy en la zona del centro pide esperar a los quioscos, sea cual sea su cese', () => {
     // 22:30 UTC del 1 de octubre ya es el 2 en Madrid (CEST); 21:30 UTC del 1, aun el 1.
-    const effective = (offboardedAt: string | null | undefined, terminatedAt = '2026-09-20') =>
-      isRecentTermination({ offboardedAt, terminatedAt, today: TODAY, timezone: ZONE })
+    const effective = (offboardedAt: string | null) =>
+      isRecentTermination({ offboardedAt, today: TODAY, timezone: ZONE })
 
     expect(effective('2026-10-01T22:30:00Z')).toBe(true)
     expect(effective('2026-10-02T08:00:00Z')).toBe(true)
     expect(effective('2026-10-01T21:30:00Z')).toBe(false)
-    // Una baja retroactiva registrada esta mañana cuenta, aunque su cese sea de hace dias...
-    expect(effective('2026-10-02T08:00:00Z', '2026-09-01')).toBe(true)
-    // ...y una de cese de hoy registrada hace tiempo no.
-    expect(effective('2026-09-30T08:00:00Z', TODAY)).toBe(false)
-    expect(effective(null, TODAY)).toBe(false)
-  })
-
-  it('sin offboarded_at (la lista no trae el detalle) aproxima por el cese de hoy o de ayer', () => {
-    const approx = (terminatedAt: string | null, today = TODAY) =>
-      isRecentTermination({ offboardedAt: undefined, terminatedAt, today, timezone: ZONE })
-
-    expect(approx(TODAY)).toBe(true)
-    expect(approx('2026-10-01')).toBe(true)
-    expect(approx('2026-09-30')).toBe(false)
-    expect(approx(null)).toBe(false)
-    expect(approx(TODAY, '')).toBe(false)
+    // Lo que cuenta es cuando se hizo efectiva, no su fecha de cese (que esta ni se mira): una baja
+    // retroactiva registrada esta mañana avisa, y una de cese de hoy registrada hace tiempo no.
+    expect(effective('2026-09-30T08:00:00Z')).toBe(false)
+    // Una baja que no es efectiva (o que la ficha no trae) no hay nada que esperar.
+    expect(effective(null)).toBe(false)
   })
 
   it('sin la zona del centro no adivina con un instante que si conoce', () => {
     expect(
       isRecentTermination({
         offboardedAt: '2026-10-02T08:00:00Z',
-        terminatedAt: TODAY,
         today: TODAY,
         timezone: undefined,
       }),
@@ -262,7 +250,6 @@ describe('isRecentTermination en el borde de medianoche de la zona del centro (A
       expect(
         isRecentTermination({
           offboardedAt: instante,
-          terminatedAt: '2026-01-15',
           today: hoy,
           timezone: MADRID,
         }),
@@ -275,7 +262,6 @@ describe('isRecentTermination en el borde de medianoche de la zona del centro (A
     const enZona = (timezone: string) =>
       isRecentTermination({
         offboardedAt: '2026-10-01T22:30:00Z',
-        terminatedAt: '2026-01-15',
         today: '2026-10-02',
         timezone,
       })
@@ -283,24 +269,4 @@ describe('isRecentTermination en el borde de medianoche de la zona del centro (A
     expect(enZona('Europe/Madrid')).toBe(true)
     expect(enZona('Atlantic/Canary')).toBe(false)
   })
-
-  it.each([
-    { hoy: '2027-01-01', cese: '2026-12-31', aviso: true },
-    { hoy: '2027-01-01', cese: '2026-12-30', aviso: false },
-    { hoy: '2026-03-01', cese: '2026-02-28', aviso: true },
-    { hoy: '2028-03-01', cese: '2028-02-29', aviso: true },
-    { hoy: '2028-03-01', cese: '2028-02-28', aviso: false },
-  ])(
-    'sin offboarded_at, «ayer» de $hoy es $cese por calendario: $aviso',
-    ({ hoy, cese, aviso }) => {
-      expect(
-        isRecentTermination({
-          offboardedAt: undefined,
-          terminatedAt: cese,
-          today: hoy,
-          timezone: MADRID,
-        }),
-      ).toBe(aviso)
-    },
-  )
 })

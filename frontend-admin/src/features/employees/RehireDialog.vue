@@ -17,7 +17,6 @@
 import { useQuery } from '@tanstack/vue-query'
 import FormField from '@kronoqr/web-kit/components/FormField.vue'
 import { formatCivilDate, todayInZone } from '@kronoqr/web-kit/datetime'
-import { isApiError } from '@kronoqr/web-kit/http'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useOfferedLocales } from '@/shared/i18n/useOfferedLocales'
@@ -43,9 +42,17 @@ import {
   WEEKLY_HOURS_MAX,
 } from './employmentLimits'
 import EmploymentProblemNotice from './EmploymentProblemNotice.vue'
-import { type EmploymentProblemKey, staleProblemKey } from './employmentProblems'
-import { getEmployee, rehireEmployee } from './employees.api'
+import {
+  type EmploymentProblemKey,
+  fieldErrorsOf,
+  noticeError,
+  staleProblemKey,
+} from './employmentProblems'
+import { rehireEmployee } from './employees.api'
 import { rehireDateWarnings } from './rehirePlan'
+
+/** Campos cuyo error del 422 se pinta junto a su campo; los demas van al aviso. */
+const PLACED_FIELDS = ['hired_at'] as const
 
 const props = defineProps<{
   employee: Employee
@@ -109,19 +116,10 @@ function hours(value: number | null): string {
   return formatHours(value, locale.value, t)
 }
 
-// Cuando se hizo efectiva la baja: la ficha de detalle lo trae en su ultimo periodo
-// (`offboarded_at`). La lista de Plantilla no trae los periodos, asi que se pide el detalle;
-// mientras llega (o si falla) el aviso se aproxima por el cese.
-const detail = useQuery({
-  queryKey: ['employee', props.employee.uuid] as const,
-  queryFn: () => getEmployee(props.employee.uuid),
-  enabled: props.employee.employment_periods === undefined,
-  retry: false,
-})
-const offboardedAt = computed<string | null | undefined>(
-  () =>
-    (props.employee.employment_periods ?? detail.data.value?.employment_periods)?.at(-1)
-      ?.offboarded_at,
+// Cuando se hizo efectiva la baja: `offboarding.offboarded_at`, que viaja en la ficha y tambien
+// en el listado de Plantilla (sin una peticion por persona).
+const offboardedAt = computed<string | null>(
+  () => props.employee.offboarding?.offboarded_at ?? null,
 )
 
 const warnings = computed(() =>
@@ -146,9 +144,9 @@ const minHiredAt = computed(() =>
   props.employee.terminated_at === null ? undefined : addCivilDays(props.employee.terminated_at, 1),
 )
 
-const serverDateErrors = computed<readonly string[]>(() =>
-  isApiError(error.value) ? (error.value.fieldErrors['hired_at'] ?? []) : [],
-)
+// Lo que el servidor dijo de la fecha en el ultimo 422. Es propio y se borra al editar el campo:
+// si dependiera del ultimo fallo, el boton seguiria parado aunque la fecha ya estuviera corregida.
+const serverDateErrors = ref<readonly string[]>([])
 
 const dateErrors = computed<readonly string[]>(() => [
   ...(warnings.value.notAfterTermination
@@ -271,6 +269,7 @@ function buildContract(): RehireContract | null | undefined {
 async function confirm(): Promise<void> {
   busy.value = true
   error.value = null
+  serverDateErrors.value = []
 
   const contract = buildContract()
   const body: RehireEmployeeRequest = {
@@ -290,8 +289,9 @@ async function confirm(): Promise<void> {
     emit('rehired', await rehireEmployee(props.employee.uuid, body))
   } catch (caught) {
     error.value = caught
+    serverDateErrors.value = fieldErrorsOf(caught)['hired_at'] ?? []
 
-    if (isApiError(caught) && caught.status === 422 && serverDateErrors.value.length > 0) {
+    if (serverDateErrors.value.length > 0) {
       dateInput.value?.focus()
     }
 
@@ -305,14 +305,8 @@ async function confirm(): Promise<void> {
   }
 }
 
-/** Un 422 con mensaje en `hired_at` se pinta junto al campo; el resto, en el aviso del dialogo. */
-const visibleError = computed<unknown>(() =>
-  isApiError(error.value) &&
-  error.value.status === 422 &&
-  error.value.fieldErrors['hired_at'] !== undefined
-    ? null
-    : error.value,
-)
+/** Un 422 cuyos campos estan todos junto a su campo no se repite en el aviso del dialogo. */
+const visibleError = computed<unknown>(() => noticeError(error.value, PLACED_FIELDS))
 
 const inputClass =
   'rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text'
@@ -330,7 +324,7 @@ const inputClass =
     @confirm="confirm"
   >
     <template #error="{ error: failure }">
-      <EmploymentProblemNotice :error="failure" />
+      <EmploymentProblemNotice :error="failure" :placed="PLACED_FIELDS" />
     </template>
 
     <p class="mb-4 max-w-prose">{{ t('employees.rehire.explanation') }}</p>
@@ -358,6 +352,7 @@ const inputClass =
           :class="inputClass"
           :aria-invalid="field.invalid ? 'true' : undefined"
           :aria-describedby="field.describedBy"
+          @input="serverDateErrors = []"
         />
       </FormField>
 

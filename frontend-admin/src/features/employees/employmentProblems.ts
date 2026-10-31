@@ -7,7 +7,7 @@
 // que es cierto pero no ayuda a RRHH a decidir; estas causas tienen una salida
 // concreta (readmitir en vez de anular, corregir la fecha en vez de cambiarla) y
 // la pantalla la dice. `problem.detail` no se enseña: es para quien depura.
-import { isApiError } from '@kronoqr/web-kit/http'
+import { ApiError, type FieldErrors, isApiError, type Problem } from '@kronoqr/web-kit/http'
 
 export const EMPLOYMENT_PROBLEM_TYPES = {
   employeeTerminated: 'urn:kronoqr:problem:employee-terminated',
@@ -56,7 +56,53 @@ export function rehirableEmployeeUuid(error: unknown): string | null {
     return null
   }
 
-  const candidate = (error.problem as unknown as Record<string, unknown>)['rehirable_employee_uuid']
+  const { rehirable_employee_uuid: candidate } = error.problem as Problem & {
+    rehirable_employee_uuid?: unknown
+  }
 
   return typeof candidate === 'string' && candidate !== '' ? candidate : null
+}
+
+/** Los errores por campo de un `422`, tal como los escribio el servidor; vacio para cualquier otro fallo. */
+export function fieldErrorsOf(error: unknown): FieldErrors {
+  return isApiError(error) && error.status === 422 ? error.fieldErrors : {}
+}
+
+/**
+ * Los errores de campo de un `422` que el dialogo NO coloca junto a un campo (`placed` son los
+ * que si): `department_id`, `contract.*`, un `reason` cuando el campo del motivo no tiene sitio
+ * para el error... Si no se enseñan en el aviso, el usuario ve el boton parado sin saber por que.
+ */
+export function unplacedFieldErrors(error: unknown, placed: readonly string[]): FieldErrors {
+  return Object.fromEntries(
+    Object.entries(fieldErrorsOf(error)).filter(([field]) => !placed.includes(field)),
+  )
+}
+
+/**
+ * Lo que debe enseñar el aviso del dialogo: `null` si el fallo es un `422` con campos y todos
+ * estan ya junto a su campo (decirlo dos veces es ruido); el propio fallo en cualquier otro caso.
+ */
+export function noticeError(error: unknown, placed: readonly string[]): unknown {
+  const fields = fieldErrorsOf(error)
+
+  return Object.keys(fields).length > 0 &&
+    Object.keys(unplacedFieldErrors(error, placed)).length === 0
+    ? null
+    : error
+}
+
+/** Copia del fallo con solo los errores de campo que no estan junto a su campo. */
+export function withUnplacedFields(error: unknown, placed: readonly string[]): unknown {
+  if (!isApiError(error) || error.status !== 422) {
+    return error
+  }
+
+  return new ApiError({
+    kind: error.kind,
+    status: error.status,
+    problem: error.problem,
+    fieldErrors: unplacedFieldErrors(error, placed),
+    retryAfterSeconds: error.retryAfterSeconds,
+  })
 }

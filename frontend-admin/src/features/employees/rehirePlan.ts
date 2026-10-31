@@ -13,7 +13,6 @@
 // (`''`) no se adivina nada y no hay avisos. Son avisos, no bloqueos: el servidor
 // decide y la tablet nunca bloquea al empleado (regla dura 19).
 import { todayInZone } from '@kronoqr/web-kit/datetime'
-import { addCivilDays } from './employmentDates'
 
 export interface RehireDateWarnings {
   /** La fecha de alta es posterior a hoy: los fichajes anteriores se rechazan. */
@@ -33,7 +32,7 @@ export interface RehireDateInput {
   today: string
   timezone: string | undefined
   /** Cuando se hizo efectiva la baja (ver `isRecentTermination`). */
-  offboardedAt: string | null | undefined
+  offboardedAt: string | null
 }
 
 /** Aviso del alta con fecha futura (sirve tambien para el alta de una persona nueva). */
@@ -43,13 +42,11 @@ export function isFutureHire(hiredAt: string, today: string): boolean {
 
 export interface RecentTerminationInput {
   /**
-   * Instante UTC en que la baja se hizo efectiva (`EmploymentPeriodRecord.offboarded_at`).
-   * `null`: la baja no es efectiva. `undefined`: todavia no se conoce (la ficha no trae el
-   * detalle o aun no ha llegado); entonces se aproxima por el cese.
+   * Instante UTC en que la baja se hizo efectiva: `Employee.offboarding.offboarded_at`, que
+   * viaja tambien en el listado de Plantilla. `null` si la baja no es efectiva (o la ficha no la
+   * trae): entonces no hay nada que esperar.
    */
-  offboardedAt: string | null | undefined
-  /** Fecha de cese del periodo, para la aproximacion cuando no se conoce `offboardedAt`. */
-  terminatedAt: string | null
+  offboardedAt: string | null
   /** Hoy en la zona del centro, o vacio si aun no se conoce. */
   today: string
   timezone: string | undefined
@@ -60,27 +57,15 @@ export interface RecentTerminationInput {
  * cual sea su fecha de cese (una baja retroactiva registrada esta manana tambien cuenta, y
  * una programada con cese ayer la hace efectiva la tarea hoy). Hasta ese momento los
  * quioscos pueden seguir tratando a la persona como de alta.
- *
- * Sin `offboardedAt` (la lista de Plantilla no trae el detalle de periodos) se aproxima
- * por el cese de hoy o de ayer: peca de aviso de mas, nunca de menos.
  */
 export function isRecentTermination(input: RecentTerminationInput): boolean {
-  const { offboardedAt, terminatedAt, today, timezone } = input
-
-  if (today === '') {
-    return false
-  }
-
-  if (offboardedAt === null) {
-    return false
-  }
-
-  if (offboardedAt !== undefined) {
-    return timezone !== undefined && todayInZone(timezone, new Date(offboardedAt)) === today
-  }
+  const { offboardedAt, today, timezone } = input
 
   return (
-    terminatedAt !== null && (terminatedAt === today || terminatedAt === addCivilDays(today, -1))
+    today !== '' &&
+    offboardedAt !== null &&
+    timezone !== undefined &&
+    todayInZone(timezone, new Date(offboardedAt)) === today
   )
 }
 

@@ -9,11 +9,34 @@
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { employmentProblemKey } from './employmentProblems'
+import { employmentProblemKey, withUnplacedFields } from './employmentProblems'
 
-const props = defineProps<{ error: unknown }>()
+const props = withDefaults(
+  defineProps<{
+    error: unknown
+    /** Campos cuyo error del `422` ya se pinta junto a su campo: aqui no se repiten. */
+    placed?: readonly string[]
+  }>(),
+  { placed: () => [] },
+)
 
 const { t } = useI18n()
+
+// Nombre de cada campo del contrato tal como lo ve RRHH, para los errores sueltos de un 422.
+const fieldLabels = computed<Record<string, string>>(() => ({
+  department_id: t('employees.fields.department'),
+  locale: t('employees.fields.locale'),
+  contract: t('employees.rehire.contract.label'),
+  'contract.weekly_hours': t('contracts.fields.weeklyHours'),
+  'contract.annual_hours': t('contracts.fields.annualHours'),
+  'contract.schedule_type': t('contracts.fields.scheduleType'),
+  reason: t('employees.offboard.reasonLabel'),
+  apply_now: t('employees.offboard.applyNowLabel'),
+  terminated_at: t('employees.fields.terminatedAt'),
+  hired_at: t('employees.fields.hiredAt'),
+}))
+
+const shown = computed(() => withUnplacedFields(props.error, props.placed))
 
 const key = computed(() => employmentProblemKey(props.error))
 </script>
@@ -29,5 +52,5 @@ const key = computed(() => employmentProblemKey(props.error))
     <p class="font-semibold">{{ t(`employees.problems.${key}.title`) }}</p>
     <p class="mt-1">{{ t(`employees.problems.${key}.advice`) }}</p>
   </div>
-  <ErrorNotice v-else :error="error" />
+  <ErrorNotice v-else :error="shown" :field-labels="fieldLabels" />
 </template>

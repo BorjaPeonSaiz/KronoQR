@@ -14,8 +14,7 @@
 import FormField from '@kronoqr/web-kit/components/FormField.vue'
 import { formatCivilDate, todayInZone } from '@kronoqr/web-kit/datetime'
 import { isApiError } from '@kronoqr/web-kit/http'
-import { useQueryClient } from '@tanstack/vue-query'
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { usePersonName } from '@/shared/people/personName'
 import type { Employee, RehiredEmployee } from '@/shared/api/types'
@@ -25,7 +24,9 @@ import ConfirmDialog from '@/shared/ui/ConfirmDialog.vue'
 import { revealElement } from '@/shared/ui/revealElement'
 import DateWarnings from './DateWarnings.vue'
 import { addCivilDays } from './employmentDates'
-import { getEmployee, rehireEmployees } from './employees.api'
+import EmploymentProblemNotice from './EmploymentProblemNotice.vue'
+import { fieldErrorsOf, noticeError } from './employmentProblems'
+import { rehireEmployees } from './employees.api'
 import { isFutureHire, isRecentTermination } from './rehirePlan'
 
 const props = defineProps<{
@@ -141,52 +142,13 @@ const dateErrors = computed<readonly string[]>(() => {
   return own
 })
 
-// Cuando se hizo efectiva la baja de cada una. La lista no trae los periodos: se pide el detalle
-// de las primeras `MAX_DETAIL_LOOKUPS` (de cinco en cinco) y el resto se aproxima por el cese,
-// que peca de aviso de mas. Pedir 500 fichas para un aviso no compensa.
-const MAX_DETAIL_LOOKUPS = 50
-const LOOKUP_CONCURRENCY = 5
-const queryClient = useQueryClient()
-const offboardedAtByUuid = ref(new Map<string, string | null>())
-
-onMounted(async () => {
-  const pending = props.people
-    .filter((person) => person.employment_periods === undefined)
-    .slice(0, MAX_DETAIL_LOOKUPS)
-
-  for (let index = 0; index < pending.length; index += LOOKUP_CONCURRENCY) {
-    await Promise.all(
-      pending.slice(index, index + LOOKUP_CONCURRENCY).map(async (person) => {
-        try {
-          const detail = await queryClient.fetchQuery({
-            queryKey: ['employee', person.uuid] as const,
-            queryFn: () => getEmployee(person.uuid),
-            staleTime: 60_000,
-          })
-          const next = new Map(offboardedAtByUuid.value)
-
-          next.set(person.uuid, detail.employment_periods?.at(-1)?.offboarded_at ?? null)
-          offboardedAtByUuid.value = next
-        } catch {
-          // Sin detalle, el aviso se aproxima por el cese.
-        }
-      }),
-    )
-  }
-})
-
-function offboardedAtOf(person: Employee): string | null | undefined {
-  return person.employment_periods !== undefined
-    ? person.employment_periods.at(-1)?.offboarded_at
-    : offboardedAtByUuid.value.get(person.uuid)
-}
-
+// Cuando se hizo efectiva la baja de cada una: `offboarding.offboarded_at`, que el listado de
+// Plantilla ya trae. Ninguna peticion por persona.
 const recentCount = computed(
   () =>
     props.people.filter((person) =>
       isRecentTermination({
-        offboardedAt: offboardedAtOf(person),
-        terminatedAt: person.terminated_at,
+        offboardedAt: person.offboarding?.offboarded_at ?? null,
         today,
         timezone: props.timezone,
       }),
@@ -202,14 +164,14 @@ const confirmDisabled = computed(
   () => hiredAt.value === '' || props.people.length === 0 || tooEarly.value.length > 0,
 )
 
-/** El `422` por posicion y por `hired_at` se pinta en la lista y el campo; el resto, en el aviso. */
-const visibleError = computed<unknown>(() =>
-  isApiError(error.value) &&
-  error.value.status === 422 &&
-  (serverPositions.value.length > 0 || dateErrors.value.length > 0)
-    ? null
-    : error.value,
-)
+/** Los campos de un 422 que ya estan en pantalla: cada posicion en la lista y la fecha en su campo. */
+const placedFields = computed<string[]>(() => [
+  'hired_at',
+  ...Object.keys(fieldErrorsOf(error.value)).filter((field) => /^employee_uuids.d+$/.test(field)),
+])
+
+/** Lo demas (p. ej. `reset_pin`) va al aviso del dialogo, con el nombre del campo. */
+const visibleError = computed<unknown>(() => noticeError(error.value, placedFields.value))
 
 const changes = computed<Change[]>(() => [
   {
@@ -277,6 +239,10 @@ const inputClass =
     @cancel="emit('close')"
     @confirm="confirm"
   >
+    <template #error="{ error: failure }">
+      <EmploymentProblemNotice :error="failure" :placed="placedFields" />
+    </template>
+
     <p class="mb-4 max-w-prose">{{ t('employees.rehireBatch.explanation') }}</p>
 
     <details class="mb-4" data-test="rehire-batch-people">
@@ -318,6 +284,7 @@ const inputClass =
           v-model="hiredAt"
           type="date"
           required
+          :min="minHiredAt"
           :class="inputClass"
           :aria-invalid="field.invalid ? 'true' : undefined"
           :aria-describedby="field.describedBy"

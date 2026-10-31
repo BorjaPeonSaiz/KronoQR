@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import RehireBatchDialog from '@/features/employees/RehireBatchDialog.vue'
 import es from '@/shared/i18n/locales/es.json'
 import type { Employee } from '@/shared/api/types'
-import { employee, employmentPeriodRecord, rehired } from './support/fixtures'
+import { employee, rehired } from './support/fixtures'
 import { jsonResponse, mountView, problemResponse, settle, stubFetch } from './support/harness'
 
 // Readmision en lote con fecha comun (RN-27, ADR-062 §6, pedido del 18-10-2026):
@@ -10,7 +10,12 @@ import { jsonResponse, mountView, problemResponse, settle, stubFetch } from './s
 
 const TIMEZONE = 'Europe/Madrid'
 
-function former(uuid: string, first: string, terminatedAt = '2026-10-31'): Employee {
+function former(
+  uuid: string,
+  first: string,
+  terminatedAt = '2026-10-31',
+  offboardedAt?: string,
+): Employee {
   return employee({
     uuid,
     first_name: first,
@@ -21,7 +26,7 @@ function former(uuid: string, first: string, terminatedAt = '2026-10-31'): Emplo
     offboarding: {
       state: 'effective',
       terminated_at: terminatedAt,
-      offboarded_at: `${terminatedAt}T22:00:04Z`,
+      offboarded_at: offboardedAt ?? `${terminatedAt}T22:00:04Z`,
     },
   })
 }
@@ -32,30 +37,10 @@ const C = '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b03'
 
 const PEOPLE = [former(A, 'Ana'), former(B, 'Beto'), former(C, 'Carla')]
 
-function stubApi(
-  respond?: (init: RequestInit) => Response,
-  details: Record<string, string | null> = {},
-): Array<Record<string, unknown>> {
+function stubApi(respond?: (init: RequestInit) => Response): Array<Record<string, unknown>> {
   const bodies: Array<Record<string, unknown>> = []
 
   stubFetch((url, init) => {
-    // El detalle de cada ficha (la lista no trae los periodos): solo las que la prueba declara.
-    const uuid = /^\/api\/v1\/employees\/([0-9a-f-]{36})$/.exec(url)?.[1]
-
-    if (uuid !== undefined && uuid in details) {
-      const person = PEOPLE.find((candidate) => candidate.uuid === uuid) ?? former(uuid, 'X')
-
-      return jsonResponse({
-        ...person,
-        employment_periods: [
-          employmentPeriodRecord({
-            terminated_at: person.terminated_at,
-            offboarded_at: details[uuid] ?? null,
-          }),
-        ],
-      })
-    }
-
     if (url === '/api/v1/employees/rehire' && init?.method === 'POST') {
       bodies.push(JSON.parse(String(init.body)))
 
@@ -268,30 +253,26 @@ describe('RehireBatchDialog (RN-27, la vuelta de la temporada)', () => {
 
 describe('RehireBatchDialog: el aviso de sincronizacion sale de offboarded_at (31-10-2026)', () => {
   it('cuenta solo a quien se dio de baja hoy en la zona del centro, no por su cese', async () => {
+    stubApi()
+
     // Ana: cese de ayer pero efectiva hace dias; Beto: cese de hace un mes, registrada esta mañana.
-    stubApi(undefined, { [A]: '2027-03-26T08:00:00Z', [B]: '2027-03-29T07:00:00Z' })
-
     const wrapper = await mountBatch([
-      former(A, 'Ana', '2027-03-28'),
-      former(B, 'Beto', '2027-02-20'),
+      former(A, 'Ana', '2027-03-28', '2027-03-26T08:00:00Z'),
+      former(B, 'Beto', '2027-02-20', '2027-03-29T07:00:00Z'),
     ])
-
-    await settle()
 
     expect(wrapper.find('[data-test="rehire-recent-warning"]').text()).toContain('1 persona')
   })
 
-  it('si el detalle de alguna no llega, esa se aproxima por el cese', async () => {
-    stubApi(undefined, { [A]: '2027-03-26T08:00:00Z' })
+  it('sin nadie dado de baja hoy no avisa', async () => {
+    stubApi()
 
     const wrapper = await mountBatch([
       former(A, 'Ana', '2027-03-20'),
-      former(B, 'Beto', '2027-03-28'),
+      former(B, 'Beto', '2027-03-21'),
     ])
 
-    await settle()
-
-    expect(wrapper.find('[data-test="rehire-recent-warning"]').text()).toContain('1 persona')
+    expect(wrapper.find('[data-test="rehire-recent-warning"]').exists()).toBe(false)
   })
 })
 
@@ -388,65 +369,34 @@ describe('RehireBatchDialog: un lote grande (RN-27, ADR-062 §6)', () => {
   })
 })
 
-describe('RehireBatchDialog: el detalle de cada ficha para el aviso de sincronizacion (31-10-2026)', () => {
+describe('RehireBatchDialog: ninguna peticion por persona (RN-27)', () => {
   const uuidDe = (posicion: number) =>
     `0199f0c2-1f4a-7c3e-9b21-${String(posicion).padStart(12, '0')}`
 
-  /** 60 personas de baja: mas que las 50 fichas que el dialogo llega a pedir. */
-  const SESENTA = Array.from({ length: 60 }, (_, posicion) =>
-    former(uuidDe(posicion), `Persona${posicion}`),
-  )
-
-  function stubDetails(): { pedidas: string[]; maximoEnVuelo: () => number } {
+  it('con 60 personas no sale ninguna peticion y el aviso viene de offboarding.offboarded_at del listado', async () => {
     const pedidas: string[] = []
-    let enVuelo = 0
-    let maximo = 0
 
-    stubFetch(async (url) => {
+    stubFetch((url) => {
       pedidas.push(url)
-      enVuelo += 1
-      maximo = Math.max(maximo, enVuelo)
-      await new Promise((resolve) => setTimeout(resolve, 0))
-      enVuelo -= 1
 
-      return jsonResponse({ ...former(url.slice(-36), 'X'), employment_periods: [] })
+      throw new Error(`Sin doble para ${url}`)
     })
 
-    return { pedidas, maximoEnVuelo: () => maximo }
-  }
+    // La 40 se dio de baja esta mañana en Madrid (cese antiguo); las demas, hace mucho.
+    const sesenta = Array.from({ length: 60 }, (_, posicion) =>
+      former(
+        uuidDe(posicion),
+        `Persona${posicion}`,
+        '2027-02-20',
+        posicion === 40 ? '2027-03-29T07:00:00Z' : undefined,
+      ),
+    )
 
-  it('pide la ficha de las 50 primeras, de cinco en cinco, y no la de las demas', async () => {
-    const red = stubDetails()
-
-    await mountBatch(SESENTA)
-
-    await vi.waitFor(() => expect(red.pedidas).toHaveLength(50))
-    await settle()
-
-    expect(red.pedidas).toHaveLength(50)
-    expect(red.pedidas[0]).toBe(`/api/v1/employees/${uuidDe(0)}`)
-    expect(red.pedidas[49]).toBe(`/api/v1/employees/${uuidDe(49)}`)
-    expect(red.maximoEnVuelo()).toBe(5)
-  })
-
-  it('a quien ya trae sus periodos no se le pide la ficha, y su offboarded_at es el que cuenta', async () => {
-    const red = stubDetails()
-    // Cese de hace meses, pero la baja se registro esta mañana en Madrid.
-    const conPeriodos = {
-      ...former(A, 'Ana', '2026-10-31'),
-      employment_periods: [
-        employmentPeriodRecord({
-          terminated_at: '2026-10-31',
-          offboarded_at: '2027-03-29T07:00:00Z',
-        }),
-      ],
-    }
-
-    const wrapper = await mountBatch([conPeriodos])
+    const wrapper = await mountBatch(sesenta)
 
     await settle()
 
-    expect(red.pedidas).toEqual([])
+    expect(pedidas).toEqual([])
     expect(wrapper.find('[data-test="rehire-recent-warning"]').text()).toContain('1 persona')
   })
 })
@@ -469,5 +419,30 @@ describe('RehireBatchDialog: sin la zona del centro (RN-27, ADR-040)', () => {
     await settle()
 
     expect(bodies).toEqual([])
+  })
+})
+
+describe('RehireBatchDialog: errores de campo que no son de una posicion (RN-27)', () => {
+  it('un 422 de otro campo sale en el aviso, y las posiciones y la fecha no se repiten', async () => {
+    stubApi(() =>
+      problemResponse(422, 'urn:kronoqr:problem:validation-failed', {
+        errors: {
+          'employee_uuids.1': ['Esta persona no esta de baja.'],
+          hired_at: ['Fecha no valida.'],
+          reset_pin: ['No se puede emitir PIN ahora.'],
+        },
+      }),
+    )
+
+    const wrapper = await mountBatch()
+
+    await confirm(wrapper).trigger('click')
+    await settle()
+
+    const notice = wrapper.find('[data-test="employment-problem"], [role="alert"]:not([data-test])')
+
+    expect(wrapper.text()).toContain('No se puede emitir PIN ahora.')
+    expect(wrapper.find('[data-test="rehire-batch-error"]').text()).toContain('Beto Prueba')
+    expect(notice.exists()).toBe(true)
   })
 })
