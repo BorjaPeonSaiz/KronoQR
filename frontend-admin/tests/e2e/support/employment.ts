@@ -135,6 +135,9 @@ export const NEW_PIN = '654321'
 
 const PDF_HEADERS = { 'Cache-Control': 'no-store, private' }
 
+/** Filas por pagina del listado, las del panel (`EMPLOYEE_LIST_PER_PAGE`). */
+const PER_PAGE = 30
+
 export async function stubEmploymentApi(page: Page, people: StubPerson[]): Promise<EmploymentStub> {
   const requests: RecordedRequest[] = []
   const state = new Map(people.map((person) => [person.employee.uuid, person]))
@@ -295,14 +298,21 @@ export async function stubEmploymentApi(page: Page, people: StubPerson[]): Promi
 
       // --- Lectura -----------------------------------------------------------
       if (method === 'GET' && path === '/api/v1/employees') {
+        // Paginado como el servidor (30 por pagina): la seleccion del lote se conserva al pasar.
         const status = url.searchParams.get('status')
-        const data = [...state.values()]
+        const page = Number(url.searchParams.get('page') ?? '1')
+        const all = [...state.values()]
           .map((person) => person.employee)
           .filter((employee) => status === null || employee.status === status)
 
         await json(route, 200, {
-          data,
-          meta: { page: 1, per_page: 30, total: data.length, total_pages: 1 },
+          data: all.slice((page - 1) * PER_PAGE, page * PER_PAGE),
+          meta: {
+            page,
+            per_page: PER_PAGE,
+            total: all.length,
+            total_pages: Math.max(Math.ceil(all.length / PER_PAGE), 1),
+          },
         })
 
         return

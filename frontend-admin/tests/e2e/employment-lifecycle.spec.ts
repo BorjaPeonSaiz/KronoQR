@@ -454,3 +454,76 @@ test(
     await expectNoBlockingViolations(page)
   },
 )
+
+test(
+  'la vuelta de la temporada en dos paginas: la seleccion se conserva y el rechazo de la persona 32 dice a quien',
+  { tag: ['@RN-27', '@RF-GP-03'] },
+  async ({ page }) => {
+    const temporera = (n: number) =>
+      formerPerson(
+        `0199f0c2-1f4a-7c3e-9b21-${String(n).padStart(12, '0')}`,
+        `Temporera${String(n).padStart(2, '0')}`,
+      )
+    const rechazada = {
+      ...temporera(32),
+      rejectInBatch: 'Esta persona ya no se puede dar de alta de nuevo.',
+    }
+    // 35 personas de baja: 30 en la primera pagina y 5 en la segunda; la 32, en la segunda.
+    const temporada = [
+      ...Array.from({ length: 31 }, (_, index) => temporera(index + 1)),
+      rechazada,
+      ...Array.from({ length: 3 }, (_, index) => temporera(index + 33)),
+    ]
+
+    await stubManagementApi(page)
+    const api = await stubEmploymentApi(page, temporada)
+    await logIn(page)
+    await page.goto('/employees?status=terminated')
+
+    await expect(page.getByTestId('employee-row')).toHaveCount(30)
+    await page.getByLabel('Seleccionar a todas las personas de baja de esta página').check()
+    await page.getByRole('button', { name: 'Siguiente' }).click()
+    await expect(page.getByTestId('employee-row')).toHaveCount(5)
+    await page.getByLabel('Seleccionar a todas las personas de baja de esta página').check()
+    await expect(page.getByTestId('selection-summary')).toHaveText('35 personas seleccionadas')
+
+    // Al volver a la primera pagina, lo marcado sigue marcado.
+    await page.getByRole('button', { name: 'Anterior' }).click()
+    await expect(page.getByLabel('Seleccionar a Temporera01 Prueba', { exact: true })).toBeChecked()
+
+    await page.getByTestId('rehire-selected').click()
+
+    const dialog = page.getByRole('dialog', { name: 'Dar de alta de nuevo a varias personas' })
+
+    await dialog.getByTestId('confirm-dialog-confirm').click()
+
+    // Todo o nada: el error de la posicion 31 (la persona 32) la nombra y queda a la vista.
+    const errors = dialog.getByTestId('rehire-batch-errors')
+
+    await expect(dialog.getByTestId('rehire-batch-error')).toHaveText([
+      'Temporera32 Prueba: Esta persona ya no se puede dar de alta de nuevo.',
+    ])
+    await expect(errors).toBeInViewport()
+    expect(temporada.every((person) => person.employee.status === 'terminated')).toBe(true)
+    await expectNoBlockingViolations(page, { include: '[role="dialog"]' })
+
+    // Se la quita en su pagina y se repite con las otras 34.
+    await dialog.getByTestId('confirm-dialog-cancel').click()
+    await expect(dialog).toBeHidden()
+    await page.getByRole('button', { name: 'Siguiente' }).click()
+    await page.getByLabel('Seleccionar a Temporera32 Prueba', { exact: true }).uncheck()
+    await expect(page.getByTestId('selection-summary')).toHaveText('34 personas seleccionadas')
+    await page.getByTestId('rehire-selected').click()
+    await dialog.getByTestId('confirm-dialog-confirm').click()
+
+    await expect(page.getByRole('dialog', { name: 'Tarjeta nueva' })).toBeVisible()
+
+    const lote = (
+      offboardRequests(api, '/employees/rehire').at(-1)?.body as { employee_uuids: string[] } | null
+    )?.employee_uuids
+
+    expect(lote).toHaveLength(34)
+    expect(lote).not.toContain(rechazada.employee.uuid)
+    expect(api.person(rechazada.employee.uuid).employee.status).toBe('terminated')
+  },
+)
