@@ -491,3 +491,143 @@ describe('TerminationCorrectionDialog: corregir la fecha de cese (RN-27, RL-04)'
     expect(spy).not.toHaveBeenCalled()
   })
 })
+
+describe('EmploymentPeriodsSection: el historico con varias correcciones y varios periodos (RN-13, RN-27, RL-04)', () => {
+  const MARTA = { ...terminationCorrection().corrected_by, name: 'Marta Soler' }
+
+  /** Readmitida el 1 de octubre y de baja otra vez: cada periodo con sus correcciones del cese. */
+  const PRIMERO = employmentPeriodRecord({
+    terminated_at: '2026-09-03',
+    corrections: [
+      terminationCorrection({
+        id: 1,
+        previous_terminated_at: '2026-08-31',
+        terminated_at: '2026-09-01',
+        reason: 'Primera revision del cuadrante',
+      }),
+      terminationCorrection({
+        id: 2,
+        previous_terminated_at: '2026-09-01',
+        terminated_at: '2026-09-05',
+        reason: 'Segunda revision del cuadrante',
+      }),
+      terminationCorrection({
+        id: 3,
+        previous_terminated_at: '2026-09-05',
+        terminated_at: '2026-09-03',
+        corrected_by: MARTA,
+        reason: 'Tercera revision del cuadrante',
+      }),
+    ],
+  })
+  const SEGUNDO = employmentPeriodRecord({
+    uuid: SECOND_UUID,
+    hired_at: '2026-10-01',
+    terminated_at: '2026-10-20',
+    corrections: [
+      terminationCorrection({
+        id: 4,
+        previous_terminated_at: '2026-10-25',
+        terminated_at: '2026-10-20',
+        reason: 'El cese del segundo periodo era el 20',
+      }),
+    ],
+  })
+
+  it('cada periodo lleva debajo solo sus correcciones, en el orden en que se hicieron', async () => {
+    const wrapper = await mountSection([PRIMERO, SEGUNDO])
+    const grupos = wrapper.findAll('[data-test="termination-corrections"]')
+
+    expect(grupos).toHaveLength(2)
+    expect(
+      grupos[0]
+        ?.findAll('[data-test="termination-correction"]')
+        .map((item) => item.find('.font-medium').text()),
+    ).toEqual([
+      'De 31 ago 2026 a 1 sept 2026',
+      'De 1 sept 2026 a 5 sept 2026',
+      'De 5 sept 2026 a 3 sept 2026',
+    ])
+    expect(
+      grupos[1]
+        ?.findAll('[data-test="termination-correction"]')
+        .map((item) => item.find('.font-medium').text()),
+    ).toEqual(['De 25 oct 2026 a 20 oct 2026'])
+  })
+
+  it('el historico de un periodo va justo detras de su fila, no al final de la tabla', async () => {
+    const wrapper = await mountSection([PRIMERO, SEGUNDO])
+    const filas = wrapper.findAll('tbody tr').map((row) => row.attributes('data-test'))
+
+    expect(filas).toEqual([
+      'employment-period',
+      'termination-corrections',
+      'employment-period',
+      'termination-corrections',
+    ])
+  })
+
+  it('cada correccion dice su autor: las de varias personas no se confunden', async () => {
+    const wrapper = await mountSection([PRIMERO])
+    const items = wrapper.findAll('[data-test="termination-correction"]')
+
+    expect(items[1]?.text()).toContain('Direccion RRHH')
+    expect(items[1]?.text()).not.toContain('Marta Soler')
+    expect(items[2]?.text()).toContain('Marta Soler')
+  })
+
+  it('el momento de cada correccion sale en la zona del centro, tambien la noche del cambio de hora de octubre', async () => {
+    // 25-10-2026: a las 00:30 UTC son las 02:30 CEST; a las 01:30 UTC, otra vez las 02:30, ya CET.
+    const wrapper = await mountSection([
+      employmentPeriodRecord({
+        corrections: [
+          terminationCorrection({ id: 1, corrected_at: '2026-10-25T00:30:00.000Z' }),
+          terminationCorrection({ id: 2, corrected_at: '2026-10-25T01:30:00.000Z' }),
+        ],
+      }),
+    ])
+    const items = wrapper.findAll('[data-test="termination-correction"]')
+
+    expect(items[0]?.text()).toContain('02:30')
+    expect(items[0]?.text()).toContain('CEST')
+    expect(items[1]?.text()).toContain('02:30')
+    expect(items[1]?.text()).toContain('CET')
+    expect(items[1]?.text()).not.toContain('CEST')
+  })
+})
+
+describe('EmploymentPeriodsSection: el historico de una ficha minimizada (RN-13, RL-11, ADR-060)', () => {
+  const MOTIVO_RETIRADO = 'Motivo retirado al minimizar la ficha (ADR-060, ADR-062)'
+
+  const MINIMIZADO = employmentPeriodRecord({
+    hired_at: '2010-01-01',
+    terminated_at: '2012-12-20',
+    corrections: [
+      terminationCorrection({
+        id: 1,
+        previous_terminated_at: '2012-12-31',
+        terminated_at: '2012-12-20',
+        corrected_at: '2026-10-30T09:00:00.000Z',
+        reason: MOTIVO_RETIRADO,
+      }),
+    ],
+  })
+
+  it('sigue enseñando las fechas, el autor, el momento y el texto fijo que sustituye al motivo', async () => {
+    const wrapper = await mountSection([MINIMIZADO], { minimised: true })
+    const item = wrapper.find('[data-test="termination-correction"]')
+
+    expect(item.text()).toContain('De 31 dic 2012 a 20 dic 2012')
+    expect(item.text()).toContain('Direccion RRHH')
+    expect(item.text()).toContain('10:00')
+    expect(item.text()).toContain(`Motivo: ${MOTIVO_RETIRADO}`)
+  })
+
+  it('no ofrece corregir, y la fila del historico ocupa las tres columnas que quedan', async () => {
+    const wrapper = await mountSection([MINIMIZADO], { minimised: true })
+
+    expect(wrapper.find('[data-test="correct-termination"]').exists()).toBe(false)
+    expect(wrapper.findAll('thead th[scope="col"]')).toHaveLength(3)
+    expect(wrapper.find('[data-test="termination-corrections"] td').attributes('colspan')).toBe('3')
+  })
+})
