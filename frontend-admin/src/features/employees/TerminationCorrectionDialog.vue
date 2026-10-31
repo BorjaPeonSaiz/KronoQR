@@ -259,10 +259,10 @@ const inputClass =
           ref="reasonInput"
           v-model="reason"
           rows="3"
-          @blur="reasonTouched = true"
           :class="inputClass"
           :aria-invalid="field.invalid ? 'true' : undefined"
           :aria-describedby="field.describedBy"
+          @blur="reasonTouched = true"
         />
         <p class="text-sm text-kq-text-muted" data-test="reason-counter">
           {{
