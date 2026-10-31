@@ -22,6 +22,7 @@ import { getSite } from '@/shared/api/organisation.api'
 import type { EmploymentContract } from '@/shared/api/types'
 import ContractRegisterDialog from './ContractRegisterDialog.vue'
 import { listEmploymentContracts } from './contracts.api'
+import { formatHours } from './employmentLimits'
 
 const props = defineProps<{
   employeeUuid: string
@@ -52,12 +53,6 @@ const current = computed<EmploymentContract | null>(
 
 const registering = ref(false)
 const today = computed(() => todayInZone(site.value?.timezone ?? 'UTC'))
-
-function formatHours(value: number): string {
-  return t('contracts.hoursValue', {
-    hours: new Intl.NumberFormat(locale.value, { maximumFractionDigits: 2 }).format(value),
-  })
-}
 
 async function reread(): Promise<void> {
   await queryClient.invalidateQueries({ queryKey: contractsKey.value })
@@ -169,9 +164,13 @@ async function onConflict(): Promise<void> {
                 {{ t('contracts.current') }}
               </span>
             </td>
-            <td class="py-2 pr-4 tabular-nums">{{ formatHours(contract.weekly_hours) }}</td>
             <td class="py-2 pr-4 tabular-nums">
-              {{ contract.annual_hours === null ? '—' : formatHours(contract.annual_hours) }}
+              {{ formatHours(contract.weekly_hours, locale, t) }}
+            </td>
+            <td class="py-2 pr-4 tabular-nums">
+              {{
+                contract.annual_hours === null ? '—' : formatHours(contract.annual_hours, locale, t)
+              }}
             </td>
             <td class="py-2">{{ t(`contracts.schedule.${contract.schedule_type}`) }}</td>
           </tr>

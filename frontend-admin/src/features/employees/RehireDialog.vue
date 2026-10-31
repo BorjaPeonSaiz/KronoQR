@@ -35,7 +35,13 @@ import ConfirmDialog from '@/shared/ui/ConfirmDialog.vue'
 import { listEmploymentContracts } from './contracts.api'
 import DateWarnings from './DateWarnings.vue'
 import { addCivilDays } from './employmentDates'
-import { parsePositiveHours, WEEKLY_HOURS_MAX, ANNUAL_HOURS_MAX } from './employmentLimits'
+import {
+  ANNUAL_HOURS_MAX,
+  formatHours,
+  parsePositiveHours,
+  SCHEDULE_TYPES,
+  WEEKLY_HOURS_MAX,
+} from './employmentLimits'
 import EmploymentProblemNotice from './EmploymentProblemNotice.vue'
 import { type EmploymentProblemKey, staleProblemKey } from './employmentProblems'
 import { getEmployee, rehireEmployee } from './employees.api'
@@ -56,8 +62,6 @@ const emit = defineEmits<{
 
 const { t, locale } = useI18n()
 const { locales: offered, multilingual } = useOfferedLocales()
-
-const SCHEDULE_TYPES: readonly ScheduleType[] = ['continua', 'partida', 'turnos']
 
 /** Hoy en el centro, fijado al abrir. Vacio si aun no se conoce la zona. */
 const today = props.timezone === undefined ? '' : todayInZone(props.timezone)
@@ -102,11 +106,7 @@ function departmentName(id: number | null): string {
 }
 
 function hours(value: number | null): string {
-  return value === null
-    ? t('common.empty')
-    : t('contracts.hoursValue', {
-        hours: new Intl.NumberFormat(locale.value, { maximumFractionDigits: 2 }).format(value),
-      })
+  return formatHours(value, locale.value, t)
 }
 
 // Cuando se hizo efectiva la baja: la ficha de detalle lo trae en su ultimo periodo
