@@ -114,7 +114,11 @@ export function formerPerson(
       ...base.employee,
       status: 'terminated',
       terminated_at: terminatedAt,
-      offboarding: { state: 'effective', terminated_at: terminatedAt },
+      offboarding: {
+        state: 'effective',
+        terminated_at: terminatedAt,
+        offboarded_at: options.offboardedAt ?? `${terminatedAt}T22:00:04.512Z`,
+      },
     },
     periods: [
       {
@@ -434,6 +438,7 @@ export async function stubEmploymentApi(page: Page, people: StubPerson[]): Promi
         open.state = effective ? 'terminated' : 'scheduled'
         // Efectiva ahora: el instante (UTC) queda escrito; una programada aun no lo tiene.
         open.offboarded_at = effective ? new Date().toISOString() : null
+        const offboardedNow = open.offboarded_at
         person.employee = {
           ...person.employee,
           status: effective ? 'terminated' : 'active',
@@ -441,6 +446,7 @@ export async function stubEmploymentApi(page: Page, people: StubPerson[]): Promi
           offboarding: {
             state: effective ? 'effective' : 'scheduled',
             terminated_at: terminatedAt,
+            offboarded_at: offboardedNow,
           },
         }
 
@@ -565,7 +571,7 @@ export async function stubEmploymentApi(page: Page, people: StubPerson[]): Promi
         previous_terminated_at: correction.previous_terminated_at,
         terminated_at: terminatedAt,
         corrected_at: new Date().toISOString(),
-        corrected_by: { uuid: USER.uuid, name: USER.name },
+        corrected_by: { uuid: USER.uuid, name: USER.name, minimised: false },
         reason,
       })
       period.terminated_at = terminatedAt
@@ -574,7 +580,12 @@ export async function stubEmploymentApi(page: Page, people: StubPerson[]): Promi
         person.employee = {
           ...person.employee,
           terminated_at: terminatedAt,
-          offboarding: { state: 'effective', terminated_at: terminatedAt },
+          // `offboarded_at` no cambia al corregir la fecha de cese.
+          offboarding: {
+            state: 'effective',
+            terminated_at: terminatedAt,
+            offboarded_at: period.offboarded_at,
+          },
         }
       }
 

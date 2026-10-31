@@ -24,7 +24,11 @@ function former(overrides: Partial<Employee> = {}): Employee {
     status: 'terminated',
     hired_at: '2026-03-16',
     terminated_at: '2026-08-31',
-    offboarding: { state: 'effective', terminated_at: '2026-08-31' },
+    offboarding: {
+      state: 'effective',
+      terminated_at: '2026-08-31',
+      offboarded_at: '2026-08-31T22:00:04Z',
+    },
     ...overrides,
   })
 }
@@ -250,7 +254,11 @@ describe('RehireDialog: los dos avisos del propietario (31-10-2026)', () => {
     const wrapper = await mountDialog(
       former({
         terminated_at: '2026-11-02',
-        offboarding: { state: 'effective', terminated_at: '2026-11-02' },
+        offboarding: {
+          state: 'effective',
+          terminated_at: '2026-11-02',
+          offboarded_at: '2026-11-02T22:00:04Z',
+        },
       }),
     )
 
@@ -269,7 +277,11 @@ describe('RehireDialog: los dos avisos del propietario (31-10-2026)', () => {
     const wrapper = await mountDialog(
       former({
         terminated_at: '2026-11-02',
-        offboarding: { state: 'effective', terminated_at: '2026-11-02' },
+        offboarding: {
+          state: 'effective',
+          terminated_at: '2026-11-02',
+          offboarded_at: '2026-11-02T22:00:04Z',
+        },
       }),
     )
 
@@ -295,7 +307,11 @@ describe('RehireDialog: los dos avisos del propietario (31-10-2026)', () => {
     const wrapper = await mountDialog(
       former({
         terminated_at: '2026-11-02',
-        offboarding: { state: 'effective', terminated_at: '2026-11-02' },
+        offboarding: {
+          state: 'effective',
+          terminated_at: '2026-11-02',
+          offboarded_at: '2026-11-02T22:00:04Z',
+        },
       }),
     )
 

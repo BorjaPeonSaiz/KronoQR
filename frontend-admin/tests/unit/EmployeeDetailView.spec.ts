@@ -778,7 +778,11 @@ describe('EmployeeDetailView', () => {
                 hired_at: hiredAt,
                 status: effective ? 'terminated' : 'active',
                 terminated_at: cese,
-                offboarding: { state: effective ? 'effective' : 'scheduled', terminated_at: cese },
+                offboarding: {
+                  state: effective ? 'effective' : 'scheduled',
+                  terminated_at: cese,
+                  offboarded_at: effective ? '2026-10-02T10:00:00Z' : null,
+                },
               }),
             )
           }

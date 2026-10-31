@@ -208,7 +208,11 @@ describe('EmploymentPeriodsSection: historico de correcciones del cese (RN-13, R
         id: 2,
         previous_terminated_at: '2026-09-01',
         terminated_at: '2026-09-02',
-        corrected_by: { uuid: '0199f0aa-2222-7000-8000-0123456789ab', name: 'Marta Soler' },
+        corrected_by: {
+          uuid: '0199f0aa-2222-7000-8000-0123456789ab',
+          name: 'Marta Soler',
+          minimised: false,
+        },
         corrected_at: '2026-11-02T09:12:44.120Z',
         reason: 'Trabajo hasta el 2\nsegun el cuadrante firmado',
       }),

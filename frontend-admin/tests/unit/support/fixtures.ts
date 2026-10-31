@@ -118,7 +118,11 @@ export function terminationCorrection(
     previous_terminated_at: '2026-08-31',
     terminated_at: '2026-09-02',
     corrected_at: '2026-11-02T09:12:44.120Z',
-    corrected_by: { uuid: '0199f0aa-1111-7000-8000-0123456789ab', name: 'Direccion RRHH' },
+    corrected_by: {
+      uuid: '0199f0aa-1111-7000-8000-0123456789ab',
+      name: 'Direccion RRHH',
+      minimised: false,
+    },
     reason: 'Trabajo hasta el 2 segun el cuadrante firmado',
     ...overrides,
   }

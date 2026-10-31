@@ -40,7 +40,11 @@ function former(uuid: string, first: string, overrides: Partial<Employee> = {}):
     status: 'terminated',
     hired_at: '2026-03-16',
     terminated_at: '2026-10-15',
-    offboarding: { state: 'effective', terminated_at: '2026-10-15' },
+    offboarding: {
+      state: 'effective',
+      terminated_at: '2026-10-15',
+      offboarded_at: '2026-10-15T22:00:04Z',
+    },
     ...overrides,
   })
 }
@@ -406,7 +410,7 @@ describe('Plantilla con el filtro «De baja» (RN-27)', () => {
     stubApi([
       employee({
         terminated_at: '2026-11-15',
-        offboarding: { state: 'scheduled', terminated_at: '2026-11-15' },
+        offboarding: { state: 'scheduled', terminated_at: '2026-11-15', offboarded_at: null },
       }),
     ])
 

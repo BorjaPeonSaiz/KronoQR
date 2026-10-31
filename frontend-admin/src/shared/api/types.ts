@@ -33,6 +33,10 @@ export type EmploymentPeriod = Schemas['EmploymentPeriod']
 /** El periodo de la ficha de rrhh+: lleva `offboarded_at` y sus correcciones del cese (RN-13, RN-27). */
 export type EmploymentPeriodRecord = Schemas['EmploymentPeriodRecord']
 export type TerminationDateCorrectionRecord = Schemas['TerminationDateCorrectionRecord']
+/** Quien corrigio el cese: `name` es `null` si y solo si la cuenta se minimizo (ADR-060). */
+export type TerminationCorrectionAuthor = Schemas['TerminationCorrectionAuthor']
+/** La baja en la ficha reducida del responsable: sin `offboarded_at`. */
+export type ScopedEmployeeOffboarding = Schemas['ScopedEmployeeOffboarding']
 export type RehireContract = Schemas['RehireContract']
 export type RehireEmployeeRequest = Schemas['RehireEmployeeRequest']
 export type RehireEmployeesRequest = Schemas['RehireEmployeesRequest']

@@ -4382,6 +4382,7 @@ export async function stubManagementApi(
             offboarding: {
               state: effective ? 'effective' : 'scheduled',
               terminated_at: body.terminated_at,
+              offboarded_at: effective ? new Date().toISOString() : null,
             },
           })
           await json(route, 200, target)

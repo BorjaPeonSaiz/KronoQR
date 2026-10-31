@@ -35,7 +35,7 @@ const TODAY_ISO = '2026-10-31T10:00:00Z'
 function scheduled(overrides: Partial<Employee> = {}): Employee {
   return employee({
     terminated_at: '2026-11-15',
-    offboarding: { state: 'scheduled', terminated_at: '2026-11-15' },
+    offboarding: { state: 'scheduled', terminated_at: '2026-11-15', offboarded_at: null },
     employment_periods: [
       employmentPeriodRecord({
         hired_at: '2026-08-14',
@@ -53,7 +53,11 @@ function terminated(overrides: Partial<Employee> = {}): Employee {
     status: 'terminated',
     hired_at: '2026-03-16',
     terminated_at: '2026-08-31',
-    offboarding: { state: 'effective', terminated_at: '2026-08-31' },
+    offboarding: {
+      state: 'effective',
+      terminated_at: '2026-08-31',
+      offboarded_at: '2026-08-31T22:00:04Z',
+    },
     employment_periods: [employmentPeriodRecord()],
     ...overrides,
   })
@@ -406,7 +410,11 @@ describe('dar de alta de nuevo desde la ficha (RN-27)', () => {
   function offboardedAt(terminatedAt: string, instant: string): Employee {
     return terminated({
       terminated_at: terminatedAt,
-      offboarding: { state: 'effective', terminated_at: terminatedAt },
+      offboarding: {
+        state: 'effective',
+        terminated_at: terminatedAt,
+        offboarded_at: `${terminatedAt}T22:00:04Z`,
+      },
       employment_periods: [
         employmentPeriodRecord({
           terminated_at: terminatedAt,

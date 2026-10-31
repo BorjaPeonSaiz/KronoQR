@@ -18,7 +18,11 @@ function former(uuid: string, first: string, terminatedAt = '2026-10-31'): Emplo
     status: 'terminated',
     hired_at: '2026-03-16',
     terminated_at: terminatedAt,
-    offboarding: { state: 'effective', terminated_at: terminatedAt },
+    offboarding: {
+      state: 'effective',
+      terminated_at: terminatedAt,
+      offboarded_at: `${terminatedAt}T22:00:04Z`,
+    },
   })
 }
 
