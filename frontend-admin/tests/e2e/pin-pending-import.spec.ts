@@ -11,38 +11,11 @@
 // PIN, que la primera emision deje `pin.issued` y no cuente como
 // restablecimiento lo prueba el backend (`EmployeeImportTest`,
 // `PinIssuanceEndpointsTest`).
-import { expect, type Page, test } from '@playwright/test'
+import { expect, test } from '@playwright/test'
+import type { Page } from '@playwright/test'
 import { EMPLOYEE, EMPLOYEE_UUID, logIn, stubManagementApi } from './support/admin'
 import { expectNoBlockingViolations } from './support/axe'
-import { SITE, stubOnboardingApi, TOTP_CODE } from './support/setupWizard'
-
-async function reachImportStep(page: Page): Promise<void> {
-  await page.goto('/setup')
-
-  await page.getByLabel('Nombre').fill('Dirección del hotel')
-  await page.getByLabel('Correo electrónico').fill('direccion@hotel.example')
-  await page.getByLabel('Contraseña').fill('una-contrasena-larga-y-propia-1!')
-  await page.getByRole('button', { name: 'Crear la cuenta' }).click()
-  await expect(page.getByTestId('two-factor-secret')).toBeVisible()
-  await page.getByLabel(/Código del autenticador/).fill(TOTP_CODE)
-  await page.getByRole('button', { name: 'Activar y entrar' }).click()
-
-  await expect(page.getByRole('heading', { name: 'Organización' })).toBeVisible()
-  await page.getByLabel('Nombre del establecimiento').fill('Hotel Marina')
-  await page.getByRole('button', { name: 'Continuar' }).click()
-
-  await expect(page.getByRole('heading', { name: 'Centro de trabajo' })).toBeVisible()
-  await page.getByLabel('Nombre del centro').fill(SITE.name)
-  await page.getByRole('button', { name: 'Continuar' }).click()
-
-  await expect(page.getByRole('heading', { name: 'Departamentos' })).toBeVisible()
-  await page.getByTestId('skip').click()
-
-  await expect(page.getByRole('heading', { name: 'Perfil de convenio' })).toBeVisible()
-  await page.getByTestId('confirm-compliance-profile').click()
-
-  await expect(page.getByRole('heading', { name: 'Plantilla' })).toBeVisible()
-}
+import { reachImportStep, stubOnboardingApi } from './support/setupWizard'
 
 async function importOnePerson(page: Page): Promise<void> {
   await page.getByTestId('import-file').setInputFiles({

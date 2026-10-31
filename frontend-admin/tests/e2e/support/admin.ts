@@ -4340,10 +4340,11 @@ export async function stubManagementApi(
           return
         }
         case `POST /api/v1/employees/${EMPLOYEE_UUID}/offboard`: {
-          // RN-14: la baja es efectiva al registrarla y su fecha de cese no es
-          // posterior a hoy, que es la fecha civil del CENTRO. El doble la
-          // calcula en la zona del centro, como el servidor (ADR-040).
-          const body = request.postDataJSON() as { terminated_at: string }
+          // RN-14 (ADR-062 §3): un cese anterior a hoy es efectivo al registrarlo; de hoy
+          // o posterior, la baja queda PROGRAMADA salvo `apply_now` con la fecha de hoy.
+          // «Hoy» es la fecha civil del CENTRO (ADR-040). La tabla completa, con la
+          // readmision y la anulacion, vive en `support/employment.ts`.
+          const body = request.postDataJSON() as { terminated_at: string; apply_now?: boolean }
           const today = new Intl.DateTimeFormat('en-CA', {
             timeZone: SITE.timezone,
             year: 'numeric',
@@ -4362,21 +4363,27 @@ export async function stubManagementApi(
             return
           }
 
-          if (body.terminated_at > today) {
+          if (body.terminated_at < target.hired_at) {
             await validationProblem(
               route,
               'urn:kronoqr:problem:validation-failed',
               'Peticion no valida',
-              {
-                terminated_at: [
-                  `La fecha de cese (${body.terminated_at}) es posterior a hoy (${today}). La baja es efectiva al registrarla; regístrala el último día, cuando haya terminado su turno.`,
-                ],
-              },
+              { terminated_at: ['La fecha de cese es anterior a la de alta.'] },
             )
             return
           }
 
-          Object.assign(target, { status: 'terminated', terminated_at: body.terminated_at })
+          const effective =
+            body.terminated_at < today || (body.apply_now === true && body.terminated_at === today)
+
+          Object.assign(target, {
+            status: effective ? 'terminated' : target.status,
+            terminated_at: body.terminated_at,
+            offboarding: {
+              state: effective ? 'effective' : 'scheduled',
+              terminated_at: body.terminated_at,
+            },
+          })
           await json(route, 200, target)
           return
         }
@@ -4990,6 +4997,20 @@ export async function stubManagementApi(
               status: 'terminated',
               hired_at: '2022-03-01',
               terminated_at: '2026-02-15',
+              employment_periods: [
+                {
+                  uuid: '0199f0c2-5555-7000-8000-000000000001',
+                  hired_at: '2020-03-01',
+                  terminated_at: '2020-10-31',
+                  state: 'terminated',
+                },
+                {
+                  uuid: '0199f0c2-5555-7000-8000-000000000002',
+                  hired_at: '2022-03-01',
+                  terminated_at: '2026-02-15',
+                  state: 'terminated',
+                },
+              ],
             },
             {
               uuid: '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b91',
@@ -4999,6 +5020,14 @@ export async function stubManagementApi(
               status: 'active',
               hired_at: '2024-01-10',
               terminated_at: null,
+              employment_periods: [
+                {
+                  uuid: '0199f0c2-5555-7000-8000-000000000003',
+                  hired_at: '2024-01-10',
+                  terminated_at: null,
+                  state: 'active',
+                },
+              ],
             },
           ]
           const found =
