@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Estado** | **Aceptada**: el propietario aprobó D16 y D17 el 18-10-2026 (plan de la 2.3.0, bloque 25), y este texto las concreta. El 29-10-2026 decidió además que la baja con cese de hoy también se programa, con «Aplicar ya» (`apply_now`) para el efecto inmediato (§3). Revisión de `seguridad-cumplimiento`: §2 revisado (30-10-2026, con las tareas 25.3 y 25.4); quedan §3.3, §4 y §8 (25.5). Lo implementan las tareas 25.2 (baja programada), 25.3 y 25.7 (readmisión), 25.4 (corrección de la fecha de cese) y 25.6 (panel) |
+| **Estado** | **Aceptada**: el propietario aprobó D16 y D17 el 18-10-2026 (plan de la 2.3.0, bloque 25), y este texto las concreta. El 29-10-2026 decidió además que la baja con cese de hoy también se programa, con «Aplicar ya» (`apply_now`) para el efecto inmediato (§3). Revisión de `seguridad-cumplimiento`: §2 revisado (30-10-2026); §3.3, §4 y §8 revisados (30-10-2026, tarea 25.5) sin hallazgos que bloqueen; residuales en doc 07 §6. Lo implementan las tareas 25.2 (baja programada), 25.3 y 25.7 (readmisión), 25.4 (corrección de la fecha de cese), 25.5 (fichaje por PIN después de la baja, §8) y 25.6 (panel) |
 | **Fecha** | 29 de octubre de 2026 |
 | **Decide** | `arquitecto-dominio` (bloque 25 de la 2.3.0, tarea 25.1; V3-AR-6 y R4-SC-01 en seguimiento) |
 | **Afecta a** | **Enmienda** [ADR-046](ADR-046-la-ficha-del-empleado-se-escribe-bajo-candado-y-por-columnas.md): «`terminated` es final», el disparador descartado y la fila de una persona de baja en la importación. Precisa [ADR-043](ADR-043-el-pin-rechazado-conserva-a-quien-correspondia-el-codigo.md) por su enmienda del 29-10-2026 (D15) · Respeta [ADR-006](ADR-006-los-turnos-no-se-parten-a-medianoche.md), [ADR-010](ADR-010-auditoria-solo-append-encadenada.md), [ADR-025](ADR-025-frontera-de-dependencias-del-nucleo.md), [ADR-028](ADR-028-limites-del-plan-no-bloquean.md), [ADR-034](ADR-034-el-token-nace-al-imprimir-no-al-emitir.md), [ADR-040](ADR-040-un-centro-por-instalacion-y-por-licencia.md), [ADR-047](ADR-047-ningun-fichaje-sale-de-la-cola-sin-desenlace-del-servidor.md), [ADR-057](ADR-057-el-registro-horario-no-se-borra-ni-se-reescribe-con-la-credencial-del-runtime.md), [ADR-058](ADR-058-como-termino-un-tramo-es-un-hecho-del-registro.md) y [ADR-060](ADR-060-al-vencer-su-plazo-la-ficha-y-la-cuenta-de-gestion-se-minimizan-en-sitio-con-asiento.md) · `Workforce`: `Employee`, `EmployeeRepository`, `OffboardEmployeeHandler`, `PlanEmployeeImport`, `ApplyEmployeeImport` y los casos de uso nuevos de §10 · `Identity`: la revocación de la baja y la emisión de la readmisión · `Attendance`: `EmployeeDirectory`, `ScanIntentPolicy`, `ManualEntryEligibility` · tablas nuevas `employment_periods` y `employment_period_corrections` |
@@ -169,7 +169,10 @@ La aplican el fichaje (`ScanIntentPolicy`) y el alta y la corrección manuales (
 Las dos la leen de `EmployeeSnapshot`, que ya lleva `terminatedOn` (ADR-025). La consecuencia:
 
 - El turno de noche del último día cierra con su salida a las 06:00 del día siguiente, porque su
-  jornada es la del cese (regla dura 4).
+  jornada es la del cese (regla dura 4). **Solo si esa salida llega con red o con la cola corta**: si
+  llega cuando la baja ya es efectiva, se rechaza como cualquier escaneo posterior, y su fecha civil,
+  posterior al cese, tampoco abre `scan_before_revocation` (§8 y la enmienda de ADR-043). Lo detecta
+  RF-PR-01 como tramo abierto y se cierra con una corrección.
 - La vuelta de una pausa dentro de la cota de continuación de ADR-058 sigue siendo de la jornada del
   cese.
 - Una **entrada** que abriría la jornada del día siguiente se rechaza con el rechazo genérico de RS-03,
@@ -477,7 +480,15 @@ por rol (regla dura 18).
   (`work_date_between_periods`), y sería registro legal de días en los que la persona no estaba de
   alta.
 - **El riesgo de doc 07 §6 «días trabajados después de la fecha de cese»** queda cubierto por §7 y
-  por la enmienda de ADR-043 cuando se implementen las tareas 25.4 y 25.5. No antes.
+  por la enmienda de ADR-043, implementadas con las tareas 25.4 y 25.5 (30-10-2026). El doc 07 lo da por
+  mitigado, con sus residuales.
+- **Una tarjeta de un periodo anterior a una readmisión se acota por la proyección**, no por el cese
+  de su propio periodo. El titular de RN-20 lleva el `terminated_at` de la ficha, que tras la
+  readmisión es el del periodo en curso (o nulo). Esa tarjeta quedó revocada al aplicarse la baja de
+  su periodo, así que `revoked_at` ya la acota; lo único que se pierde es la cota del cese entre el
+  día del cese y la aplicación de una baja programada, para un escaneo de esa tarjeta que llegue
+  después de la readmisión. Se acepta (revisión del 30-10-2026): resolverlo exigiría leer los periodos
+  en el camino del fichaje, una consulta más para un caso que ya abre una incidencia revisable.
 
 ## Verificación
 

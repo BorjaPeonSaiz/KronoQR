@@ -239,6 +239,54 @@ it('rechaza cada linea con su codigo, y aplica las demas', function (): void {
     expect($informe->json('rows.0.line'))->toBe(2);
 })->group('RF-GP-04');
 
+it('rechaza en la revision la linea que no cae entera en un periodo de alta, como la aplicacion', function (): void {
+    // RN-27, hueco heredado de la 25.3/25.4 cerrado en la 25.5: la aplicacion se
+    // salta la linea (`Absence::fallsWithin`), y la revision la daba por `create`.
+    // El informe mentia. Ahora la rechaza con `outside_employment` en `ends_on`,
+    // el campo del `422` del alta individual.
+    $contexto = contextoDeCarga();
+    $site = WorkforceFixtures::onlySiteId();
+    // Alta el 1 de enero y cese el 30 de junio.
+    $deBaja = codigoDe(WorkforceFixtures::employee($site, null, 'terminated'));
+
+    $csv = ImportFiles::csv(ImportFiles::rows(
+        ['codigo', 'tipo', 'desde', 'hasta'],
+        [
+            // Dentro de su periodo.
+            [$deBaja, 'vacaciones', '2026-06-01', '2026-06-05'],
+            // Solape parcial con el cese: empieza dentro y acaba despues.
+            [$deBaja, 'vacaciones', '2026-06-28', '2026-07-03'],
+            // Solape parcial con el alta de quien sigue de alta (1 de enero).
+            [$contexto['code'], 'permiso', '2025-12-30', '2026-01-02'],
+            // Entera despues del cese.
+            [$deBaja, 'baja', '2026-08-01', '2026-08-03'],
+        ],
+    ));
+
+    $informe = cargarAusencias($contexto['token'], $csv)
+        ->assertValidResponse(200)
+        ->assertJsonPath('summary.create', 1)
+        ->assertJsonPath('summary.reject', 3)
+        ->assertJsonPath('rows.0.outcome', 'create')
+        ->assertJsonPath('rows.1.outcome', 'reject')
+        ->assertJsonPath('rows.1.messages.0.code', 'outside_employment')
+        ->assertJsonPath('rows.1.messages.0.column', 'ends_on')
+        ->assertJsonPath('rows.2.messages.0.code', 'outside_employment')
+        ->assertJsonPath('rows.3.messages.0.code', 'outside_employment');
+
+    // Dice que hacer, no el codigo.
+    expect($informe->json('rows.1.messages.0.detail'))->toBeString()
+        ->and($informe->json('rows.1.messages.0.detail'))->not->toBe('outside_employment');
+
+    // Lo que se aplica es exactamente lo revisado: una ausencia.
+    cargarAusencias($contexto['token'], $csv, 'apply', huellaDeCarga($informe))
+        ->assertValidResponse(200)
+        ->assertJsonPath('summary.create', 1)
+        ->assertJsonPath('summary.reject', 3);
+
+    expect(DB::table('absences')->count())->toBe(1);
+})->group('RF-GP-04', 'RN-27');
+
 it('rechaza la linea que pisa una ausencia ya registrada, sin confundirla con una reimportacion', function (): void {
     $contexto = contextoDeCarga();
 

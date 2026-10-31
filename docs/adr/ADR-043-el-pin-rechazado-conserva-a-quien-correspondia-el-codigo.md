@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Estado** | Aceptada. **Enmendada el 29-10-2026** (D15 del propietario, bloque 25 de la 2.3.0): el PIN correcto de una persona de baja con fecha hasta el cese se atribuye y abre `scan_before_revocation`, sin cambio de respuesta (ver la enmienda al final; la implementa la tarea 25.5) |
+| **Estado** | Aceptada. **Enmendada el 29-10-2026** (D15 del propietario, bloque 25 de la 2.3.0): el PIN correcto de una persona de baja con fecha hasta el cese se atribuye y abre `scan_before_revocation`, sin cambio de respuesta (ver la enmienda al final; implementada en la tarea 25.5; enmienda revisada por `seguridad-cumplimiento` el 30-10-2026) |
 | **Fecha** | 30 de septiembre de 2026 |
 | **Decide** | `arquitecto-dominio` (Bloque 5 de la 2.2.0, hallazgos PIN-06 y SC7-02). Revisión pendiente de `seguridad-cumplimiento` |
 | **Afecta a** | Precisa [ADR-039](ADR-039-que-hechos-de-autenticacion-dejan-asiento.md) (§«Un solo motivo de fallo donde la respuesta es una sola») · Complementa [ADR-038](ADR-038-limite-de-tasa-por-dispositivo-y-por-ip-no-por-credencial.md) y [ADR-020](ADR-020-soporte-con-paquete-de-diagnostico.md) · `Shared\Domain\ValueObject\PinVerification`, `CredentialResolution` · `scan_events` · Especificación `docs/verificacion/2.2.0-bloque5-especificacion-pin-incidencias.md` |
@@ -98,7 +98,10 @@ incluidas):
    log técnico (`invalid_credentials`) no cambian. El tiempo tampoco: el verificador ya compara el
    hash real de una persona de baja (la baja se evalúa después de la comparación, `isRejected()`),
    la fecha de alta y la de cese salen de la misma fila que ya lee y la inserción tiene la misma forma
-   con y sin persona (punto 4).
+   con y sin persona (punto 4). Lo que sí lleva la persona cuando se atribuye, como la tarjeta de
+   RN-20, es lo interno del servidor: la línea `attendance.scan_rejected` del log técnico y el evento
+   `ScanRejected` llevan su `employee_uuid` (nunca su nombre, regla dura 21). El apunte
+   `auth.login_failed` sigue sin UUID.
 3. **La incidencia** es `scan_before_revocation`, la de RN-20, una por persona y jornada. Para el PIN,
    «la retirada» es la baja. La abre la revisión diaria (punto 5), que lee las filas marcadas por
    `recorded_at` sin mirar el origen. Un mismo día con tarjeta y con PIN da una sola incidencia.
@@ -110,6 +113,11 @@ incluidas):
 6. **Nada de lo que hace el acierto** en una persona que puede fichar ocurre aquí: ni se borra el
    contador de intentos ni hay *rehash*. La persona de baja no se autentica, se identifica para la
    revisión.
+
+**Consecuencias de la enmienda.** La salida de un turno de noche del día del cese que llega por PIN
+después de las 00:00 tiene fecha civil posterior al cese y no se atribuye: es la misma cota que la
+tarjeta. Es un residual aceptado (revisión del 30-10-2026); RF-PR-01 ve el tramo abierto y la guía
+de RRHH explica cómo encontrar los rechazos de PIN sin persona por quiosco y hora.
 
 **Validación jurídica.** Atribuir un fichaje rechazado a una persona de baja trata un dato suyo
 posterior a la relación laboral. Lo tienen que validar la asesoría y el DPO del cliente, y está en la

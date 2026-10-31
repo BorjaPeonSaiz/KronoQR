@@ -3,13 +3,16 @@
 declare(strict_types=1);
 
 use App\Modules\Attendance\Application\Port\CredentialResolver;
+use App\Modules\Shared\Application\Port\EmployeePinVerifier;
 use App\Modules\Shared\Domain\ValueObject\CredentialResolution;
+use App\Modules\Shared\Domain\ValueObject\PinOrigin;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Identity\Credentials;
 use Tests\Support\Time\Samples;
 use Tests\Support\Time\WallClockBudget;
+use Tests\Support\Workforce\EmployeePins;
 use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
@@ -258,3 +261,56 @@ it('consume el mismo tiempo en los siete rechazos', function (): void {
 
     WallClockBudget::expectBelow(max($medianas) - min($medianas), 10.0, 'RS-03', 'ms');
 })->group('RS-03', 'RS-02', 'RF-QR-02', 'RF-QR-07', 'performance');
+
+// --- D15: el PIN correcto de una persona de baja (enmienda de ADR-043) ---------
+
+/**
+ * Los rechazos del PIN en el quiosco que el caso nuevo no puede distinguir,
+ * cada uno con una persona distinta para que ninguno abra el bloqueo de RS-12.
+ *
+ * @return array<string, array{0: string, 1: string}>
+ */
+function constantTimePinRejections(): array
+{
+    $site = WorkforceFixtures::site();
+    $pinBueno = '481902';
+
+    $persona = static function (string $status) use ($site, $pinBueno): string {
+        $uuid = WorkforceFixtures::employee($site, null, $status);
+        EmployeePins::issue($uuid, $pinBueno);
+
+        return EmployeePins::codeOf($uuid);
+    };
+
+    return [
+        'PIN correcto de una persona de baja' => [$persona('terminated'), $pinBueno],
+        'PIN incorrecto de una persona de baja' => [$persona('terminated'), '481903'],
+        'PIN incorrecto de una persona en alta' => [$persona('active'), '481903'],
+        'PIN correcto de una persona suspendida' => [$persona('suspended'), $pinBueno],
+        'codigo inexistente' => ['ENOEXISTE', $pinBueno],
+    ];
+}
+
+it('hace las mismas consultas con el PIN correcto de una persona de baja que con cualquier otro rechazo del PIN', function (): void {
+    // RS-03, regla dura 17 y la enmienda de ADR-043 (D15): las fechas del
+    // periodo y la zona del centro salen de la misma consulta que el verificador
+    // ya hacia para todos los codigos. Una lectura de mas solo para el acierto de
+    // una persona de baja seria un oraculo para adivinar su PIN.
+    $verifier = app(EmployeePinVerifier::class);
+    $consultas = [];
+
+    foreach (constantTimePinRejections() as $caso => [$codigo, $pin]) {
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+
+        $verification = $verifier->verify($codigo, $pin, PinOrigin::KIOSK);
+
+        $consultas[$caso] = \count(DB::getRawQueryLog());
+        DB::disableQueryLog();
+
+        expect($verification->employeeUuid())->toBeNull("El caso «{$caso}» ha filtrado el empleado.");
+    }
+
+    expect(array_unique(array_values($consultas)))
+        ->toHaveCount(1, 'Los rechazos del PIN no cuestan lo mismo: '.json_encode($consultas));
+})->group('RS-03', 'RN-20', 'RN-25');

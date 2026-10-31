@@ -18,11 +18,13 @@ use App\Modules\Attendance\Application\Port\SiteCalendar;
 use App\Modules\Attendance\Application\Port\WorkDayRepository;
 use App\Modules\Attendance\Application\Support\ClockingPolicies;
 use App\Modules\Attendance\Application\Support\ContinuationCeilings;
+use App\Modules\Attendance\Application\Support\EmploymentEnd;
 use App\Modules\Attendance\Domain\Event\ScanRejected;
 use App\Modules\Attendance\Domain\Exception\OverlappingShiftEntry;
 use App\Modules\Attendance\Domain\Exception\ShiftEntryAlreadyOpen;
 use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\Policy\DebouncePolicy;
+use App\Modules\Attendance\Domain\Policy\OffboardedPinPolicy;
 use App\Modules\Attendance\Domain\Policy\ReviewPolicy;
 use App\Modules\Attendance\Domain\Policy\ScanIntentPolicy;
 use App\Modules\Attendance\Domain\Policy\WithdrawnCredentialPolicy;
@@ -44,6 +46,7 @@ use App\Modules\Shared\Domain\ValueObject\CredentialHolder;
 use App\Modules\Shared\Domain\ValueObject\CredentialResolution;
 use App\Modules\Shared\Domain\ValueObject\EmployeeSnapshot;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
+use App\Modules\Shared\Domain\ValueObject\OffboardedPinHolder;
 use App\Modules\Shared\Domain\ValueObject\PinClaim;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -342,36 +345,7 @@ final readonly class RegisterScanHandler implements ScanRegistration
         $employeeUuid = $resolution->employeeUuid();
 
         if ($employeeUuid === null) {
-            $reason = $resolution->rejectionReason();
-
-            // RN-20 (ADR-047): una tarjeta AUTENTICA que ya no vale atribuye la
-            // fila a su titular, y la marca si se uso antes de la retirada. Es
-            // lo unico que cambia: los mismos parametros de la misma sentencia
-            // de insercion (el patron de ADR-043, punto 4), el mismo evento y la
-            // misma respuesta. Sin credencial retirada, la retirada es la
-            // recepcion: la baja confirmo durante esta peticion o antes.
-            $holder = $resolution->holder();
-
-            return $this->reject(
-                $command,
-                $recordedAt,
-                $holder?->employeeUuid,
-                ScanResult::fromRejection(
-                    $reason === null
-                        ? ScanRejectionReason::UNKNOWN_CREDENTIAL
-                        : ScanRejectionReason::fromCredentialRejection($reason),
-                ),
-                flaggedForReview: $holder instanceof CredentialHolder
-                    && (new WithdrawnCredentialPolicy)->requiresReview(
-                        $command->occurredAt,
-                        $holder->issuedAt,
-                        $holder->withdrawnAt ?? $recordedAt,
-                        $this->employmentEndOf($holder->terminatedOn, $holder->siteId),
-                    ),
-                // RN-19 (ADR-043): el dueño del codigo de un PIN rechazado, solo
-                // para la fila. Nulo en todo lo demas.
-                pinClaim: $resolution->pinClaim(),
-            );
+            return $this->rejectCredential($command, $recordedAt, $resolution);
         }
 
         $employee = $this->employees->find($employeeUuid);
@@ -402,26 +376,85 @@ final readonly class RegisterScanHandler implements ScanRegistration
     }
 
     /**
-     * RN-20 en la carrera con la baja: la tarjeta resolvio —estaba vigente— y
-     * cuando se cargo a su titular ya estaba de baja.
+     * La credencial no resolvio: el rechazo de RS-03, con la fila atribuida y
+     * marcada en los dos casos en que hay alguien detras.
      *
-     * Solo con **tarjeta** (`qr_kiosk`): el PIN de una persona de baja queda
-     * fuera de RN-20 hasta que se amplie ADR-043 (doc 01, nota sobre RN-20). Y
-     * solo con la persona **de baja**: una suspendida no tiene instante con el
-     * que comparar. La retirada es la recepcion del escaneo.
+     * - **RN-20 (ADR-047)**: una tarjeta AUTENTICA que ya no vale atribuye la
+     *   fila a su titular, y la marca si se uso antes de la retirada y no
+     *   despues del dia del cese. Sin credencial retirada, la retirada es la
+     *   recepcion: la baja confirmo durante esta peticion o antes.
+     * - **Enmienda del 29-10-2026 de ADR-043**: el PIN correcto de una
+     *   persona de baja atribuye y marca la fila solo si la fecha civil del
+     *   fichaje cae en el periodo que cerro la baja. Fuera de el, sin persona,
+     *   como un PIN incorrecto. Sin E/S: la zona y las fechas vienen con la
+     *   persona, de la misma consulta del verificador.
      *
-     * La cota inferior es el **alta** de la persona: aqui la tarjeta resolvio y
-     * su emision no viaja, y el alta es anterior a cualquier tarjeta suya. Sin
-     * alta registrada o sin zona del centro no se afirma nada. Es una carrera
-     * de microsegundos con la baja: la consulta de la zona solo la paga ese
-     * camino.
+     * Es lo unico que cambia: los mismos parametros de la misma sentencia de
+     * insercion (el patron de ADR-043, punto 4), el mismo evento y la misma
+     * respuesta.
+     */
+    private function rejectCredential(
+        RegisterScanCommand $command,
+        DateTimeImmutable $recordedAt,
+        CredentialResolution $resolution,
+    ): RegisterScanResult {
+        $reason = $resolution->rejectionReason();
+        $holder = $resolution->holder();
+        $offboardedPin = $resolution->offboardedPinHolder();
+
+        $offboardedPinOwner = $offboardedPin instanceof OffboardedPinHolder
+            && (new OffboardedPinPolicy)->attributes($command->occurredAt, $offboardedPin)
+                ? $offboardedPin->employeeUuid
+                : null;
+
+        return $this->reject(
+            $command,
+            $recordedAt,
+            $holder instanceof CredentialHolder ? $holder->employeeUuid : $offboardedPinOwner,
+            ScanResult::fromRejection(
+                $reason === null
+                    ? ScanRejectionReason::UNKNOWN_CREDENTIAL
+                    : ScanRejectionReason::fromCredentialRejection($reason),
+            ),
+            flaggedForReview: $offboardedPinOwner !== null || ($holder instanceof CredentialHolder
+                && (new WithdrawnCredentialPolicy)->requiresReview(
+                    $command->occurredAt,
+                    $holder->issuedAt,
+                    $holder->withdrawnAt ?? $recordedAt,
+                    EmploymentEnd::of($this->calendar, $holder->terminatedOn, $holder->siteId),
+                )),
+            // RN-19 (ADR-043): el dueño del codigo de un PIN rechazado, solo
+            // para la fila. Nulo en todo lo demas.
+            pinClaim: $resolution->pinClaim(),
+        );
+    }
+
+    /**
+     * RN-20 en la carrera con la baja: la credencial resolvio —la tarjeta
+     * estaba vigente, o el PIN verifico con la persona en alta— y cuando se
+     * cargo a la persona ya estaba de baja.
+     *
+     * Solo con la persona **de baja**: una suspendida no tiene instante con el
+     * que comparar.
+     *
+     * - **Tarjeta** (`qr_kiosk`): la retirada es la recepcion del escaneo y la
+     *   cota inferior es el **alta** de la persona: aqui la tarjeta resolvio y
+     *   su emision no viaja, y el alta es anterior a cualquier tarjeta suya.
+     * - **PIN** (`pin_kiosk`, enmienda del 29-10-2026 de ADR-043): el PIN
+     *   acerto, asi que es la misma regla que su rechazo fuera de la carrera:
+     *   la fecha civil del fichaje entre el alta y el cese, ambos incluidos
+     *   ({@see OffboardedPinPolicy}).
+     *
+     * Sin alta registrada o sin zona del centro no se afirma nada. Es una
+     * carrera de microsegundos con la baja: la consulta de la zona solo la paga
+     * ese camino.
      */
     private function offboardedBeforeScanning(
         RegisterScanCommand $command,
         DateTimeImmutable $recordedAt,
         ?EmployeeSnapshot $employee,
     ): bool {
-        if ($command->origin !== ScanOrigin::QR_KIOSK
+        if (! \in_array($command->origin, [ScanOrigin::QR_KIOSK, ScanOrigin::PIN_KIOSK], true)
             || ! $employee instanceof EmployeeSnapshot
             || $employee->status !== EmploymentStatus::TERMINATED
             || $employee->hiredOn === null) {
@@ -434,6 +467,13 @@ final readonly class RegisterScanHandler implements ScanRegistration
             return false;
         }
 
+        if ($command->origin === ScanOrigin::PIN_KIOSK) {
+            return $employee->terminatedOn !== null && (new OffboardedPinPolicy)->attributes(
+                $command->occurredAt,
+                OffboardedPinHolder::of($employee->employeeUuid, $employee->hiredOn, $employee->terminatedOn, $timezone),
+            );
+        }
+
         // El primer instante de la fecha civil del alta, en la zona del centro.
         $hiredAt = WorkDate::fromIsoDate($employee->hiredOn, $timezone)->startsAt();
 
@@ -441,25 +481,8 @@ final readonly class RegisterScanHandler implements ScanRegistration
             $command->occurredAt,
             $hiredAt,
             $recordedAt,
-            $employee->terminatedOn === null ? null : WorkDate::fromIsoDate($employee->terminatedOn, $timezone)->endsAt(),
+            EmploymentEnd::inZone($employee->terminatedOn, $timezone),
         );
-    }
-
-    /**
-     * El final del dia civil del cese en la zona del centro, o `null` sin cese o
-     * sin zona (RN-20, RN-14): despues de ese instante una tarjeta retirada no
-     * pide revision. La zona solo se consulta en este camino, el de una tarjeta
-     * autentica de alguien con fecha de cese.
-     */
-    private function employmentEndOf(?string $terminatedOn, ?int $siteId): ?DateTimeImmutable
-    {
-        if ($terminatedOn === null || $siteId === null) {
-            return null;
-        }
-
-        $timezone = $this->calendar->timezoneOf($siteId);
-
-        return $timezone instanceof DateTimeZone ? WorkDate::fromIsoDate($terminatedOn, $timezone)->endsAt() : null;
     }
 
     /**

@@ -327,8 +327,12 @@ it('marca y atribuye el escaneo de la carrera con la baja posterior al alta, y n
     'anterior al alta' => ['2025-12-31T22:59:59Z', false],
 ])->group('RN-20', 'RN-14');
 
-it('no marca la carrera con la baja de un fichaje por PIN', function (): void {
-    // El PIN de una persona de baja queda fuera de RN-20 (ADR-043).
+it('marca la carrera con la baja de un PIN correcto solo dentro del periodo', function (string $occurredAt, bool $marcado): void {
+    // D15 (enmienda del 29-10-2026 de ADR-043): el PIN verifico con la persona
+    // en alta y, al cargarla, ya estaba de baja. El PIN acerto, asi que es la
+    // misma regla que su rechazo fuera de la carrera: la fecha civil del
+    // fichaje entre el alta y el cese, en la zona del centro. El cese del
+    // fixture es el 30 de junio y el alta el 1 de enero, en Madrid.
     $escenario = AttendanceFixtures::scenario();
     WorkforceFixtures::terminate($escenario['employee']);
     $scanId = Str::uuid7()->toString();
@@ -337,7 +341,7 @@ it('no marca la carrera con la baja de un fichaje por PIN', function (): void {
         new RegisterScanCommand(
             scanId: $scanId,
             qrPayload: null,
-            occurredAt: new DateTimeImmutable('2026-08-15 08:00:00', new DateTimeZone('UTC')),
+            occurredAt: new DateTimeImmutable($occurredAt, new DateTimeZone('UTC')),
             deviceId: $escenario['device'],
             deviceUuid: $escenario['deviceUuid'],
             origin: ScanOrigin::PIN_KIOSK,
@@ -347,5 +351,10 @@ it('no marca la carrera con la baja de un fichaje por PIN', function (): void {
     );
 
     expect(filaDelEscaneo($scanId)->result)->toBe('rejected_unknown')
-        ->and(filaDelEscaneo($scanId)->flagged_for_review)->toBeFalse();
-})->group('RN-20', 'RN-14');
+        ->and(filaDelEscaneo($scanId)->flagged_for_review)->toBe($marcado);
+})->with([
+    'el ultimo dia' => ['2026-06-30 13:00:00', true],
+    'el dia siguiente al cese en Madrid' => ['2026-06-30 22:00:00', false],
+    'semanas despues del cese' => ['2026-08-15 08:00:00', false],
+    'la vispera del alta en Madrid' => ['2025-12-31 22:59:59', false],
+])->group('RN-20', 'RN-14');

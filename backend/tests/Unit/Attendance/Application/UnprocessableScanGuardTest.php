@@ -20,6 +20,7 @@ use App\Modules\Attendance\Application\Port\ScanIntent;
 use App\Modules\Attendance\Application\Port\ScanLog;
 use App\Modules\Attendance\Application\Port\ScanRecord;
 use App\Modules\Attendance\Application\Port\ScanResult;
+use App\Modules\Attendance\Application\Port\SiteCalendar;
 use App\Modules\Attendance\Application\UseCase\GuardedScan;
 use App\Modules\Attendance\Application\UseCase\RegisterScanBatchHandler;
 use App\Modules\Attendance\Application\UseCase\RegisterScanHandler;
@@ -36,6 +37,7 @@ use App\Modules\Attendance\Domain\ValueObject\ScanFailureHistory;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Shared\Application\Support\ConstantTimeFloor;
 use App\Modules\Shared\Domain\Event\DomainEvent;
+use App\Modules\Shared\Domain\ValueObject\CredentialHolder;
 use App\Modules\Shared\Domain\ValueObject\CredentialRejectionReason;
 use App\Modules\Shared\Domain\ValueObject\CredentialResolution;
 use App\Modules\Shared\Domain\ValueObject\EmployeeSnapshot;
@@ -229,6 +231,18 @@ function guardianDePrueba(array $piezas = []): UnprocessableScanGuard
             public function latestAcceptedOwner(string $payloadFingerprint, DateTimeImmutable $notBefore, DateTimeImmutable $notAfter): ?string
             {
                 return $this->dueno;
+            }
+        },
+        calendar: new class implements SiteCalendar
+        {
+            public function timezoneOf(int $siteId): DateTimeZone
+            {
+                return new DateTimeZone('Europe/Madrid');
+            }
+
+            public function timezoneForRecording(int $siteId): DateTimeZone
+            {
+                return new DateTimeZone('Europe/Madrid');
             }
         },
     );
@@ -521,6 +535,67 @@ it('deja el descarte sin atribuir si la huella tampoco aparece', function (): vo
 
     expect($avisos->avisos[0]->attribution->method)->toBe(DiscardedScanAttributionMethod::NONE);
 })->group('RN-22');
+
+it('acota al dia del cese la atribucion de una tarjeta retirada, como el fichaje', function (?string $terminatedOn, DiscardedScanAttributionMethod $expected): void {
+    // ADR-062 §8, tarea 25.5. El escaneo es del 14 a las 07:00 UTC y la tarjeta
+    // se retiro despues, a las 08:00: «antes de la retirada». Con el cese el 13
+    // (en Madrid acaba a las 22:00 UTC del 13) ya no hay jornada que revisar.
+    $avisos = new AvisosDelGuardian;
+
+    intentarConVeneno(guardianDePrueba([
+        'avisos' => $avisos,
+        'resolutor' => new class($terminatedOn) implements CredentialResolver
+        {
+            public function __construct(private readonly ?string $cese) {}
+
+            public function resolve(string $qrPayload): CredentialResolution
+            {
+                return CredentialResolution::rejectedWithHolder(CredentialRejectionReason::REVOKED, CredentialHolder::of(
+                    GUARDIAN_EMPLOYEE,
+                    new DateTimeImmutable('2026-08-01 06:00:00', new DateTimeZone('UTC')),
+                    new DateTimeImmutable('2026-08-14 08:00:00', new DateTimeZone('UTC')),
+                    $this->cese,
+                    1,
+                ));
+            }
+        },
+    ]), new LogicException('veneno'));
+
+    expect($avisos->avisos[0]->attribution->method)->toBe($expected);
+})->with([
+    'cese el mismo dia' => ['2026-08-14', DiscardedScanAttributionMethod::CREDENTIAL],
+    'cese el dia anterior' => ['2026-08-13', DiscardedScanAttributionMethod::NONE],
+    'sin cese' => [null, DiscardedScanAttributionMethod::CREDENTIAL],
+])->group('RN-22', 'RN-20', 'RN-14');
+
+it('no busca por la huella una tarjeta autentica que la cota del cese deja sin atribuir', function (): void {
+    // ADR-061 A2: la huella es para una firma que no se pudo verificar. Una
+    // tarjeta autentica ya dijo de quien es; si la cota del cese (ADR-062 §8)
+    // no la atribuye, la huella no puede contradecirla, aunque encuentre al
+    // mismo titular en un aceptado anterior.
+    $avisos = new AvisosDelGuardian;
+
+    intentarConVeneno(guardianDePrueba([
+        'avisos' => $avisos,
+        'huella' => GUARDIAN_EMPLOYEE,
+        'resolutor' => new class implements CredentialResolver
+        {
+            public function resolve(string $qrPayload): CredentialResolution
+            {
+                return CredentialResolution::rejectedWithHolder(CredentialRejectionReason::REVOKED, CredentialHolder::of(
+                    GUARDIAN_EMPLOYEE,
+                    new DateTimeImmutable('2026-08-01 06:00:00', new DateTimeZone('UTC')),
+                    new DateTimeImmutable('2026-08-14 08:00:00', new DateTimeZone('UTC')),
+                    '2026-08-13',
+                    1,
+                ));
+            }
+        },
+    ]), new LogicException('veneno'));
+
+    expect($avisos->avisos[0]->attribution->method)->toBe(DiscardedScanAttributionMethod::NONE)
+        ->and($avisos->avisos[0]->attribution->ownerUuid)->toBeNull();
+})->group('RN-22', 'RN-20', 'RN-14');
 
 it('calcula la misma huella que el registro del fichaje, de una sola fuente', function (): void {
     // ADR-061 A2: la atribucion por huella busca en `scan_events` lo que calcula

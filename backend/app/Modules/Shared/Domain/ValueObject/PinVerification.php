@@ -33,6 +33,10 @@ use InvalidArgumentException;
  * `employeeUuid()`, `isVerified()` sigue siendo falso y quien construye la
  * respuesta no lo lee. El portal recibe este mismo valor y no usa `claim()`.
  *
+ * **Desde la 2.3.0 (RN-20) el PIN correcto de una persona de baja** baja con un
+ * {@see OffboardedPinHolder}, tambien solo para la base de datos: es el mismo
+ * rechazo, sin `employeeUuid()`, y el fichaje decide con el si atribuye la fila.
+ *
  * Lo que si se separa es `locked()`, porque quien lo recibe tiene que poder
  * contarlo y registrarlo —un bloqueo activo es una senal operativa util (§8.2)—
  * y porque el propio bloqueo no puede convertirse en un oraculo: quien llama lo
@@ -51,6 +55,7 @@ final readonly class PinVerification
         private bool $locked,
         private int $retryAfterSeconds,
         private ?PinClaim $claim,
+        private ?OffboardedPinHolder $offboardedHolder = null,
     ) {}
 
     /**
@@ -77,6 +82,18 @@ final readonly class PinVerification
     public static function rejected(?PinClaim $claim = null): self
     {
         return new self(null, false, 0, $claim);
+    }
+
+    /**
+     * El PIN **correcto** de una persona **de baja**, tecleado en el quiosco
+     * (RN-20, enmienda del 29-10-2026 de ADR-043). **Hacia fuera es el
+     * mismo rechazo** que {@see rejected()}: sin `employeeUuid()`, sin claim y
+     * con `isVerified()` falso. La persona solo la lee el fichaje del quiosco
+     * para atribuir y marcar la fila si la fecha cae en su periodo.
+     */
+    public static function rejectedOffboarded(OffboardedPinHolder $holder): self
+    {
+        return new self(null, false, 0, null, $holder);
     }
 
     /**
@@ -134,5 +151,15 @@ final readonly class PinVerification
     public function claim(): ?PinClaim
     {
         return $this->claim;
+    }
+
+    /**
+     * La persona de baja cuyo PIN correcto se rechazo (RN-20), o `null`. **Solo
+     * lo lee el fichaje del quiosco** para escribir la fila; nada que construya
+     * una respuesta debe llamarlo.
+     */
+    public function offboardedHolder(): ?OffboardedPinHolder
+    {
+        return $this->offboardedHolder;
     }
 }

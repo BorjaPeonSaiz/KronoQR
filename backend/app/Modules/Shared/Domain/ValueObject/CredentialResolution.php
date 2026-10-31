@@ -29,6 +29,7 @@ final readonly class CredentialResolution
         private ?PinClaim $pinClaim = null,
         private ?CredentialHolder $holder = null,
         private ?DateTimeImmutable $issuedAt = null,
+        private ?OffboardedPinHolder $offboardedPinHolder = null,
     ) {}
 
     /**
@@ -77,6 +78,19 @@ final readonly class CredentialResolution
     }
 
     /**
+     * Rechazo del PIN **correcto** de una persona **de baja** (RN-20,
+     * enmienda del 29-10-2026 de ADR-043). **Hacia fuera es el mismo rechazo**
+     * que {@see rejected()} con `UNKNOWN`: sin `employeeUuid()` y con el mismo
+     * motivo, asi que `scan_events.result` sigue siendo `rejected_unknown`. La
+     * persona solo la lee el caso de uso para atribuir y marcar la fila si la
+     * fecha civil del fichaje cae en su periodo; nunca sube a la respuesta.
+     */
+    public static function rejectedWithOffboardedPinHolder(OffboardedPinHolder $holder): self
+    {
+        return new self(null, CredentialRejectionReason::UNKNOWN, offboardedPinHolder: $holder);
+    }
+
+    /**
      * UUID del empleado, o `null` si la credencial no se resolvio.
      *
      * Devuelve `?string` en lugar de lanzar para que quien llama tenga que
@@ -117,6 +131,15 @@ final readonly class CredentialResolution
     public function holder(): ?CredentialHolder
     {
         return $this->holder;
+    }
+
+    /**
+     * La persona de baja cuyo PIN correcto se rechazo (RN-20), o `null`. Nunca
+     * viaja a una respuesta.
+     */
+    public function offboardedPinHolder(): ?OffboardedPinHolder
+    {
+        return $this->offboardedPinHolder;
     }
 
     /**

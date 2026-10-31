@@ -18,6 +18,7 @@ use App\Modules\Shared\Domain\ValueObject\AuthFailureReason;
 use App\Modules\Shared\Domain\ValueObject\CredentialRejectionReason;
 use App\Modules\Shared\Domain\ValueObject\CredentialResolution;
 use App\Modules\Shared\Domain\ValueObject\EmployeeSnapshot;
+use App\Modules\Shared\Domain\ValueObject\OffboardedPinHolder;
 use App\Modules\Shared\Domain\ValueObject\PinClaim;
 use App\Modules\Shared\Domain\ValueObject\PinOrigin;
 
@@ -68,6 +69,11 @@ use App\Modules\Shared\Domain\ValueObject\PinOrigin;
  * `scan_events` (`claimed_employee_id`). La revision diaria lo convierte en
  * incidencia si nadie lo subsana; la respuesta, el evento `ScanRejected` y el
  * log no lo llevan. El sobre que no abre nunca lleva claim.
+ *
+ * **El PIN correcto de una persona de baja (RN-20, desde la 2.3.0)** baja como
+ * `CredentialResolution::rejectedWithOffboardedPinHolder()`: el mismo `UNKNOWN`.
+ * {@see RegisterScanHandler} atribuye y marca la fila solo si la fecha civil
+ * del fichaje cae en el periodo que cerro la baja (RN-20).
  *
  * **El sobre que no abre no cuenta como intento fallido**, y esa distincion
  * importa: un criptograma corrupto no dice nada sobre el PIN que lleva dentro, y
@@ -204,6 +210,15 @@ final readonly class RegisterPinScanHandler
             // claim baja hasta la fila de `scan_events` y a ningun otro sitio.
             // Hacia fuera es el mismo rechazo `UNKNOWN`, sin `employeeUuid`.
             $claim = $verification->claim();
+
+            // Enmienda del 29-10-2026 de ADR-043: el PIN correcto de una
+            // persona de baja. El mismo `UNKNOWN` hacia fuera; la fila decide si
+            // se atribuye por la fecha.
+            $offboarded = $verification->offboardedHolder();
+
+            if ($offboarded instanceof OffboardedPinHolder) {
+                return CredentialResolution::rejectedWithOffboardedPinHolder($offboarded);
+            }
 
             return $claim instanceof PinClaim
                 ? CredentialResolution::rejectedWithPinClaim($claim)

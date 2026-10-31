@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Modules\Shared\Domain\ValueObject\OffboardedPinHolder;
 use App\Modules\Shared\Domain\ValueObject\PinVerification;
 
 /*
@@ -25,13 +26,18 @@ it('no admite un PIN verificado sin empleado', function (): void {
         ->toThrow(InvalidArgumentException::class);
 })->group('RF-AT-11', 'RF-ID-06');
 
+// Los casos se construyen dentro de la prueba (closures), no al declarar el
+// dataset: si no, la cobertura no ve las fabricas y la mutacion los da por sin probar.
 it('no presenta como bloqueo ni un PIN verificado ni uno rechazado', function (PinVerification $verification): void {
     expect($verification->isLocked())->toBeFalse()
         ->and($verification->retryAfterSeconds())->toBe(0);
 })->with([
-    'verificado' => [PinVerification::verified(PIN_VERIFICATION_TEST_UUID)],
-    'rechazado' => [PinVerification::rejected()],
-])->group('RS-12', 'RS-03');
+    'verificado' => fn (): PinVerification => PinVerification::verified(PIN_VERIFICATION_TEST_UUID),
+    'rechazado' => fn (): PinVerification => PinVerification::rejected(),
+    'rechazado de una persona de baja' => fn (): PinVerification => PinVerification::rejectedOffboarded(
+        OffboardedPinHolder::of(PIN_VERIFICATION_TEST_UUID, '2026-03-01', '2026-08-15', new DateTimeZone('Europe/Madrid')),
+    ),
+])->group('RS-12', 'RS-03', 'RN-20');
 
 it('no entrega empleado mientras dura el bloqueo', function (): void {
     $verification = PinVerification::locked(300);

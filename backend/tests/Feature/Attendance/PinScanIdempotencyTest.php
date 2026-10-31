@@ -12,6 +12,7 @@ use Tests\Support\Database\CommittedDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\EmployeePins;
+use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
  * **Idempotencia del fichaje por PIN, incluida bajo concurrencia** (regla dura
@@ -314,3 +315,51 @@ it('no cuenta como uso del PIN el reenvio de un fichaje ya registrado', function
 
     expect($metricas->pinFallbacks)->toBe([$escenario['site']]);
 })->group('RF-AT-07', 'RF-AT-11');
+
+it('atribuye una sola fila y devuelve diez rechazos identicos al PIN correcto de una persona de baja con el mismo scan_id', function (): void {
+    // D15 (enmienda del 29-10-2026 de ADR-043): la cola offline del ultimo dia
+    // reenvia en paralelo el fichaje que llega despues de la baja. El UNIQUE de
+    // `scan_events.scan_id` deja una fila, atribuida y marcada, y las diez
+    // respuestas son el mismo rechazo generico (regla dura 8, RS-03).
+    //
+    // Los primeros envios que se cruzan verifican todos el PIN y cada uno suma
+    // un intento: con el umbral de serie, los que llegan despues del tercero
+    // verian el bloqueo y no sabrian si acerto. Aqui se mide la idempotencia,
+    // no RS-12, asi que el umbral se sube.
+    config()->set('identity.pin.max_attempts', 100);
+
+    $escenario = escenarioIdempotente('2026-08-15 15:00:00');
+    $baja = WorkforceFixtures::employee(
+        $escenario['site'],
+        null,
+        'terminated',
+        hiredAt: '2026-03-01',
+        terminatedAt: '2026-08-15',
+    );
+    EmployeePins::issue($baja, PIN_IDEMPOTENTE);
+
+    $scanId = Str::uuid7()->toString();
+    $cuerpo = [
+        ...cuerpoDePin($escenario, $scanId, '2026-08-15T13:00:00Z'),
+        'employee_code' => EmployeePins::codeOf($baja),
+    ];
+
+    $respuestas = ParallelRequests::run(
+        PETICIONES_PARALELAS_PIN,
+        static fn (): mixed => Api::as($escenario['token'])
+            ->withHeaders(['Idempotency-Key' => $scanId])
+            ->post('/api/v1/scan/pin', $cuerpo),
+    );
+
+    $cuerpos = array_map(static fn (array $r): string => json_encode($r['body'], JSON_THROW_ON_ERROR), $respuestas);
+    $codigos = array_map(static fn (array $r): int => $r['status'], $respuestas);
+
+    expect($respuestas)->toHaveCount(PETICIONES_PARALELAS_PIN)
+        ->and(array_values(array_unique($codigos)))->toBe([422])
+        ->and(array_values(array_unique($cuerpos)))->toHaveCount(1)
+        ->and(DB::table('scan_events')->count())->toBe(1)
+        ->and(DB::table('scan_events')->where('scan_id', $scanId)->value('result'))->toBe('rejected_unknown')
+        ->and(DB::table('scan_events')->where('scan_id', $scanId)->value('employee_id'))->toBe(AttendanceFixtures::employeeIdOf($baja))
+        ->and(DB::table('scan_events')->where('scan_id', $scanId)->value('flagged_for_review'))->toBeTrue()
+        ->and(DB::table('shift_entries')->count())->toBe(0);
+})->group('RF-AT-07', 'RN-20', 'RS-03', 'RQ-03');

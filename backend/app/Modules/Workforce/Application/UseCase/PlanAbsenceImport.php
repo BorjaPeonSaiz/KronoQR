@@ -8,6 +8,7 @@ use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Workforce\Application\Port\AbsenceRepository;
 use App\Modules\Workforce\Application\Port\EmployeeImportDirectory;
 use App\Modules\Workforce\Application\Port\EmployeeImportSource;
+use App\Modules\Workforce\Application\Port\EmployeeRepository;
 use App\Modules\Workforce\Domain\Exception\UnreadableImportFile;
 use App\Modules\Workforce\Domain\Model\Absence;
 use App\Modules\Workforce\Domain\ValueObject\AbsenceImportMessage;
@@ -66,6 +67,7 @@ final readonly class PlanAbsenceImport
         private EmployeeImportSource $source,
         private EmployeeImportDirectory $directory,
         private AbsenceRepository $absences,
+        private EmployeeRepository $employees,
     ) {}
 
     /**
@@ -214,6 +216,16 @@ final readonly class PlanAbsenceImport
 
             return AbsenceImportRow::rejected($line, $label, [
                 AbsenceImportMessage::of(AbsenceImportMessageCode::OVERLAPPING_ABSENCE, self::FIELD_STARTS_ON),
+            ]);
+        }
+
+        // RN-27: la misma regla que aplica {@see ApplyAbsenceImport} y que el
+        // alta individual responde con `422` en `ends_on`. Sin ella, una linea
+        // con solape parcial salia `create` aqui y se saltaba en silencio al
+        // aplicar: el informe mentia.
+        if (! $candidate->fallsWithin($this->employees->employmentHistory($employeeUuid))) {
+            return AbsenceImportRow::rejected($line, $label, [
+                AbsenceImportMessage::of(AbsenceImportMessageCode::OUTSIDE_EMPLOYMENT, self::FIELD_ENDS_ON),
             ]);
         }
 

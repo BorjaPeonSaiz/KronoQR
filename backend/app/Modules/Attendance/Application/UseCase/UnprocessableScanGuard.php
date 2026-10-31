@@ -19,6 +19,8 @@ use App\Modules\Attendance\Application\Port\ScanLog;
 use App\Modules\Attendance\Application\Port\ScanMetrics;
 use App\Modules\Attendance\Application\Port\ScanRecord;
 use App\Modules\Attendance\Application\Port\ScanResult;
+use App\Modules\Attendance\Application\Port\SiteCalendar;
+use App\Modules\Attendance\Application\Support\EmploymentEnd;
 use App\Modules\Attendance\Domain\Event\UnprocessableScanDiscarded;
 use App\Modules\Attendance\Domain\Policy\DiscardedScanAttributionPolicy;
 use App\Modules\Attendance\Domain\Policy\UnprocessableScanPolicy;
@@ -29,6 +31,7 @@ use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Support\ConstantTimeFloor;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\Support\UtcInstant;
+use App\Modules\Shared\Domain\ValueObject\CredentialHolder;
 use DateTimeImmutable;
 use Illuminate\Database\ConnectionInterface;
 use Psr\Log\LoggerInterface;
@@ -118,6 +121,7 @@ final readonly class UnprocessableScanGuard
         private LoggerInterface $logger,
         private ConstantTimeFloor $floor,
         private CardFingerprintOwners $fingerprints,
+        private SiteCalendar $calendar,
     ) {}
 
     /**
@@ -341,8 +345,10 @@ final readonly class UnprocessableScanGuard
      * La atribucion del aviso del quiosco (ADR-047 §2): tarjeta autentica, o
      * codigo de una persona que puede fichar. Nunca el `token_hash` del padron.
      *
-     * **Una tarjeta que no se atribuye por su firma busca a su titular por la
-     * huella del contenido** (ADR-061 A2): el aceptado mas reciente con el mismo
+     * **Una tarjeta cuya firma no se pudo verificar busca a su titular por la
+     * huella del contenido** (ADR-061 A2). Una tarjeta autentica que no se
+     * atribuye —retirada fuera de su vida o despues del cese— no la busca: la
+     * firma ya dijo de quien es. La huella toma el aceptado mas reciente con el mismo
      * `payload_fingerprint`, dentro de {@see self::FINGERPRINT_LOOKBACK_DAYS}
      * dias antes del fichaje. Tambien si el resolutor lanza, que puede ser
      * justamente lo roto.
@@ -358,9 +364,23 @@ final readonly class UnprocessableScanGuard
                 return $policy->forEmployeeCode($this->employees->findByCode($scan->employeeCode ?? ''));
             }
 
-            $byCard = $policy->forCard($this->credentials->resolve($scan->qrPayload ?? ''), $scan->occurredAt, $now);
+            $resolution = $this->credentials->resolve($scan->qrPayload ?? '');
+            $holder = $resolution->holder();
 
-            if ($byCard->isAttributed()) {
+            // La cota del cese (ADR-062 §8), como en el fichaje: una tarjeta
+            // retirada usada despues del dia del cese no se atribuye.
+            $byCard = $policy->forCard(
+                $resolution,
+                $scan->occurredAt,
+                $now,
+                $holder instanceof CredentialHolder ? EmploymentEnd::of($this->calendar, $holder->terminatedOn, $holder->siteId) : null,
+            );
+
+            // Con la firma verificada la tarjeta ya dijo de quien es: si no se
+            // atribuye —por la cota del cese o sin emision conocida— la huella
+            // no puede contradecirla. La huella es solo para una firma que no se
+            // pudo verificar (ADR-061 A2).
+            if ($byCard->isAttributed() || $holder instanceof CredentialHolder || $resolution->employeeUuid() !== null) {
                 return $byCard;
             }
         } catch (Throwable $failure) {

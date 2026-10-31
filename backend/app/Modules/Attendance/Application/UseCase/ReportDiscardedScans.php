@@ -11,12 +11,15 @@ use App\Modules\Attendance\Application\Port\DiscardedScanReportLog;
 use App\Modules\Attendance\Application\Port\DiscardedScanReportRecord;
 use App\Modules\Attendance\Application\Port\EmployeeDirectory;
 use App\Modules\Attendance\Application\Port\ScanMetrics;
+use App\Modules\Attendance\Application\Port\SiteCalendar;
+use App\Modules\Attendance\Application\Support\EmploymentEnd;
 use App\Modules\Attendance\Domain\Policy\DiscardedScanAttributionPolicy;
 use App\Modules\Attendance\Domain\ValueObject\DiscardedScanAttribution;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Support\ConstantTimeFloor;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
+use App\Modules\Shared\Domain\ValueObject\CredentialHolder;
 use DateTimeImmutable;
 
 /**
@@ -65,6 +68,7 @@ final readonly class ReportDiscardedScans
         private ScanMetrics $metrics,
         private Clock $clock,
         private ConstantTimeFloor $floor,
+        private SiteCalendar $calendar,
     ) {}
 
     /**
@@ -128,10 +132,17 @@ final readonly class ReportDiscardedScans
         DateTimeImmutable $recordedAt,
     ): DiscardedScanAttribution {
         if ($report->origin === ScanOrigin::QR_KIOSK) {
+            $resolution = $this->credentials->resolve($report->qrPayload ?? '');
+            $holder = $resolution->holder();
+
+            // La cota del cese (ADR-062 §8), como en el fichaje. La zona solo se
+            // consulta con una tarjeta autentica retirada de alguien con cese, y
+            // el suelo de abajo iguala el reloj de todos los caminos.
             return $policy->forCard(
-                $this->credentials->resolve($report->qrPayload ?? ''),
+                $resolution,
                 $report->occurredAt,
                 $recordedAt,
+                $holder instanceof CredentialHolder ? EmploymentEnd::of($this->calendar, $holder->terminatedOn, $holder->siteId) : null,
             );
         }
 

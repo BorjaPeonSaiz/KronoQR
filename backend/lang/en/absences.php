@@ -60,6 +60,10 @@ return [
             'duplicate_in_file' => 'This absence overlaps an earlier row of the same file. The first one '
                 .'is loaded and this one is discarded: delete the repeat or merge the two rows.',
 
+            'outside_employment' => 'That person was not employed on all of those days: the absence starts '
+                .'before their hire date, ends after their termination date or falls between an offboarding '
+                .'and a rehire. Fit the dates to their employment period, shown on their record.',
+
             'unknown_column' => 'Column ":column" is not used. If you expected it to be, check its name: '
                 .'the names the system recognises are in the configuration guide, and you can add your '
                 .'own without touching the program.',
