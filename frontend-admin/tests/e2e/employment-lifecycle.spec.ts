@@ -217,7 +217,11 @@ test(
   async ({ page }) => {
     await stubManagementApi(page)
     await stubEmploymentApi(page, [
-      formerPerson(EMPLOYEE_UUID, 'Lucia', { terminatedAt: addDays(todayInCenter(), -1) }),
+      // Cese de ayer y baja efectiva hoy: lo que avisa es `offboarded_at`, no el cese.
+      formerPerson(EMPLOYEE_UUID, 'Lucia', {
+        terminatedAt: addDays(todayInCenter(), -1),
+        offboardedAt: new Date().toISOString(),
+      }),
     ])
     await logIn(page)
     await openEmployee(page, EMPLOYEE_UUID)
@@ -399,8 +403,18 @@ test(
     await expect(confirm).toBeDisabled()
     await dialog.getByLabel(/Fecha de cese/).fill('2026-09-02')
     await dialog.getByLabel(/Motivo de la corrección/).fill('corto')
+    // Mientras se escribe no se avisa; sale al salir del campo.
+    await expect(dialog).not.toContainText('Escribe al menos 10 caracteres')
+    await dialog.getByLabel(/Fecha de cese/).focus()
     await expect(dialog).toContainText('Escribe al menos 10 caracteres')
     await expect(confirm).toBeDisabled()
+
+    // Y al intentar confirmar sin motivo valido, el aviso vuelve y el foco va al campo.
+    await dialog.getByLabel(/Motivo de la corrección/).fill('')
+    await dialog.getByLabel(/Fecha de cese/).focus()
+    await confirm.click({ force: true })
+    await expect(dialog.getByLabel(/Motivo de la corrección/)).toBeFocused()
+    await dialog.getByLabel(/Motivo de la corrección/).fill('corto')
 
     await dialog.getByLabel(/Motivo de la corrección/).fill('Trabajó hasta el 2 según el cuadrante')
 
@@ -414,10 +428,25 @@ test(
     await confirm.click()
     await expect(dialog).toBeHidden()
 
-    // El dato anterior sigue a la vista junto al nuevo.
-    await expect(page.getByTestId('last-correction')).toContainText('31 ago 2026')
-    await expect(page.getByTestId('last-correction')).toContainText('2 sept 2026')
+    // El dato anterior sigue a la vista junto al nuevo, con quien, cuando y el motivo...
+    const history = page.getByTestId('termination-correction')
+
+    await expect(history).toHaveCount(1)
+    await expect(history).toContainText('De 31 ago 2026 a 2 sept 2026')
+    await expect(history).toContainText('Dirección RRHH')
+    await expect(history).toContainText('Motivo: Trabajó hasta el 2 según el cuadrante')
     await expect(page.getByTestId('employment-period').first()).toContainText('2 sept 2026')
+
+    // ...y tambien tras recargar: viene en la ficha, no en la memoria de la sesion.
+    await page.reload()
+    await expect(page.getByTestId('employee-name')).toBeVisible()
+    await expect(page.getByTestId('termination-correction')).toHaveCount(1)
+    await expect(page.getByTestId('termination-correction')).toContainText(
+      'De 31 ago 2026 a 2 sept 2026',
+    )
+    await expect(page.getByTestId('termination-correction')).toContainText(
+      'Motivo: Trabajó hasta el 2 según el cuadrante',
+    )
     expect(
       api.requests.filter((request) => request.path.endsWith('/termination-corrections'))[0]?.body,
     ).toEqual({ terminated_at: '2026-09-02', reason: 'Trabajó hasta el 2 según el cuadrante' })

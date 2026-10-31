@@ -11,11 +11,11 @@
 import type { Page, Route } from '@playwright/test'
 import type {
   Employee,
-  EmploymentPeriod,
+  EmploymentPeriodRecord,
   EmploymentPeriodCorrection,
   IssuedPin,
 } from '@/shared/api/types'
-import type { RecordedRequest } from './admin'
+import { USER, type RecordedRequest } from './admin'
 
 /** «Hoy» en la zona del centro, como lo calcula el servidor (ADR-040). */
 export function todayInCenter(now: Date = new Date()): string {
@@ -38,7 +38,7 @@ export function addDays(date: string, days: number): string {
 /** Una persona del doble: su ficha, sus periodos y sus correcciones. */
 export interface StubPerson {
   employee: Employee
-  periods: EmploymentPeriod[]
+  periods: EmploymentPeriodRecord[]
   corrections: EmploymentPeriodCorrection[]
   /** Si el servidor la rechaza en un lote (`422` en su posicion), p. ej. porque ya no esta de baja. */
   rejectInBatch?: string
@@ -84,7 +84,16 @@ export function activePerson(uuid: string, firstName: string, hiredAt = '2026-03
       anonymized_at: null,
       offboarding: null,
     },
-    periods: [{ uuid: periodUuid(), hired_at: hiredAt, terminated_at: null, state: 'active' }],
+    periods: [
+      {
+        uuid: periodUuid(),
+        hired_at: hiredAt,
+        terminated_at: null,
+        state: 'active',
+        offboarded_at: null,
+        corrections: [],
+      },
+    ],
     corrections: [],
   }
 }
@@ -93,7 +102,7 @@ export function activePerson(uuid: string, firstName: string, hiredAt = '2026-03
 export function formerPerson(
   uuid: string,
   firstName: string,
-  options: { hiredAt?: string; terminatedAt?: string } = {},
+  options: { hiredAt?: string; terminatedAt?: string; offboardedAt?: string } = {},
 ): StubPerson {
   const hiredAt = options.hiredAt ?? '2026-03-16'
   const terminatedAt = options.terminatedAt ?? '2026-08-31'
@@ -108,7 +117,15 @@ export function formerPerson(
       offboarding: { state: 'effective', terminated_at: terminatedAt },
     },
     periods: [
-      { uuid: periodUuid(), hired_at: hiredAt, terminated_at: terminatedAt, state: 'terminated' },
+      {
+        uuid: periodUuid(),
+        hired_at: hiredAt,
+        terminated_at: terminatedAt,
+        state: 'terminated',
+        // Por omision la baja se hizo efectiva al cerrar el dia del cese (la aplico la tarea).
+        offboarded_at: options.offboardedAt ?? `${terminatedAt}T22:00:04.512Z`,
+        corrections: [],
+      },
     ],
   }
 }
@@ -134,7 +151,7 @@ export async function stubEmploymentApi(page: Page, people: StubPerson[]): Promi
     return person
   }
 
-  function current(person: StubPerson): EmploymentPeriod {
+  function current(person: StubPerson): EmploymentPeriodRecord {
     const last = person.periods.at(-1)
 
     if (last === undefined) {
@@ -169,10 +186,15 @@ export async function stubEmploymentApi(page: Page, people: StubPerson[]): Promi
     })
   }
 
-  function withPeriods(person: StubPerson): Employee & { employment_periods: EmploymentPeriod[] } {
+  function withPeriods(
+    person: StubPerson,
+  ): Employee & { employment_periods: EmploymentPeriodRecord[] } {
     return {
       ...person.employee,
-      employment_periods: person.periods.map((period) => ({ ...period })),
+      employment_periods: person.periods.map((period) => ({
+        ...period,
+        corrections: period.corrections.map((correction) => ({ ...correction })),
+      })),
     }
   }
 
@@ -194,11 +216,13 @@ export async function stubEmploymentApi(page: Page, people: StubPerson[]): Promi
       ...(body.department_id === undefined ? {} : { department_id: body.department_id }),
       ...(body.locale === undefined ? {} : { locale: body.locale }),
     }
-    const period: EmploymentPeriod = {
+    const period: EmploymentPeriodRecord = {
       uuid: periodId,
       hired_at: body.hired_at,
       terminated_at: null,
       state: 'active',
+      offboarded_at: null,
+      corrections: [],
     }
 
     person.periods.push(period)
@@ -398,6 +422,8 @@ export async function stubEmploymentApi(page: Page, people: StubPerson[]): Promi
 
         open.terminated_at = terminatedAt
         open.state = effective ? 'terminated' : 'scheduled'
+        // Efectiva ahora: el instante (UTC) queda escrito; una programada aun no lo tiene.
+        open.offboarded_at = effective ? new Date().toISOString() : null
         person.employee = {
           ...person.employee,
           status: effective ? 'terminated' : 'active',
@@ -523,6 +549,15 @@ export async function stubEmploymentApi(page: Page, people: StubPerson[]): Promi
       }
 
       person.corrections.push(correction)
+      // El historico del periodo, que viaja en la ficha (RN-13): se queda tras recargar.
+      period.corrections.push({
+        id: correction.id,
+        previous_terminated_at: correction.previous_terminated_at,
+        terminated_at: terminatedAt,
+        corrected_at: new Date().toISOString(),
+        corrected_by: { uuid: USER.uuid, name: USER.name },
+        reason,
+      })
       period.terminated_at = terminatedAt
 
       if (next === undefined) {
