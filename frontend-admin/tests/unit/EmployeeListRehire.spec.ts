@@ -447,3 +447,144 @@ describe('Plantilla con el filtro «De baja» (RN-27)', () => {
     expect(wrapper.find('[data-test="rehire-stale"]').exists()).toBe(false)
   })
 })
+
+describe('Plantilla «De baja»: la seleccion del lote entre paginas y su tope (RN-27, ADR-062 §6)', () => {
+  /** Las paginas del listado, una por elemento, como las sirve el servidor (30 por pagina). */
+  function paginas(...contenido: Employee[][]) {
+    const total = contenido.reduce((suma, pagina) => suma + pagina.length, 0)
+
+    return (url: string): Response | null => {
+      if (!url.startsWith('/api/v1/employees?')) {
+        return null
+      }
+
+      const page = Number(new URLSearchParams(url.split('?')[1]).get('page') ?? '1')
+
+      return jsonResponse({
+        data: contenido[page - 1] ?? [],
+        meta: { page, per_page: 30, total, total_pages: contenido.length },
+      })
+    }
+  }
+
+  const uuidDe = (posicion: number) =>
+    `0199f0c2-1f4a-7c3e-9b21-${String(posicion).padStart(12, '0')}`
+
+  /** `cuantas` personas de baja, desde la posicion `desde`. */
+  const deBaja = (cuantas: number, desde = 0) =>
+    Array.from({ length: cuantas }, (_, offset) =>
+      former(uuidDe(desde + offset), `Persona${desde + offset}`),
+    )
+
+  const pagina = (wrapper: Awaited<ReturnType<typeof mountList>>, label: string) =>
+    buttonWith(wrapper, label).trigger('click')
+
+  it('se conserva al cambiar de pagina, y el lote lleva a las de las dos en el orden en que se marcaron', async () => {
+    const calls = stubApi(
+      [former(A, 'Ana'), former(B, 'Beto'), former(C, 'Carla')],
+      paginas([former(A, 'Ana'), former(B, 'Beto')], [former(C, 'Carla')]),
+    )
+
+    const wrapper = await mountList()
+
+    await wrapper.findAll('[data-test="select-row"]')[1]?.setValue(true)
+    await pagina(wrapper, es.common.pagination.next)
+    await settle()
+
+    expect(wrapper.find('[data-test="employee-row"]').text()).toContain('Carla Prueba')
+
+    await wrapper.find('[data-test="select-row"]').setValue(true)
+    await settle(1)
+
+    expect(wrapper.find('[data-test="selection-summary"]').text()).toBe('2 personas seleccionadas')
+
+    await pagina(wrapper, es.common.pagination.previous)
+    await settle()
+
+    expect(
+      wrapper
+        .findAll<HTMLInputElement>('[data-test="select-row"]')
+        .map((box) => box.element.checked),
+    ).toEqual([false, true])
+
+    await wrapper.find('[data-test="rehire-selected"]').trigger('click')
+    await settle()
+    await confirm(wrapper).trigger('click')
+    await settle()
+
+    expect(calls.rehire).toEqual([
+      {
+        url: '/api/v1/employees/rehire',
+        body: { employee_uuids: [B, C], hired_at: '2027-03-29', reset_pin: false },
+      },
+    ])
+  })
+
+  it('la casilla de la cabecera no pasa de 500: marca las 500 primeras de la pagina y lo avisa', async () => {
+    const quinientasUna = deBaja(501)
+
+    stubApi(quinientasUna, paginas(quinientasUna))
+
+    const wrapper = await mountList()
+
+    await wrapper.find('[data-test="select-all"]').setValue(true)
+    await settle(1)
+
+    const casillas = wrapper.findAll<HTMLInputElement>('[data-test="select-row"]')
+
+    expect(wrapper.find('[data-test="selection-summary"]').text()).toBe(
+      '500 personas seleccionadas',
+    )
+    expect(casillas[499]?.element.checked).toBe(true)
+    expect(casillas[500]?.element.checked).toBe(false)
+    expect(wrapper.find('[data-test="rehire-toolbar"] [role="status"]').text()).toBe(
+      'Como máximo se pueden dar de alta de nuevo 500 personas a la vez.',
+    )
+  })
+
+  it('con 500 ya marcadas en otra pagina, una casilla mas no entra en el lote y lo avisa', async () => {
+    const primeras = deBaja(500)
+    const otra = deBaja(1, 500)
+
+    const calls = stubApi([...primeras, ...otra], paginas(primeras, otra))
+
+    const wrapper = await mountList()
+
+    await wrapper.find('[data-test="select-all"]').setValue(true)
+    await settle(1)
+    await pagina(wrapper, es.common.pagination.next)
+    await settle()
+    await wrapper.find('[data-test="select-row"]').setValue(true)
+    await settle(1)
+
+    expect(wrapper.find('[data-test="selection-summary"]').text()).toBe(
+      '500 personas seleccionadas',
+    )
+    expect(wrapper.find('[data-test="rehire-toolbar"] [role="status"]').text()).toContain('500')
+
+    await wrapper.find('[data-test="rehire-selected"]').trigger('click')
+    await settle()
+    await confirm(wrapper).trigger('click')
+    await settle()
+
+    const enviadas = calls.rehire[0]?.body['employee_uuids'] as string[]
+
+    expect(enviadas).toHaveLength(500)
+    expect(enviadas).not.toContain(uuidDe(500))
+  })
+
+  it('«Quitar la selección» retira tambien el aviso del tope', async () => {
+    const quinientasUna = deBaja(501)
+
+    stubApi(quinientasUna, paginas(quinientasUna))
+
+    const wrapper = await mountList()
+
+    await wrapper.find('[data-test="select-all"]').setValue(true)
+    await settle(1)
+    await wrapper.find('[data-test="selection-clear"]').trigger('click')
+    await settle(1)
+
+    expect(wrapper.text()).not.toContain(es.employees.selection.tooMany.replace('{max}', '500'))
+  })
+})
