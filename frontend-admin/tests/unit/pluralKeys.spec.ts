@@ -35,6 +35,8 @@ const INVARIANT: Readonly<Record<string, string>> = {
   'incidents.dialog.noteCounter': 'contador «12/500 caracteres»: el maximo manda, no el recuento',
   'operationalSettings.pinLengthOptions': 'longitudes de PIN de 4 a 8 cifras: nunca 1',
   'errorEvents.table.occurrencesValue': 'solo la cifra',
+  'employees.actions.rehireSelected':
+    'cifra entre parentesis tras un verbo: «Dar de alta de nuevo a la seleccion (1)»',
 }
 
 /** Toda clave con {count} o con formas plurales (« | »): ninguna se queda a medias en un idioma. */

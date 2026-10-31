@@ -17,6 +17,7 @@ import type {
   EmployeeImportReport,
   EmployeeWorkDays,
   EmploymentContract,
+  EmploymentPeriod,
   Incident,
   IncidentCollection,
   IssuedSupportGrant,
@@ -24,6 +25,7 @@ import type {
   ManagementAccountCollection,
   ManagementUser,
   PairingConfirmed,
+  RehiredEmployee,
   Session,
   SetupCompletion,
   SetupStatus,
@@ -66,6 +68,35 @@ export function employee(overrides: Partial<Employee> = {}): Employee {
     pin_status: 'issued',
     anonymized_at: null,
     offboarding: null,
+    ...overrides,
+  }
+}
+
+export const PERIOD_UUID = '019a3b5e-7c00-7d1e-8f2a-3b4c5d6e7f80'
+export const REHIRED_CREDENTIAL_UUID = '019a3b5e-7c00-7d1e-8f2a-3b4c5d6e7f81'
+
+/** Un periodo de alta (RN-27, ADR-062 §1), por omision el de una baja efectiva. */
+export function employmentPeriod(overrides: Partial<EmploymentPeriod> = {}): EmploymentPeriod {
+  return {
+    uuid: PERIOD_UUID,
+    hired_at: '2026-03-16',
+    terminated_at: '2026-08-31',
+    state: 'terminated',
+    ...overrides,
+  }
+}
+
+/** Lo que devuelve la readmision de una persona (RN-27): ficha en alta, periodo nuevo y tarjeta pendiente. */
+export function rehired(overrides: Partial<RehiredEmployee> = {}): RehiredEmployee {
+  return {
+    employee: employee({ hired_at: '2026-11-02', terminated_at: null, offboarding: null }),
+    employment_period: employmentPeriod({
+      uuid: '019a3b5e-7c00-7d1e-8f2a-3b4c5d6e7f90',
+      hired_at: '2026-11-02',
+      terminated_at: null,
+      state: 'active',
+    }),
+    credential: { uuid: REHIRED_CREDENTIAL_UUID, status: 'pending_print' },
     ...overrides,
   }
 }

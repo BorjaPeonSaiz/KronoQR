@@ -36,7 +36,13 @@ const { t } = useI18n()
 <template>
   <BaseDialog :title="title" :size="size" @close="emit('cancel')">
     <slot />
-    <ErrorNotice v-if="error !== null && error !== undefined" :error="error" class="mt-4" />
+    <div v-if="error !== null && error !== undefined" class="mt-4">
+      <!-- Quien abre el dialogo puede contar el fallo a su manera (p. ej. con el «que hacer»
+           propio de un 409); por omision, el aviso general. -->
+      <slot name="error" :error="error">
+        <ErrorNotice :error="error" />
+      </slot>
+    </div>
 
     <template #actions>
       <button

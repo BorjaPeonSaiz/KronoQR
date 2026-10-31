@@ -26,6 +26,17 @@ export type EmploymentStatus = Schemas['EmploymentStatus']
 export type CreateEmployeeRequest = Schemas['CreateEmployeeRequest']
 export type UpdateEmployeeRequest = Schemas['UpdateEmployeeRequest']
 export type OffboardEmployeeRequest = Schemas['OffboardEmployeeRequest']
+
+// Baja programada, readmision y correccion de la fecha de cese (RN-14, RN-27, ADR-062).
+export type EmployeeOffboarding = Schemas['EmployeeOffboarding']
+export type EmploymentPeriod = Schemas['EmploymentPeriod']
+export type RehireContract = Schemas['RehireContract']
+export type RehireEmployeeRequest = Schemas['RehireEmployeeRequest']
+export type RehireEmployeesRequest = Schemas['RehireEmployeesRequest']
+export type RehiredEmployee = Schemas['RehiredEmployee']
+export type RehiredEmployees = Schemas['RehiredEmployees']
+export type TerminationDateCorrectionRequest = Schemas['TerminationDateCorrectionRequest']
+export type EmploymentPeriodCorrection = Schemas['EmploymentPeriodCorrection']
 export type PageMeta = Schemas['PageMeta']
 
 export type PinStatus = Schemas['PinStatus']

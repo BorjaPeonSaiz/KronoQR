@@ -289,7 +289,7 @@ describe('EmployeeDetailView', () => {
     await buttonWith(wrapper, es.employees.offboard.action).trigger('click')
     await settle(1)
 
-    const confirm = buttonWith(wrapper, es.employees.offboard.confirmAction)
+    const confirm = buttonWith(wrapper, es.employees.offboard.confirmSchedule)
 
     expect(confirm.attributes('aria-disabled')).toBeDefined()
 
@@ -297,14 +297,27 @@ describe('EmployeeDetailView', () => {
     await settle(1)
 
     expect(
-      buttonWith(wrapper, es.employees.offboard.confirmAction).attributes('aria-disabled'),
+      buttonWith(wrapper, es.employees.offboard.confirmSchedule).attributes('aria-disabled'),
     ).toBeUndefined()
   })
 
   it('la baja avisa de sus consecuencias y de que no se borra nada', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-02T10:00:00Z') })
+
     const wrapper = await mountDetail(employee())
 
     await buttonWith(wrapper, es.employees.offboard.action).trigger('click')
+    await settle(1)
+
+    // Por omision (hoy) la baja se programa: sigue fichando y se puede anular.
+    const scheduled = wrapper.find('[role="dialog"]').text()
+
+    expect(scheduled).toContain(es.employees.status.scheduled)
+    expect(scheduled).toContain(es.employees.offboard.scheduledCancel)
+    expect(scheduled).toContain(es.employees.offboard.consequenceHistory)
+
+    // Con un cese pasado es efectiva: tarjeta revocada y sin fichar en el acto.
+    await wrapper.find('[role="dialog"] input[type="date"]').setValue('2026-09-30')
     await settle(1)
 
     const dialog = wrapper.find('[role="dialog"]')
@@ -313,6 +326,7 @@ describe('EmployeeDetailView', () => {
     expect(dialog.text()).toContain(es.employees.offboard.consequenceScan)
     expect(dialog.text()).toContain(es.employees.offboard.consequenceHistory)
     expect(dialog.text()).toContain(es.employees.status.terminated)
+    vi.useRealTimers()
   })
 
   it('a quien ya esta de baja no le ofrece darle de baja otra vez', async () => {
@@ -647,7 +661,11 @@ describe('EmployeeDetailView', () => {
       return wrapper.find<HTMLInputElement>('[role="dialog"] input[type="date"]')
     }
 
-    it('el max del campo es hoy en la zona del centro, no la fecha UTC ni la del navegador', async () => {
+    function confirmButton(wrapper: Wrapper): DOMWrapper<Element> {
+      return wrapper.find('[role="dialog"] [data-test="confirm-dialog-confirm"]')
+    }
+
+    it('la fecha de hoy es la del centro, no la fecha UTC ni la del navegador', async () => {
       // 22:30 UTC del 2 de octubre: en Madrid (CEST) ya es el 3 a las 00:30.
       vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-02T22:30:00Z') })
 
@@ -656,11 +674,12 @@ describe('EmployeeDetailView', () => {
       await buttonWith(wrapper, es.employees.offboard.action).trigger('click')
       await settle(1)
 
-      expect(dateInput(wrapper).attributes('max')).toBe('2026-10-03')
       expect(dateInput(wrapper).element.value).toBe('2026-10-03')
+      // Ya no hay `max`: una fecha futura programa la baja (RN-14, ADR-062).
+      expect(dateInput(wrapper).attributes('max')).toBeUndefined()
     })
 
-    it('no deja confirmar una fecha posterior a hoy y lo dice en el campo', async () => {
+    it('una fecha posterior a hoy se admite y avisa de que la baja se programa', async () => {
       vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-02T10:00:00Z') })
 
       const wrapper = await mountDetail(employee())
@@ -671,25 +690,51 @@ describe('EmployeeDetailView', () => {
       await dateInput(wrapper).setValue('2026-10-31')
       await settle(1)
 
-      expect(
-        buttonWith(wrapper, es.employees.offboard.confirmAction).attributes('aria-disabled'),
-      ).toBeDefined()
+      expect(dateInput(wrapper).attributes('aria-invalid')).toBeUndefined()
+      expect(confirmButton(wrapper).attributes('aria-disabled')).toBeUndefined()
+      expect(confirmButton(wrapper).text()).toBe(es.employees.offboard.confirmSchedule)
+      expect(wrapper.find('[data-test="offboard-outcome-scheduled"]').text()).toContain('31')
+      // «Aplicar ya» no tiene efecto con un cese futuro: la casilla no se ofrece.
+      expect(wrapper.find('[data-test="apply-now"]').exists()).toBe(false)
+    })
+
+    it('una fecha anterior al alta no se admite y lo dice en el campo', async () => {
+      vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-02T10:00:00Z') })
+
+      const wrapper = await mountDetail(employee({ hired_at: '2026-08-14' }))
+
+      await buttonWith(wrapper, es.employees.offboard.action).trigger('click')
+      await settle(1)
+      await wrapper.find('[role="dialog"] select').setValue('endOfContract')
+      await dateInput(wrapper).setValue('2026-08-01')
+      await settle(1)
+
+      expect(confirmButton(wrapper).attributes('aria-disabled')).toBeDefined()
       expect(dateInput(wrapper).attributes('aria-invalid')).toBe('true')
     })
 
-    it('el texto de la baja dice que es efectiva al confirmarla, también hoy', async () => {
+    it('con la fecha de hoy la baja se programa, y con «Aplicar ya» es efectiva al confirmar', async () => {
+      vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-02T10:00:00Z') })
+
       const wrapper = await mountDetail(employee())
 
       await buttonWith(wrapper, es.employees.offboard.action).trigger('click')
       await settle(1)
 
-      const text = wrapper.find('[role="dialog"]').text()
+      expect(wrapper.find('[data-test="offboard-outcome-scheduled"]').exists()).toBe(true)
+      expect(wrapper.find('[role="dialog"]').text()).toContain(
+        es.employees.offboard.scheduledCancel,
+      )
 
-      expect(text).toContain('efectiva al confirmarla')
-      expect(text).not.toContain('A partir de la fecha de cese')
+      await wrapper.find('[data-test="apply-now"] input').setValue(true)
+      await settle(1)
+
+      expect(wrapper.find('[data-test="offboard-outcome-immediate"]').exists()).toBe(true)
+      expect(wrapper.find('[data-test="offboard-outcome-scheduled"]').exists()).toBe(false)
+      expect(confirmButton(wrapper).text()).toBe(es.employees.offboard.confirmAction)
     })
 
-    it('una alta futura fija la fecha de cese a la del alta y lo explica', async () => {
+    it('una alta futura propone la fecha del alta y explica las dos salidas', async () => {
       vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-02T10:00:00Z') })
 
       const wrapper = await mountDetail(employee({ hired_at: '2026-10-15' }))
@@ -700,36 +745,41 @@ describe('EmployeeDetailView', () => {
       const input = dateInput(wrapper)
 
       expect(input.attributes('min')).toBe('2026-10-15')
-      expect(input.attributes('max')).toBe('2026-10-15')
       expect(input.element.value).toBe('2026-10-15')
       expect(wrapper.find('[data-test="offboard-future-hire"]').text()).toBe(
         es.employees.offboard.futureHire,
       )
+      // Sin «Aplicar ya» se programa (el extra de un solo dia); con ello, baja sin efectos.
+      expect(wrapper.find('[data-test="offboard-outcome-scheduled"]').exists()).toBe(true)
 
-      await wrapper.find('[role="dialog"] select').setValue('endOfContract')
-      await input.setValue('2026-10-10')
+      await wrapper.find('[data-test="apply-now"] input').setValue(true)
       await settle(1)
 
-      expect(
-        buttonWith(wrapper, es.employees.offboard.confirmAction).attributes('aria-disabled'),
-      ).toBeDefined()
+      expect(wrapper.find('[data-test="offboard-outcome-no-effect"]').exists()).toBe(true)
     })
 
     it.each([
-      ['el cese de hoy', '2026-08-14', '2026-10-02', true],
-      ['un cese pasado, que ya es en el acto', '2026-08-14', '2026-09-30', false],
-      ['el cese en un alta que aun no ha llegado', '2026-10-15', '2026-10-15', true],
+      ['el cese de hoy sin «Aplicar ya»', '2026-08-14', '2026-10-02', false, 'scheduled'],
+      ['el cese de hoy con «Aplicar ya»', '2026-08-14', '2026-10-02', true, 'effective'],
+      ['un cese pasado, que ya es en el acto', '2026-08-14', '2026-09-30', false, 'effective'],
+      ['el cese en un alta futura con «Aplicar ya»', '2026-10-15', '2026-10-15', true, 'effective'],
     ])(
-      'pide «Aplicar ya» con %s, para que la baja sea efectiva al confirmarla (RN-14)',
-      async (_caso, hiredAt, cese, aplicaYa) => {
+      'envía apply_now solo cuando se pide y la fecha lo admite: %s (RN-14)',
+      async (_caso, hiredAt, cese, aplicaYa, estado) => {
         vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-02T10:00:00Z') })
         const bodies: unknown[] = []
+        const effective = estado === 'effective'
         const wrapper = await mountDetail(employee({ hired_at: hiredAt }), (url, init) => {
           if (url.endsWith('/offboard') && init?.method === 'POST') {
             bodies.push(JSON.parse(String(init.body)))
 
             return jsonResponse(
-              employee({ hired_at: hiredAt, status: 'terminated', terminated_at: cese }),
+              employee({
+                hired_at: hiredAt,
+                status: effective ? 'terminated' : 'active',
+                terminated_at: cese,
+                offboarding: { state: effective ? 'effective' : 'scheduled', terminated_at: cese },
+              }),
             )
           }
 
@@ -740,21 +790,59 @@ describe('EmployeeDetailView', () => {
         await settle(1)
         await wrapper.find('[role="dialog"] select').setValue('endOfContract')
         await dateInput(wrapper).setValue(cese)
+
+        if (aplicaYa) {
+          await wrapper.find('[data-test="apply-now"] input').setValue(true)
+        }
+
         await settle(1)
-        await buttonWith(wrapper, es.employees.offboard.confirmAction).trigger('click')
+        await confirmButton(wrapper).trigger('click')
         await settle()
 
         expect(bodies).toHaveLength(1)
         expect((bodies[0] as Record<string, unknown>)['apply_now']).toBe(
           aplicaYa ? true : undefined,
         )
+        expect(announcement.value).toContain(
+          effective ? es.employees.announce.offboarded : 'Baja programada',
+        )
       },
     )
 
+    it('«Aplicar ya» no se arrastra si se cambia la fecha a una futura', async () => {
+      vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-02T10:00:00Z') })
+      const bodies: unknown[] = []
+      const wrapper = await mountDetail(employee(), (url, init) => {
+        if (url.endsWith('/offboard') && init?.method === 'POST') {
+          bodies.push(JSON.parse(String(init.body)))
+
+          return jsonResponse(employee())
+        }
+
+        return null
+      })
+
+      await buttonWith(wrapper, es.employees.offboard.action).trigger('click')
+      await settle(1)
+      await wrapper.find('[role="dialog"] select').setValue('endOfContract')
+      await wrapper.find('[data-test="apply-now"] input').setValue(true)
+      await dateInput(wrapper).setValue('2026-10-31')
+      await settle(1)
+      await confirmButton(wrapper).trigger('click')
+      await settle()
+
+      expect((bodies[0] as Record<string, unknown>)['apply_now']).toBeUndefined()
+    })
+
     it('avisa del turno abierto con un texto fijo y dice que los dias se completan despues', async () => {
+      vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-02T10:00:00Z') })
+
       const wrapper = await mountDetail(employee())
 
       await buttonWith(wrapper, es.employees.offboard.action).trigger('click')
+      await settle(1)
+      // Un cese pasado es efectivo al confirmar: es el caso del aviso del turno abierto.
+      await dateInput(wrapper).setValue('2026-09-30')
       await settle(1)
 
       const text = wrapper.find('[role="dialog"]').text()
@@ -772,7 +860,7 @@ describe('EmployeeDetailView', () => {
       await settle(1)
 
       expect(wrapper.find('[data-test="offboard-future-hire"]').exists()).toBe(false)
-      expect(dateInput(wrapper).attributes('max')).toBe('2026-10-02')
+      expect(dateInput(wrapper).attributes('min')).toBe('2026-08-14')
     })
 
     it('pinta el 422 del servidor en el campo de fecha, accesible', async () => {
@@ -788,7 +876,7 @@ describe('EmployeeDetailView', () => {
       await buttonWith(wrapper, es.employees.offboard.action).trigger('click')
       await settle(1)
       await wrapper.find('[role="dialog"] select').setValue('endOfContract')
-      await buttonWith(wrapper, es.employees.offboard.confirmAction).trigger('click')
+      await confirmButton(wrapper).trigger('click')
       await settle()
 
       const input = dateInput(wrapper)
@@ -821,7 +909,7 @@ describe('EmployeeDetailView', () => {
       await buttonWith(wrapper, es.employees.offboard.action).trigger('click')
       await settle(1)
       await wrapper.find('[role="dialog"] select').setValue('endOfContract')
-      await buttonWith(wrapper, es.employees.offboard.confirmAction).trigger('click')
+      await confirmButton(wrapper).trigger('click')
       await settle()
 
       expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
@@ -893,7 +981,7 @@ describe('EmployeeDetailView', () => {
       await buttonWith(wrapper, es.employees.offboard.action).trigger('click')
       await settle(1)
       await wrapper.find('[role="dialog"] select').setValue('endOfContract')
-      await buttonWith(wrapper, es.employees.offboard.confirmAction).trigger('click')
+      await confirmButton(wrapper).trigger('click')
       await settle()
 
       expect(wrapper.find('[role="dialog"]').exists()).toBe(true)
