@@ -290,3 +290,180 @@ describe('RehireBatchDialog: el aviso de sincronizacion sale de offboarded_at (3
     expect(wrapper.find('[data-test="rehire-recent-warning"]').text()).toContain('1 persona')
   })
 })
+
+describe('RehireBatchDialog: un lote grande (RN-27, ADR-062 §6)', () => {
+  const NOMBRES = [
+    'Ana',
+    'Beto',
+    'Carla',
+    'Dario',
+    'Elena',
+    'Fabio',
+    'Gema',
+    'Hugo',
+    'Irene',
+    'Jorge',
+    'Karen',
+    'Luis',
+    'Marta',
+    'Nico',
+    'Olga',
+  ]
+
+  const uuidDe = (posicion: number) =>
+    `0199f0c2-1f4a-7c3e-9b21-${String(posicion).padStart(12, '0')}`
+
+  const QUINCE = NOMBRES.map((nombre, posicion) => former(uuidDe(posicion), nombre))
+
+  it('los rechazos en posiciones de dos cifras nombran a su persona y salen en el orden de la lista, no en el del texto', async () => {
+    stubApi(() =>
+      problemResponse(422, 'urn:kronoqr:problem:validation-failed', {
+        errors: {
+          'employee_uuids.13': ['Su ficha esta minimizada.'],
+          'employee_uuids.2': ['Esta persona no esta de baja.'],
+          'employee_uuids.10': ['La fecha de alta tiene que ser posterior a su cese.'],
+        },
+      }),
+    )
+
+    const wrapper = await mountBatch(QUINCE)
+
+    await confirm(wrapper).trigger('click')
+    await settle()
+
+    expect(wrapper.findAll('[data-test="rehire-batch-error"]').map((item) => item.text())).toEqual([
+      'Carla Prueba: Esta persona no esta de baja.',
+      'Karen Prueba: La fecha de alta tiene que ser posterior a su cese.',
+      'Nico Prueba: Su ficha esta minimizada.',
+    ])
+    expect(wrapper.emitted('rehired')).toBeUndefined()
+  })
+
+  it('un campo que no es una posicion (employee_uuids sin indice) no se atribuye a nadie', async () => {
+    stubApi(() =>
+      problemResponse(422, 'urn:kronoqr:problem:validation-failed', {
+        errors: {
+          employee_uuids: ['Como maximo 500 personas por peticion.'],
+          'employee_uuids.12': ['Esta persona no esta de baja.'],
+        },
+      }),
+    )
+
+    const wrapper = await mountBatch(QUINCE)
+
+    await confirm(wrapper).trigger('click')
+    await settle()
+
+    expect(wrapper.findAll('[data-test="rehire-batch-error"]').map((item) => item.text())).toEqual([
+      'Marta Prueba: Esta persona no esta de baja.',
+    ])
+  })
+
+  it('el mismo motivo en local y en el servidor para una persona se dice una sola vez', async () => {
+    const motivo = 'su fecha de cese es el 31 oct 2026 y la de alta tiene que ser posterior'
+
+    stubApi(() =>
+      problemResponse(422, 'urn:kronoqr:problem:validation-failed', {
+        errors: { 'employee_uuids.11': [motivo] },
+      }),
+    )
+
+    const wrapper = await mountBatch(QUINCE)
+
+    await confirm(wrapper).trigger('click')
+    await settle()
+    // Ahora la fecha tampoco pasa del cese de nadie: el aviso local dice lo mismo que el servidor.
+    await wrapper.find('input[type="date"]').setValue('2026-10-31')
+    await settle(1)
+
+    const errores = wrapper.findAll('[data-test="rehire-batch-error"]')
+
+    // Las quince quedan en la lista; Luis, en la posicion 11, con el motivo una sola vez.
+    expect(errores).toHaveLength(15)
+    expect(errores[11]?.text()).toBe(`Luis Prueba: ${motivo}`)
+  })
+})
+
+describe('RehireBatchDialog: el detalle de cada ficha para el aviso de sincronizacion (31-10-2026)', () => {
+  const uuidDe = (posicion: number) =>
+    `0199f0c2-1f4a-7c3e-9b21-${String(posicion).padStart(12, '0')}`
+
+  /** 60 personas de baja: mas que las 50 fichas que el dialogo llega a pedir. */
+  const SESENTA = Array.from({ length: 60 }, (_, posicion) =>
+    former(uuidDe(posicion), `Persona${posicion}`),
+  )
+
+  function stubDetails(): { pedidas: string[]; maximoEnVuelo: () => number } {
+    const pedidas: string[] = []
+    let enVuelo = 0
+    let maximo = 0
+
+    stubFetch(async (url) => {
+      pedidas.push(url)
+      enVuelo += 1
+      maximo = Math.max(maximo, enVuelo)
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      enVuelo -= 1
+
+      return jsonResponse({ ...former(url.slice(-36), 'X'), employment_periods: [] })
+    })
+
+    return { pedidas, maximoEnVuelo: () => maximo }
+  }
+
+  it('pide la ficha de las 50 primeras, de cinco en cinco, y no la de las demas', async () => {
+    const red = stubDetails()
+
+    await mountBatch(SESENTA)
+
+    await vi.waitFor(() => expect(red.pedidas).toHaveLength(50))
+    await settle()
+
+    expect(red.pedidas).toHaveLength(50)
+    expect(red.pedidas[0]).toBe(`/api/v1/employees/${uuidDe(0)}`)
+    expect(red.pedidas[49]).toBe(`/api/v1/employees/${uuidDe(49)}`)
+    expect(red.maximoEnVuelo()).toBe(5)
+  })
+
+  it('a quien ya trae sus periodos no se le pide la ficha, y su offboarded_at es el que cuenta', async () => {
+    const red = stubDetails()
+    // Cese de hace meses, pero la baja se registro esta mañana en Madrid.
+    const conPeriodos = {
+      ...former(A, 'Ana', '2026-10-31'),
+      employment_periods: [
+        employmentPeriodRecord({
+          terminated_at: '2026-10-31',
+          offboarded_at: '2027-03-29T07:00:00Z',
+        }),
+      ],
+    }
+
+    const wrapper = await mountBatch([conPeriodos])
+
+    await settle()
+
+    expect(red.pedidas).toEqual([])
+    expect(wrapper.find('[data-test="rehire-recent-warning"]').text()).toContain('1 persona')
+  })
+})
+
+describe('RehireBatchDialog: sin la zona del centro (RN-27, ADR-040)', () => {
+  it('no propone fecha de alta, no deja confirmar y no adivina avisos', async () => {
+    const bodies = stubApi()
+
+    const wrapper = await mountView(RehireBatchDialog, {
+      props: { people: [former(A, 'Ana', '2027-03-28')], timezone: undefined },
+    })
+
+    await settle()
+
+    expect(wrapper.find<HTMLInputElement>('input[type="date"]').element.value).toBe('')
+    expect(confirm(wrapper).attributes('aria-disabled')).toBeDefined()
+    expect(wrapper.find('[data-test="rehire-recent-warning"]').exists()).toBe(false)
+
+    await confirm(wrapper).trigger('click')
+    await settle()
+
+    expect(bodies).toEqual([])
+  })
+})
