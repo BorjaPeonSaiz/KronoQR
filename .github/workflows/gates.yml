@@ -2047,7 +2047,8 @@ jobs:
   # Feature y Contract juntas, no solo Unit— porque el umbral de dominio se
   # mide sobre el mismo informe Clover que el umbral global (`tools/coverage-
   # gate.php` acota el segundo del primero, no repite la ejecucion). Medido en
-  # este runner (09-09-2026): ~15 minutos, memoria de PHP en 3G
+  # este runner (09-09-2026): ~15 minutos; 31-48 min en octubre, con la suite ya
+  # por encima de 5000 pruebas (ver `timeout-minutes` abajo), memoria de PHP en 3G
   # (`COVERAGE_MEMORY_LIMIT` del Makefile — con el 1G de costumbre, Xdebug
   # agota la memoria a mitad de la suite).
   #
@@ -2066,9 +2067,18 @@ jobs:
   coverage:
     name: "Cobertura (RNF-M-01)"
     runs-on: ubuntu-24.04
-    # 50 (R6-DV-08): medido 16-25 min de los 30 anteriores, y la cobertura con
-    # Xdebug es de los pasos que mas varian entre runners.
-    timeout-minutes: 50
+    # 75 desde el 31-10-2026. Antes 50 (R6-DV-08), calibrado con 16-25 min de
+    # septiembre; la suite entera con Xdebug (>5000 pruebas) mide hoy 32-50 min
+    # y la variacion entre runners es de +-50 %. Medido (`make coverage`, solo
+    # el paso): PR 32, 35, 36, 41 y 48 min (29-10 al 31-10); noche 32, 33, 35,
+    # 41, 41, 43 y 44 min (22-10 al 30-10), y el 31-10 GitHub la corto a los 50
+    # (run 41189683683) sin terminar. NO es un problema de la noche: es el mismo
+    # job, en un runner propio (nada compite con el: los demas jobs nocturnos
+    # corren en otros runners) y el PR roza el mismo limite (47,6 min el 29-10).
+    # Que pasara en el PR y en el manual era suerte de runner. 75 = 1,5x el peor
+    # caso medido (50); si algun dia llega a 60, se parte la suite, no se sube.
+    # El check «Cobertura (RNF-M-01)» no cambia de nombre.
+    timeout-minutes: 75
     if: github.event_name == 'pull_request' || inputs.coverage
 
     env:
