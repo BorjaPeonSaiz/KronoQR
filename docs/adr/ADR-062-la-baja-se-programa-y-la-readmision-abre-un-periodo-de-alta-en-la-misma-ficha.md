@@ -351,6 +351,12 @@ baja programada no se corrige: se reprograma (§3).
   - El plazo de minimización de ADR-060 se cuenta desde la fecha corregida, porque lo lee de
     `terminated_at`.
 - **Quién.** `rrhh` y `admin`, como la baja.
+- **La corrección no conserva la cuenta que la firmó** ([ADR-060](ADR-060-al-vencer-su-plazo-la-ficha-y-la-cuenta-de-gestion-se-minimizan-en-sitio-con-asiento.md)
+  §2; decisión del 31-10-2026). Las correcciones no caducan y la tabla es solo-append: si la
+  conservaran, la cuenta no se minimizaría nunca. La cuenta dada de baja se minimiza con la regla
+  general, como la que aparece en `credentials`, `absences` o `employment_contracts`, y el histórico
+  de la ficha enseña entonces al autor por su `uuid`, sin nombre y marcado como minimizado
+  (`TerminationCorrectionAuthor`). Las fechas y el momento de la corrección se conservan (RN-13).
 
 ### 8. El fichaje por PIN después de la baja (D15)
 

@@ -2090,6 +2090,11 @@ baja programada se cambia de fecha desde «Baja» («Cambiar la fecha o aplicar 
 - **Motivo obligatorio, de 10 a 1000 caracteres.** Cuenta qué pasó, sin datos de
   salud ni juicios de valor. Se guarda con la corrección pero **no entra en el
   asiento de auditoría**: el asiento lleva las dos fechas, quién y cuándo.
+  **El motivo y tu nombre se siguen viendo en su ficha mientras la persona esté
+  en la plantilla**, también después de darla de alta de nuevo, y los ven RRHH y
+  la administración. Cuando su ficha se minimiza por el plazo de conservación,
+  el motivo se sustituye por un texto fijo; y cuando se minimiza tu cuenta, la
+  corrección aparece como de una cuenta minimizada.
 - **Antes de confirmar ves la fecha de partida y la nueva.** Después de
   confirmar, la ficha muestra la corrección registrada; **la fecha anterior no
   desaparece**: queda guardada con quién la cambió, cuándo y por qué.

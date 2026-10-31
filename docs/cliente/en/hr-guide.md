@@ -2139,6 +2139,11 @@ now").
 - **Mandatory reason, 10 to 1000 characters.** Say what happened, with no health
   data and no value judgements. It is saved with the correction but **does not go
   into the audit entry**: the entry carries the two dates, who and when.
+  **The reason and your name stay visible on their record while the person is
+  on the staff list**, also after they are hired again, and HR and the
+  administrators can see them. When their record is minimised at the end of the
+  retention period, the reason is replaced by a fixed text; and when your account
+  is minimised, the correction shows as made by a minimised account.
 - **Before confirming you see the starting date and the new one.** After
   confirming, the record shows the registered correction; **the previous date does
   not disappear**: it is kept with who changed it, when and why.
