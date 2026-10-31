@@ -8566,7 +8566,9 @@ export interface components {
              * @description La baja de la persona (RN-14, ADR-062 §3): `null` sin fecha de cese,
              *     `scheduled` con una baja programada y `effective` con la baja ya
              *     efectiva. Se deriva de `status` y `terminated_at`, que siguen
-             *     diciendo lo mismo que antes.
+             *     diciendo lo mismo que antes. Lleva `offboarded_at`, el instante en
+             *     que la baja se hizo efectiva, en **todas** las respuestas con
+             *     `Employee`, tambien en el listado.
              */
             offboarding: components["schemas"]["EmployeeOffboarding"] | null;
             /**
@@ -8589,6 +8591,9 @@ export interface components {
          *     y la tarea del sistema la aplica el dia civil siguiente. **`effective`**:
          *     `status` es `terminated`. No es un estado nuevo de `status`: «baja
          *     programada» es una persona que no esta de baja y ya tiene fecha de cese.
+         *
+         *     Es la forma de `Employee` (`admin` y `rrhh`). El responsable recibe
+         *     `ScopedEmployeeOffboarding`, sin `offboarded_at`.
          */
         EmployeeOffboarding: {
             /** @enum {string} */
@@ -8596,6 +8601,32 @@ export interface components {
             /**
              * Format: date
              * @description Fecha de cese, la misma que `Employee.terminated_at`.
+             */
+            terminated_at: string;
+            /**
+             * Format: date-time
+             * @description Instante, en UTC, en que la baja **se hizo efectiva**: el
+             *     `offboarded_at` del periodo en curso (`EmploymentPeriodRecord`,
+             *     ADR-062 §1 y §4). `null` si y solo si `state` es `scheduled`. Viaja
+             *     tambien en el listado (`GET /employees`), para que el panel sepa
+             *     sin una peticion por persona si la baja se aplico hoy en la zona del
+             *     centro. No cambia al corregir la fecha de cese.
+             * @example 2026-10-16T01:00:04.512Z
+             */
+            offboarded_at: string | null;
+        };
+        /**
+         * ScopedEmployeeOffboarding
+         * @description La baja de una persona en la ficha reducida del responsable
+         *     (`ScopedEmployee`, DIV-1): la de `EmployeeOffboarding` sin
+         *     `offboarded_at`, que el responsable no necesita (RGPD art. 5.1.c).
+         */
+        ScopedEmployeeOffboarding: {
+            /** @enum {string} */
+            state: "scheduled" | "effective";
+            /**
+             * Format: date
+             * @description Fecha de cese, la misma que `ScopedEmployee.terminated_at`.
              */
             terminated_at: string;
         };
@@ -8702,7 +8733,7 @@ export interface components {
              */
             terminated_at: string;
             corrected_at: components["schemas"]["UtcTimestamp"];
-            corrected_by: components["schemas"]["CorrectionAuthor"];
+            corrected_by: components["schemas"]["TerminationCorrectionAuthor"];
             /**
              * @description El motivo que escribio quien corrigio. **En una ficha minimizada por
              *     retencion** (ADR-060, `Employee.anonymized_at` no nulo) es un texto
@@ -8711,6 +8742,32 @@ export interface components {
              *     fechas, el autor y el momento, que son registro (RN-13).
              */
             reason: string;
+        };
+        /**
+         * TerminationCorrectionAuthor
+         * @description Quien firmo una correccion de la fecha de cese (RN-13, RN-27). **Es
+         *     siempre una cuenta de gestion**, pero, a diferencia de
+         *     `CorrectionAuthor`, puede estar **minimizada**: la correccion no
+         *     conserva la cuenta (ADR-062 §7, ADR-060 §2). La cuenta dada de baja se
+         *     minimiza con la regla general al vencer su plazo, como la que aparece
+         *     en `credentials`, `absences` o `employment_contracts`. Entonces
+         *     `minimised` es `true`, `name` es `null` y el `uuid` se conserva: es el
+         *     mismo de `audit_log`, y la cuenta sigue siendo la autora sin decir ya
+         *     quien era. El panel enseña un texto de sustitucion. No sale el correo.
+         */
+        TerminationCorrectionAuthor: {
+            /**
+             * Format: uuid
+             * @description `users.uuid`, tambien con la cuenta minimizada.
+             */
+            uuid: string;
+            /** @description `users.name`, o `null` si y solo si `minimised` es `true`. */
+            name: string | null;
+            /**
+             * @description La cuenta se minimizo por retencion (`users.anonymized_at` no nulo,
+             *     ADR-060).
+             */
+            minimised: boolean;
         };
         /**
          * RehireContract
@@ -8959,14 +9016,15 @@ export interface components {
              */
             anonymized_at: string | null;
             /**
-             * @description La baja de la persona, como en `Employee.offboarding`. **Desde la
+             * @description La baja de la persona, como en `Employee.offboarding` pero sin
+             *     `offboarded_at` (`ScopedEmployeeOffboarding`). **Desde la
              *     2.3.0 el responsable ve tambien los ceses programados de su
              *     departamento**, no solo las bajas efectivas: le hacen falta para
              *     planificar los turnos y para entender el `422 work_date_after_termination`
              *     de un tramo posterior al cese (RN-14). Validacion pendiente del DPO
              *     del cliente (doc 01 §7).
              */
-            offboarding: components["schemas"]["EmployeeOffboarding"] | null;
+            offboarding: components["schemas"]["ScopedEmployeeOffboarding"] | null;
         };
         /**
          * ScopedEmployeeCollection
