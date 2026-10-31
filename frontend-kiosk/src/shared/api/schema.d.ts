@@ -8574,8 +8574,13 @@ export interface components {
              *     periodos de alta de la persona, del mas antiguo al mas reciente. El
              *     ultimo es el que reflejan `hired_at`, `terminated_at` y `status`. Las
              *     demas respuestas con `Employee` no lo llevan.
+             *
+             *     Cada periodo lleva el instante de su baja efectiva y el historico de
+             *     las correcciones de su fecha de cese (`EmploymentPeriodRecord`,
+             *     RN-13, regla dura 5): la fecha anterior se sigue viendo despues de
+             *     corregirla.
              */
-            employment_periods?: components["schemas"]["EmploymentPeriod"][];
+            employment_periods?: components["schemas"]["EmploymentPeriodRecord"][];
         };
         /**
          * EmployeeOffboarding
@@ -8618,6 +8623,94 @@ export interface components {
             terminated_at: string | null;
             /** @enum {string} */
             state: "active" | "scheduled" | "terminated";
+        };
+        /**
+         * EmploymentPeriodRecord
+         * @description Un periodo de alta **en la ficha de `rrhh+`** (`GET /employees/{uuid}`,
+         *     RN-27, ADR-062 §1 y §7): los campos de `EmploymentPeriod`, el instante
+         *     en que su baja se hizo efectiva y las correcciones de su fecha de cese.
+         *
+         *     Es un esquema aparte, y no `EmploymentPeriod` con dos campos mas, por
+         *     minimizacion (RGPD art. 5.1.c): `EmploymentPeriod` lo recibe tambien el
+         *     `auditor` en la busqueda de la exportacion legal
+         *     (`LegalExportEmployeeMatch`), que solo necesita distinguir a dos
+         *     personas, y el motivo de una correccion es texto libre de RRHH.
+         */
+        EmploymentPeriodRecord: {
+            /** Format: uuid */
+            uuid: string;
+            /**
+             * Format: date
+             * @description Fecha de alta del periodo. No cambia nunca.
+             */
+            hired_at: string;
+            /**
+             * Format: date
+             * @description Fecha de cese **vigente**, o `null` sin baja. Si se corrigio, es la
+             *     de la ultima correccion; las anteriores estan en `corrections`.
+             */
+            terminated_at: string | null;
+            /** @enum {string} */
+            state: "active" | "scheduled" | "terminated";
+            /**
+             * Format: date-time
+             * @description Instante, en UTC, en que la baja de este periodo **se hizo
+             *     efectiva** (`employment_periods.offboarded_at`): al registrarla en el
+             *     acto o al aplicarla la tarea del sistema el dia siguiente al cese
+             *     (ADR-062 §4). `null` sin baja o con la baja programada (`state`
+             *     distinto de `terminated`). Una vez escrito no cambia, tampoco al
+             *     corregir la fecha de cese.
+             * @example 2026-10-16T01:00:04.512Z
+             */
+            offboarded_at: string | null;
+            /**
+             * @description Las correcciones de la fecha de cese de este periodo
+             *     (`employment_period_corrections`, solo-append), **en orden
+             *     cronologico**: de la mas antigua a la mas reciente. Vacia si nunca
+             *     se corrigio. La primera conserva la fecha que se registro con la
+             *     baja (`previous_terminated_at`), y la ultima la vigente
+             *     (`terminated_at`, la misma que la del periodo).
+             */
+            corrections: components["schemas"]["TerminationDateCorrectionRecord"][];
+        };
+        /**
+         * TerminationDateCorrectionRecord
+         * @description Una correccion de la fecha de cese en el historico del periodo (RN-13,
+         *     RN-27, RL-04): la fecha anterior, la nueva, quien y cuando, y el motivo.
+         *
+         *     **El motivo sale aqui y no en el asiento.** El asiento
+         *     `employee.termination_date_corrected` no lo lleva (regla dura 21): vive
+         *     en la tabla, como el de una correccion de tramo, que tambien se devuelve
+         *     a quien puede ver la jornada (`WorkDayCorrection.reason_text`). Esta
+         *     ficha solo la reciben `rrhh` y `admin`, los mismos que pueden corregir.
+         */
+        TerminationDateCorrectionRecord: {
+            /**
+             * Format: int64
+             * @description El de `EmploymentPeriodCorrection.id`, y el `correction_id` del
+             *     asiento.
+             */
+            id: number;
+            /**
+             * Format: date
+             * @description La fecha de cese que tenia el periodo antes de esta correccion.
+             */
+            previous_terminated_at: string;
+            /**
+             * Format: date
+             * @description La fecha de cese que dejo esta correccion.
+             */
+            terminated_at: string;
+            corrected_at: components["schemas"]["UtcTimestamp"];
+            corrected_by: components["schemas"]["CorrectionAuthor"];
+            /**
+             * @description El motivo que escribio quien corrigio. **En una ficha minimizada por
+             *     retencion** (ADR-060, `Employee.anonymized_at` no nulo) es un texto
+             *     fijo, `Motivo retirado al minimizar la ficha (ADR-060, ADR-062)`: la
+             *     minimizacion sustituye el motivo en la base de datos y conserva las
+             *     fechas, el autor y el momento, que son registro (RN-13).
+             */
+            reason: string;
         };
         /**
          * RehireContract
