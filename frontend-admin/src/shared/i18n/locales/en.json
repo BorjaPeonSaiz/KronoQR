@@ -576,6 +576,10 @@
       "consequenceCard": "A new card is generated, pending print. Their earlier cards stay revoked.",
       "consequencePortal": "The employee portal admits them again with their code and PIN.",
       "consequenceHistory": "Nothing is deleted: their history and their previous period are kept.",
+      "stale": {
+        "title": "That person is no longer offboarded",
+        "advice": "Someone has rehired them before you, or their record has changed. Nothing was applied: the list has been reloaded with the current state. Check how it is now before repeating this."
+      },
       "card": {
         "heading": "New card",
         "explanationOne": "{name} is employed again. Their new card is pending print: until then they cannot clock in with a card.",

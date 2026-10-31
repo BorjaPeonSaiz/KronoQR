@@ -394,9 +394,20 @@ function closeRehireResults(): void {
   rehireResults.value = null
 }
 
-/** El servidor dice que la ficha ya no esta de baja (o esta minimizada): se relee la lista. */
+/** Aviso de que la persona ya no estaba de baja: sin el, la fila desaparece sin explicacion. */
+const rehireStale = ref(false)
+
+// Abrir una readmision nueva descarta el aviso de la anterior: ya no habla de lo que se hace.
+watch([rehiring, rehiringBatch], ([single, batch]) => {
+  if (single !== null || batch) {
+    rehireStale.value = false
+  }
+})
+
+/** El servidor dice que la ficha ya no esta de baja (o esta minimizada): se relee la lista y se dice por que. */
 function onRehireStale(): void {
   rehiring.value = null
+  rehireStale.value = true
   void refetch()
 }
 
@@ -532,6 +543,17 @@ const selectClass =
         {{ t('common.filters.clear') }}
       </button>
     </form>
+
+    <!-- Alguien se adelanto: la fila ya no esta de baja. Alerta, el lector de pantalla la lee solo. -->
+    <div
+      v-if="rehireStale"
+      role="alert"
+      data-test="rehire-stale"
+      class="mt-4 rounded-kq border border-kq-warning bg-kq-warning-soft p-4 text-kq-warning"
+    >
+      <p class="font-semibold">{{ t('employees.rehire.stale.title') }}</p>
+      <p class="mt-1">{{ t('employees.rehire.stale.advice') }}</p>
+    </div>
 
     <LoadingPanel v-if="isPending" :label="t('employees.loading')" class="mt-4" />
 

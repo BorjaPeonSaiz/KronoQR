@@ -411,5 +411,16 @@ describe('Plantilla con el filtro «De baja» (RN-27)', () => {
 
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
     expect(calls.lists.length).toBeGreaterThan(readsBefore)
+    // La fila desaparece de «De baja»: se dice por que, y es una alerta.
+    const notice = wrapper.find('[data-test="rehire-stale"]')
+
+    expect(notice.attributes('role')).toBe('alert')
+    expect(notice.text()).toContain(es.employees.rehire.stale.title)
+
+    // Abrir otra readmision descarta el aviso de la anterior.
+    await wrapper.find('[data-test="rehire-row"]').trigger('click')
+    await settle(1)
+
+    expect(wrapper.find('[data-test="rehire-stale"]').exists()).toBe(false)
   })
 })

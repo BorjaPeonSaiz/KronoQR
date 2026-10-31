@@ -576,6 +576,10 @@
       "consequenceCard": "Se genera una tarjeta nueva, pendiente de imprimir. Las tarjetas de antes siguen revocadas.",
       "consequencePortal": "El portal del empleado vuelve a admitirla con su código y su PIN.",
       "consequenceHistory": "No se borra nada: su historial y su periodo anterior se conservan.",
+      "stale": {
+        "title": "Esa persona ya no está de baja",
+        "advice": "Alguien la ha dado de alta de nuevo antes que tú, o su ficha ha cambiado. No se ha aplicado nada: se ha recargado la lista con el estado actual. Comprueba cómo está antes de repetirlo."
+      },
       "card": {
         "heading": "Tarjeta nueva",
         "explanationOne": "{name} vuelve a estar de alta. Su tarjeta nueva está pendiente de imprimir: hasta entonces no podrá fichar con tarjeta.",
