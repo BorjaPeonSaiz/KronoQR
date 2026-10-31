@@ -65,6 +65,13 @@ function onCorrected(correction: EmploymentPeriodCorrection): void {
   emit('corrected', correction)
 }
 
+// Un solo periodo sin baja efectiva (el caso de casi todas las fichas) repite lo que ya dicen
+// «Datos» y «Baja»: una tabla de una fila con la fecha de alta y «En alta». La historia se
+// enseña cuando aporta algo: hay mas de un periodo, o hay una baja efectiva que corregir.
+const worthShowing = computed(
+  () => props.periods.length > 1 || props.periods.some((period) => period.state === 'terminated'),
+)
+
 const STATE_CLASS: Record<EmploymentPeriod['state'], string> = {
   active: 'bg-kq-success-soft text-kq-success',
   scheduled: 'bg-kq-warning-soft text-kq-warning',
@@ -74,7 +81,7 @@ const STATE_CLASS: Record<EmploymentPeriod['state'], string> = {
 
 <template>
   <section
-    v-if="periods.length > 0"
+    v-if="worthShowing"
     class="mt-6 rounded-kq border border-kq-border bg-kq-surface-raised p-4 shadow-kq-soft"
     data-test="employment-periods"
   >

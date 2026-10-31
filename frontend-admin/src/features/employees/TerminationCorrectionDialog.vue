@@ -63,6 +63,7 @@ const reason = ref('')
 const busy = ref(false)
 const error = ref<unknown>(null)
 const dateInput = ref<HTMLInputElement | null>(null)
+const reasonInput = ref<HTMLTextAreaElement | null>(null)
 
 function date(value: string): string {
   return value === '' ? t('common.empty') : formatCivilDate(value, locale.value)
@@ -159,7 +160,15 @@ async function confirm(): Promise<void> {
     error.value = caught
 
     if (isApiError(caught) && caught.status === 422) {
-      dateInput.value?.focus()
+      // El foco va al campo que el servidor rechazo, no siempre al primero.
+      if (
+        caught.fieldErrors['terminated_at'] === undefined &&
+        caught.fieldErrors['reason'] !== undefined
+      ) {
+        reasonInput.value?.focus()
+      } else {
+        dateInput.value?.focus()
+      }
     }
 
     const stale = staleProblemKey(caught)
@@ -231,6 +240,7 @@ const inputClass =
       >
         <textarea
           :id="field.id"
+          ref="reasonInput"
           v-model="reason"
           rows="3"
           :class="inputClass"

@@ -31,7 +31,7 @@ const CURRENT = employmentPeriod({
 
 async function mountSection(
   periods: EmploymentPeriod[],
-  options: { abilities?: string[]; minimised?: boolean } = {},
+  options: { abilities?: string[]; minimised?: boolean; attach?: boolean } = {},
 ) {
   const pinia = createTestPinia()
   const session = useSessionStore()
@@ -48,6 +48,7 @@ async function mountSection(
       minimised: options.minimised ?? false,
     },
     pinia,
+    attachTo: options.attach === true ? document.body : undefined,
   })
 
   await settle(1)
@@ -134,11 +135,29 @@ describe('EmploymentPeriodsSection: la historia de alta y baja (RN-27)', () => {
 
   it('una baja programada se rotula como tal y no se corrige (se cambia de fecha desde la baja)', async () => {
     const wrapper = await mountSection([
+      PAST,
       employmentPeriod({ hired_at: '2026-10-01', terminated_at: '2026-11-30', state: 'scheduled' }),
     ])
 
     expect(wrapper.text()).toContain(es.employees.periods.state.scheduled)
-    expect(wrapper.find('[data-test="correct-termination"]').exists()).toBe(false)
+    // Solo el periodo con baja efectiva ofrece corregir; el programado no.
+    expect(wrapper.findAll('[data-test="correct-termination"]')).toHaveLength(1)
+  })
+
+  it('un solo periodo sin baja efectiva no pinta la tabla: repite Datos y Baja', async () => {
+    const active = await mountSection([CURRENT])
+    const scheduled = await mountSection([
+      employmentPeriod({ hired_at: '2026-10-01', terminated_at: '2026-11-30', state: 'scheduled' }),
+    ])
+
+    expect(active.find('[data-test="employment-periods"]').exists()).toBe(false)
+    expect(scheduled.find('[data-test="employment-periods"]').exists()).toBe(false)
+  })
+
+  it('un solo periodo con baja efectiva si se enseña: hay algo que corregir', async () => {
+    const wrapper = await mountSection([PAST])
+
+    expect(wrapper.find('[data-test="employment-periods"]').exists()).toBe(true)
   })
 
   it('solo se ofrece corregir en un periodo con baja efectiva', async () => {
@@ -316,7 +335,7 @@ describe('TerminationCorrectionDialog: corregir la fecha de cese (RN-27, RL-04)'
       }),
     )
 
-    const wrapper = await mountSection([PAST])
+    const wrapper = await mountSection([PAST], { attach: true })
 
     await openCorrection(wrapper)
     await dialog(wrapper).find<HTMLInputElement>('input[type="date"]').setValue('2026-09-02')
@@ -328,6 +347,10 @@ describe('TerminationCorrectionDialog: corregir la fecha de cese (RN-27, RL-04)'
     expect(dialog(wrapper).find('textarea').attributes('aria-invalid')).toBe('true')
     expect(dialog(wrapper).text()).toContain('El motivo es demasiado corto.')
     expect(dialog(wrapper).find('[data-test="employment-problem"]').exists()).toBe(false)
+    // El foco va al campo que el servidor rechazo (el motivo), no al primero del dialogo.
+    expect(document.activeElement).toBe(dialog(wrapper).find('textarea').element)
+
+    wrapper.unmount()
   })
 
   it('si el periodo ya no tiene la baja efectiva lo explica, dice que hacer y avisa para releer', async () => {
