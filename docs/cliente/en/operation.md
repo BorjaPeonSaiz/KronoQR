@@ -4003,3 +4003,31 @@ carry personal data). Depending on what it says at the end:
 - **None of the above** (the report stops halfway): run `./doctor.sh` from the
   previous directory and, if it is not green, open a case with the diagnostic
   package (§12.2) and that report.
+
+### …HR needs to find a PIN clocking that was rejected without a person
+
+**When.** A night-shift person whose last termination day is the 31st clocks out
+at 06:00 on the 1st; that time has a calendar date **after the termination**. If
+their clock-out by **PIN** reaches the server **after** the offboarding has taken
+effect (the tablet had no network), it is rejected and **left without a person**:
+the PIN was right, but the date does not fall within their employment period
+(ADR-043), so it is not attributed and opens no incident. The shift shows as open
+in their record and HR needs the real time to close it with a correction (HR
+guide, §8, "…a person leaves").
+
+**What to do.** HR gives you the **kiosk name** (the one on the "Kiosks" screen,
+§16) and a time window **in the site's time**. The query is read-only and returns
+no names, because those rejections are attributed to nobody:
+
+```bash
+docker compose exec -T postgres psql -U fichaje_app -d fichaje -c \
+  "SELECT (s.occurred_at AT TIME ZONE '<zona>') AS hora_local, d.name AS quiosco, s.recorded_at FROM scan_events s JOIN devices d ON d.id = s.device_id WHERE s.origin = 'pin_kiosk' AND s.result = 'rejected_unknown' AND s.employee_id IS NULL AND d.name = '<quiosco>' AND s.occurred_at BETWEEN '<desde>' AND '<hasta>' ORDER BY s.occurred_at;"
+```
+
+Replace `<zona>` with the site's time zone (the one the "Site" screen shows, for
+example `Europe/Madrid`), `<quiosco>` with its name and `<desde>` and
+`<hasta>` with the window **with its offset** (for example
+`2026-11-01 05:30+01`). Each row is a rejection without a person from that
+kiosk; it may include mistyped PINs from anybody, and the person's one is
+recognised by the time their manager gives. Pass HR the times, never a name that
+does not come out of the query.

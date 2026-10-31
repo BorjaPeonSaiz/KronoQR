@@ -3942,3 +3942,33 @@ llevar datos personales). Según lo que diga al final:
 - **Nada de lo anterior** (el informe se queda a mitad): ejecuta `./doctor.sh`
   desde el directorio anterior y, si no sale en verde, abre un caso con el
   paquete de diagnóstico (§12.2) y ese informe.
+
+
+### …RRHH necesita encontrar un fichaje por PIN rechazado sin persona
+
+**Cuándo.** Una persona de turno de noche cuyo último día de cese es el 31 sale a
+las 06:00 del 1; esa hora tiene fecha civil **posterior al cese**. Si su fichaje
+de salida por **PIN** llega al servidor **después** de que la baja sea efectiva
+(la tablet estaba sin red), se rechaza y **queda sin persona**: el PIN acertó,
+pero la fecha no cae dentro de su periodo de alta (ADR-043), así que no se atribuye
+ni abre incidencia. El turno aparece abierto en su registro y RRHH necesita la hora
+real para cerrarlo con una corrección (guía de RRHH, §8, «…una persona causa
+baja»).
+
+**Qué hacer.** RRHH te da el **nombre del quiosco** (el de la pantalla
+«Quioscos», §16) y una franja de horas **en la hora del centro**. La consulta es de
+solo lectura y no devuelve nombres, porque esos rechazos no están atribuidos a
+nadie:
+
+```bash
+docker compose exec -T postgres psql -U fichaje_app -d fichaje -c \
+  "SELECT (s.occurred_at AT TIME ZONE '<zona>') AS hora_local, d.name AS quiosco, s.recorded_at FROM scan_events s JOIN devices d ON d.id = s.device_id WHERE s.origin = 'pin_kiosk' AND s.result = 'rejected_unknown' AND s.employee_id IS NULL AND d.name = '<quiosco>' AND s.occurred_at BETWEEN '<desde>' AND '<hasta>' ORDER BY s.occurred_at;"
+```
+
+Sustituye `<zona>` por la zona horaria del centro (la que muestra la pantalla
+«Centro», por ejemplo `Europe/Madrid`), `<quiosco>` por su nombre y
+`<desde>` y `<hasta>` por la franja **con su desfase** (por ejemplo
+`2026-11-01 05:30+01`). Cada fila es un rechazo sin persona de ese quiosco; puede
+incluir PIN mal tecleados de cualquiera, y se reconoce el de la persona por la
+hora que dice su responsable. Pasa a RRHH las horas, nunca un nombre que no salga
+de la consulta.

@@ -84,6 +84,14 @@ saber por qué:
 | Idioma | No | El idioma en el que verá el portal y en el que se le imprime la hoja de instrucciones. **Solo aparece si la instalación tiene más de un idioma activo**: de serie solo está el español y todas las fichas van en español. Si administración activa el inglés, aquí se elige entre los dos; sin elegir, el idioma de la instalación |
 | Teletrabaja | No | Una casilla, desmarcada de serie. **Es solo informativa**: se ve como columna en el listado de plantilla y se puede filtrar por ella, pero **no cambia cómo ficha esa persona** —con su tarjeta o su código y PIN, como todos— **ni ningún cálculo**: ni sus horas, ni las incidencias, ni los informes, ni lo que se entrega a la Inspección. Se marca y desmarca desde la ficha, y cada cambio queda anotado en la auditoría (quién y cuándo). La carga por fichero no la lee: las altas entran sin marcar |
 
+**Una fecha de alta futura tiene un efecto que se ve en la tablet.** Si la fecha de
+alta es posterior a hoy, **los fichajes anteriores a esa fecha se rechazan**: la
+persona no podrá fichar hasta ese día. El formulario lo avisa en cuanto eliges
+una fecha futura (es un aviso, no un bloqueo). Si tiene que empezar antes, pon la
+fecha de su primer día. Y si el documento que escribes es el de **una persona que
+ya estuvo de baja**, el alta no se hace: el panel te lleva a su ficha para darla
+de alta de nuevo (§8, «…una persona vuelve»).
+
 **El código de empleado lo genera el sistema**, y es opaco a propósito: va
 impreso en la tarjeta, así que no puede ser el número de nómina ni nada que
 tenga significado. No se puede elegir.
@@ -1800,46 +1808,83 @@ tiene su propio apartado porque lleva fecha de cese y consecuencias). Se elige
 la fecha de cese y el motivo, que queda en el registro de auditoría —sin datos
 de salud y sin juicios de valor.
 
-**La baja es efectiva en el momento en que la confirmas, no en la fecha de
-cese.** Aunque la fecha de cese sea hoy, desde que pulsas «Confirmar la baja»:
+**Lo que pasa depende de la fecha de cese**, y el diálogo te lo dice antes de
+confirmar. «Hoy» es la fecha **del hotel** (la zona horaria de su centro), no la
+de tu ordenador: importa si registras la baja desde otro huso horario, o cerca de
+la medianoche.
+
+| Fecha de cese | Qué pasa |
+| --- | --- |
+| **Anterior a su fecha de alta** | Se rechaza, con el mensaje en el campo de la fecha. No cambia nada |
+| **Anterior a hoy** | **Baja efectiva al confirmar**: la persona deja de poder fichar en ese momento |
+| **Hoy** | **Baja programada**: ficha hasta el final del día y el sistema la aplica solo. Con la casilla **«Aplicar ya»** es efectiva al confirmar (despido con efecto inmediato) |
+| **Posterior a hoy** | **Baja programada**. «Aplicar ya» no se ofrece: no tiene sentido antes de la fecha |
+| **Una incorporación que aún no ha llegado, con el cese en su fecha de alta** | Baja programada (el extra de un solo día: ficha ese día). Con «Aplicar ya», una **baja sin efectos** (ver «Una contratación que no llegó a empezar») |
+
+#### Baja programada: ficha hasta su último día
+
+Es lo que haces cuando sabes hoy que alguien termina más adelante, por ejemplo un
+contrato de temporada que acaba el 31 de octubre. En la ficha la persona sale
+como **«Baja programada»**, con su fecha de cese.
+
+- **Hasta su último día, incluido, todo sigue igual**: su tarjeta, su PIN y su
+  portal valen y ficha con normalidad, **también la salida de su último turno de
+  noche**.
+- **El día siguiente a la fecha de cese, el sistema aplica la baja solo**, sin
+  que nadie haga nada: revoca su tarjeta, cierra sus sesiones del portal y deja
+  anotada la baja en la auditoría. Si tiene un turno o una pausa abiertos ese día,
+  espera a que se cierren, como mucho hasta el segundo día después del cese.
+- **Desde que hay fecha de cese, nadie puede fichar ni anotar horas en una
+  jornada posterior a ella**, aunque el sistema todavía no haya aplicado la baja.
+- **Se puede cambiar o anular mientras no haya pasado la fecha de cese.** En el
+  apartado «Baja» de la ficha:
+  - **«Cambiar la fecha o aplicar ya»** pone otra fecha (hoy o posterior sigue
+    programada) o la hace efectiva en el acto (una fecha anterior a hoy, o hoy con
+    «Aplicar ya»).
+  - **«Anular la baja programada»** la quita: la persona sigue de alta sin fecha
+    de cese. No hay nada que reactivar, porque su tarjeta, su PIN y su portal no
+    dejaron de funcionar. Queda anotado en la auditoría, con la fecha anulada.
+- **Pasada la fecha de cese ya no se puede anular ni cambiar de fecha**: la baja
+  rige aunque el sistema aún no la haya aplicado. El panel lo explica («La fecha
+  de cese ya ha pasado»). Si solo quieres aplicarla ya, repite la baja con esa
+  misma fecha. **Si la persona sigue trabajando**, la salida es darla de alta de
+  nuevo cuando la baja sea efectiva (más abajo), o corregir la fecha de cese si se
+  puso mal.
+
+**Un ejemplo.** El contrato de temporada de una camarera de pisos termina el
+viernes 30 de octubre, con turno de 07:00 a 15:00.
+
+- **Sí**, el lunes 26: baja con fecha de cese viernes 30. Queda programada, ella
+  ficha hasta el viernes y el sábado 31 el sistema la aplica solo. No tienes que
+  acordarte del viernes.
+- **También vale** registrarla el viernes después de su salida de las 15:00, o el
+  lunes 2 con fecha de cese viernes 30: una fecha pasada hace la baja efectiva al
+  confirmar.
+- **Con «Aplicar ya»** solo cuando de verdad tiene que dejar de fichar en ese
+  momento (un despido con efecto inmediato).
+
+#### Baja efectiva: qué pasa al confirmarla
+
+Una baja es efectiva cuando la fecha de cese es anterior a hoy, o cuando es hoy y
+marcas «Aplicar ya», o cuando el sistema aplica una programada. Desde ese momento:
 
 - **Su tarjeta queda revocada** y deja de servir en el quiosco.
 - **No puede fichar**, ni con la tarjeta ni con su código y su PIN en la tablet.
-- **No tiene vuelta atrás.** Una baja confirmada no se deshace.
+- **No se deshace**: la baja efectiva no se anula. Si la persona vuelve, se la da
+  de alta de nuevo (más abajo).
 - **No se borra nada.** Su ficha, sus tramos y sus jornadas se conservan cuatro
   años, porque una inspección puede pedir el registro de alguien que ya no
   trabaja aquí, y seguirán apareciendo en los informes del periodo en que
   trabajó. Los informes la cuentan de alta hasta su fecha de cese.
 
-**Qué fecha de cese admite.** Hoy, o cualquier día anterior hasta su fecha de
-alta. **Una fecha posterior a hoy se rechaza** y no cambia nada, con este
-mensaje: «La fecha de cese (…) es posterior a hoy (…). La baja es efectiva al
-registrarla; regístrala el último día, cuando haya terminado su turno.» «Hoy» es
-la fecha **del hotel** (la zona horaria de su centro), no la de tu ordenador:
-importa si registras la baja desde otro huso horario, o cerca de la medianoche.
-
-**Cuándo registrarla: cuando haya terminado su último turno.** Es lo
-recomendable. Registrarla unos días después es normal y no tiene ningún
-problema: pon como fecha de cese el día que de verdad terminó.
-
-Antes de confirmar, mira que no tenga un turno abierto (en **Presencia** o en su
-registro horario). Si todavía está trabajando, espera a que termine; si olvidó
-fichar la salida, corrígela (apartado «…alguien olvidó fichar la salida», más
-arriba). **El diálogo de baja te lo recuerda siempre** con un aviso fijo: «Si tiene un
-turno abierto, su salida ya no se podrá fichar: ciérralo después con una
-corrección.» No comprueba si lo tiene, así que el aviso sale igual aunque no
-haya ninguno. Comprobarlo es cosa tuya.
-
-**Un ejemplo.** El contrato de temporada de una camarera de pisos termina el
-viernes 30 de octubre, con turno de 07:00 a 15:00.
-
-- **No** la registres el lunes 26 con fecha de cese el viernes: se rechaza. Y si
-  pusieras el lunes como fecha de cese para que te dejara, dejaría de poder
-  fichar ese mismo lunes y ya no podrías anotarle los días que trabaje después
-  (más abajo).
-- **Sí** el viernes 30, después de que fiche la salida de las 15:00, con fecha
-  de cese viernes 30. O, si ese día no hay nadie de RRHH, el lunes 2 con fecha
-  de cese viernes 30: una fecha pasada se admite.
+Antes de confirmar una baja **efectiva**, mira que no tenga un turno abierto (en
+**Presencia** o en su registro horario). Si todavía está trabajando, espera a que
+termine, o programa la baja; si olvidó fichar la salida, corrígela (apartado
+«…alguien olvidó fichar la salida», más arriba). **El diálogo de una baja
+efectiva te lo recuerda siempre** con un aviso fijo: «Si tiene un turno abierto,
+su salida ya no se podrá fichar: ciérralo después con una corrección.» No
+comprueba si lo tiene, así que el aviso sale igual aunque no haya ninguno.
+Comprobarlo es cosa tuya.
 
 Recoge la tarjeta física si puedes; si no aparece, revócala igualmente —ya lo
 está por la baja— y anótalo.
@@ -1859,47 +1904,211 @@ registro y en la auditoría. Los casos habituales:
 - **Un olvido** de los últimos días que nadie había corregido.
 - **La tablet estuvo sin red el último día.** Sus fichajes de ese día se guardan
   en la tablet y se envían al volver la conexión; si llegan después de que
-  registraras la baja, **se rechazan** y no aparecen en su registro. Si fichó
-  **con la tarjeta**, desde la 2.2.0 la bandeja te lo dice con la incidencia
-  **«Fichaje anterior a la retirada de la credencial»** (§4.6). Si fichó **con
-  su código y su PIN**, **no hay incidencia**: no te enterarás si no lo miras.
-  En los dos casos, revisa su último día y añade lo que falte, con **«Otro
-  motivo»** y lo que pasó, por ejemplo «Fichajes del último día que llegaron
-  después de registrar la baja». Si la tablet sigue sin red, espera a que
-  vuelva y vacíe su cola antes de dar de baja a nadie que fichara en ella.
-- **La baja se registró antes de terminar el turno.** Su salida se rechaza en la
-  tablet y el turno queda abierto: saldrá como incidencia **«Turno abierto sin
-  cerrar»** y se cierra igual que un olvido, con **«Corregir las horas»** y la
-  hora real de salida. Si siguió trabajando ese día, añade el resto a mano.
+  la baja sea efectiva, **se rechazan** y no aparecen en su registro. Si fichó
+  **con la tarjeta**, la bandeja te lo dice con la incidencia **«Fichaje anterior
+  a la retirada de la credencial»** (§4.6). Si fichó **con su código y su PIN**
+  (correcto), desde la 2.3.0 pasa lo mismo mientras la fecha del fichaje caiga
+  dentro del periodo de alta (entre su alta y su cese): queda atribuido a la
+  persona y aparece la misma incidencia. En los dos casos, revisa su último día y añade lo
+  que falte, con **«Otro motivo»** y lo que pasó, por ejemplo «Fichajes del
+  último día que llegaron después de registrar la baja». Si la tablet sigue sin
+  red, espera a que vuelva y vacíe su cola antes de dar de baja a nadie que
+  fichara en ella (con una baja programada esto se arregla solo: la persona ficha
+  hasta su último día y la baja se aplica después).
+- **La baja efectiva se registró antes de terminar el turno.** Su salida se
+  rechaza en la tablet y el turno queda abierto: saldrá como incidencia **«Turno
+  abierto sin cerrar»** y se cierra igual que un olvido, con **«Corregir las
+  horas»** y la hora real de salida. Si siguió trabajando ese día, añade el resto
+  a mano.
 
-Lo que **no** se puede hacer después de la baja:
+##### La salida de un turno de noche del día del cese que llega después de la baja
 
-- **Deshacerla** ni volver a darla de alta.
-- **Anotar un día posterior a su fecha de cese**: se rechaza. Si la persona
-  siguió trabajando más allá de la fecha de cese que registraste, **KronoQR no
-  tiene forma de recoger esas horas**: no admite tramos después del cese ni deja
-  corregir la fecha de una baja. Avisa a la persona y a su responsable de que la
-  tablet la rechazará, y consulta con tu asesoría laboral cómo dejar constancia
-  de esas horas. Por eso la fecha de cese tiene que ser la del último día
-  trabajado de verdad.
+Es el caso que el sistema **no** puede atribuir solo. Una persona con turno de
+noche cuyo último día de cese es el 31 sale a las 06:00 del 1 de noviembre. Esa
+hora tiene fecha civil **posterior al cese**, y si llega a la central **después**
+de que la baja sea efectiva (la tablet estaba sin red), **se rechaza y no abre
+ninguna incidencia**; con el **PIN**, además, el rechazo queda **sin persona**, y
+por eso no sale en ninguna pantalla del panel. El turno aparece **abierto**
+en su registro (o en «Turno abierto sin cerrar») y hay que cerrarlo a mano con la
+hora real. Para confirmar esa hora cuando nadie la recuerda:
+
+1. **Apunta el quiosco** (su nombre sale en **Quioscos**) y el día y la hora
+   aproximada de la salida, que te dice su responsable.
+2. **Pide a IT que busque los rechazos de PIN sin persona de ese quiosco y esa
+   franja.** Dale el nombre del quiosco, el día y la franja de horas **en la hora
+   del hotel**. IT tiene la consulta, de solo lectura, en
+   [`operacion.md`](operacion.md) §18, «…RRHH necesita encontrar un fichaje por
+   PIN rechazado sin persona». Sale la hora de cada rechazo, **sin nombres**: ese
+   fichaje no está atribuido a nadie. Puede traer también PIN mal tecleados de
+   cualquiera, así que se reconoce por el quiosco y la hora.
+3. **Cierra el turno con «Corregir las horas»** y esa hora, con **«Otro motivo»**
+   y lo que pasó («Salida del turno de noche llegada después de la baja»). Si la
+   hora no se puede confirmar, la que diga su responsable queda anotada con quién
+   la dio.
+
+Para evitarlo: si hay turnos de noche el último día, **programa la baja** en lugar
+de hacerla efectiva, y que la tablet haya vaciado su cola antes de la fecha.
+
+Lo que **no** se puede hacer sobre un día posterior al cese:
+
+- **Anotar un día posterior a su fecha de cese**: se rechaza. **Si la persona
+  siguió trabajando más allá de la fecha de cese que registraste**, hay dos
+  salidas, según el caso: **corrige la fecha de cese** si se puso mal («…la fecha
+  de cese se puso mal», más abajo) o **dala de alta de nuevo** si de verdad volvió
+  a empezar. Por eso la fecha de cese tiene que ser la del último día trabajado
+  de verdad.
 
 #### Una contratación que no llegó a empezar
 
 Si la persona tiene una fecha de alta **posterior a hoy** —una incorporación que
-se cae antes del primer día, o alguien importado por error—, la única fecha de
-cese que se admite es **su propia fecha de alta**. Es una baja sin efectos: nunca
-llegó a trabajar, su ficha queda de baja con el alta y el cese el mismo día, y
-no ocupa plaza en la licencia. El diálogo de baja te lo indica («Aún no ha
-empezado…»); con cualquier otra fecha, el mensaje de error te dice cuál es la
-admitida.
+se cae antes del primer día, o alguien importado por error—, la fecha de cese
+que se admite es **su propia fecha de alta**. Sin «Aplicar ya» queda programada
+(el extra de un solo día: ficha ese día). Con **«Aplicar ya»** es una **baja sin
+efectos**: nunca llegó a trabajar, su ficha queda de baja con el alta y el cese el
+mismo día, y no ocupa plaza en la licencia. El diálogo de baja te lo indica
+(«Aún no ha empezado…»).
 
 **Si tu instalación viene de la 2.1.0**, puede tener bajas registradas con una
 fecha de cese futura, de cuando eso se admitía. Esas personas quedaron de baja
 el día que se registró, y los informes las cuentan de alta hasta su fecha de
 cese, así que esos días salen sin actividad. Los que sí trabajaron se pueden
-completar ahora a mano, como se explica arriba. Cómo localizarlas:
-[`operacion.md`](operacion.md) §11, «Al actualizar desde la 2.1.0: bajas con
-fecha de cese futura».
+completar ahora a mano, como se explica arriba. No se convierten en bajas
+programadas: para darlas de alta de nuevo, corrige antes su fecha de cese. Cómo
+localizarlas: [`operacion.md`](operacion.md) §11, «Al actualizar desde la 2.1.0:
+bajas con fecha de cese futura».
+
+### …una persona vuelve: dar de alta de nuevo
+
+Quien estuvo de baja y vuelve (la temporada siguiente, un contrato nuevo) **vuelve
+a su misma ficha**, con un periodo de alta nuevo: conserva su nombre, su documento,
+su código y su historial, y **no hay que volver a escribir nada de eso**. El
+documento de identidad es único: si intentas **darla de alta como persona nueva**,
+el sistema responde que ya existe y, si está de baja, **te ofrece ir a su ficha
+para darla de alta de nuevo**.
+
+#### Una persona
+
+En su ficha, apartado **«Baja»**: **«Dar de alta de nuevo»**. También, en
+**Plantilla**, con el filtro de situación **«De baja»**, en la fila de cada
+persona.
+
+El diálogo pide **un solo dato**, la **fecha de alta** (hoy, por defecto), que
+tiene que ser **posterior a su fecha de cese** —no puede compartir día con ella.
+Lo demás viene relleno de su ficha anterior y se puede cambiar:
+
+- **Departamento e idioma**: los de la ficha.
+- **Contrato**: por defecto se registra uno nuevo con los términos del último,
+  vigente desde la fecha de alta; el último contrato, si seguía abierto, se cierra
+  en la fecha de cese. Se puede elegir **sin contrato** u **otros términos**.
+- **PIN**: por defecto **conserva el que tenía** y el portal vuelve a admitirlo.
+  Marca **«Emitir un PIN nuevo»** si quieres cambiarlo.
+
+Antes de confirmar ves **qué cambia, desde qué valor y hacia cuál**: la situación
+(de baja → en alta), las fechas, la **tarjeta** (la de antes sigue revocada y se
+genera una **nueva, pendiente de imprimir**) y el PIN.
+
+**Al confirmar:**
+
+1. Si pediste PIN nuevo, se muestra **una sola vez** (§2.2): anótalo o entrégalo
+   en ese momento.
+2. Se ofrece **imprimir la tarjeta nueva en el acto**. Imprimirla acuña su QR y no
+   tiene vuelta atrás (no hay reimpresión). Puedes dejarla «para más tarde» y
+   imprimirla desde **Credenciales**, donde queda como «Pendiente de imprimir».
+3. La entrega de la tarjeta y del PIN se registra como siempre (§2.6).
+
+Queda anotado en la auditoría quién la dio de alta de nuevo, cuándo y con qué
+fecha de alta.
+
+#### Varias personas a la vez (la vuelta de la temporada)
+
+En **Plantilla**, con el filtro **«De baja»**: marca a las personas que vuelven
+(la casilla de la cabecera marca a todas las de la página; la selección se
+conserva al cambiar de página, hasta 500 a la vez) y pulsa **«Dar de alta de nuevo
+a la selección»**. Se pide **una fecha de alta común**. Cada persona conserva su
+departamento, su idioma y un contrato con los términos del último; si necesitas
+cambiar algo de una, dala de alta de nuevo desde su ficha. Con **«Emitir un PIN
+nuevo a cada persona»**, los PIN se muestran **todos juntos, una sola vez**, al
+terminar.
+
+**Es todo o nada.** Si una sola no se puede dar de alta de nuevo (no está de
+baja, su ficha está minimizada o la fecha no es posterior a su cese), **no se
+escribe nada** y el panel te dice **cuál** y por qué. Quítala de la selección o
+cambia la fecha, y vuelve a confirmar. Después, el panel ofrece imprimir las
+tarjetas: es **la hoja A4 con todas las pendientes de la instalación**, no solo
+las de este grupo —el sistema no permite elegir cuáles.
+
+#### Por importación
+
+Una fila del CSV cuyo **documento** es el de una persona de baja **no se rechaza**:
+el resumen previo la propone como **«Dar de alta de nuevo»**, con el aviso «al
+aplicar se le da de alta de nuevo», y se aplica al confirmar el lote. Para que la
+proponga:
+
+- La fila debe identificar a la persona **por su documento y con el nombre de su
+  ficha**. Si solo coincide el correo, o el nombre no es el de la ficha, la fila
+  se **rechaza** («Coincide con una persona de baja…»): corrige el documento o el
+  nombre en el fichero, o da de alta de nuevo a la persona desde su ficha.
+- La fila debe traer una **fecha de alta posterior a su fecha de cese**. Sin
+  fecha, o con la de siempre, se rechaza y el mensaje lo dice.
+- La readmisión **no cambia el nombre ni el correo** de la ficha (aviso en la
+  fila): si deben cambiar, edítalos en la ficha después.
+
+**Revisa el resumen antes de aplicar**: cuenta las altas de nuevo aparte y no se
+aplica nada que no hayas visto. Si entre «Validar» y «Aplicar» alguien da de baja
+o de alta a una persona del fichero, o cambia el fichero, **la aplicación no
+escribe nada** y el panel avisa («El resumen que revisaste ya no es el de ahora»):
+pulsa **«Validar»** otra vez, revisa el resumen nuevo y aplica. Las tarjetas
+nuevas quedan pendientes de imprimir y las personas conservan su PIN.
+
+#### Dos avisos que el panel te da siempre
+
+El efecto llega a la tablet y no se ve desde el panel, por eso el panel avisa de
+dos cosas, tanto al dar de alta de nuevo como al dar de alta a alguien nuevo:
+
+- **Con una fecha de alta futura, los fichajes anteriores a esa fecha se
+  rechazan.** La persona no podrá fichar hasta ese día. Si tiene que empezar
+  antes, pon la fecha de su primer día. Es un aviso, no un bloqueo.
+- **Si la baja fue hoy, espera a que los quioscos estén sincronizados.** Hasta
+  que cada tablet reciba el estado nuevo, puede seguir tratando a la persona como
+  de baja, o aceptar aún su tarjeta o su PIN del periodo anterior. Compruébalo en
+  **Quioscos**: sin fichajes pendientes en la cola de cada tablet. El panel
+  también avisa si la baja fue ayer, porque la tarea que aplica las bajas
+  programadas corre el día siguiente al cese.
+
+### …la fecha de cese se puso mal: corregirla
+
+Si pusiste un cese **anterior al último día que la persona trabajó de verdad**
+—esas horas no pueden entrar en el registro—, o **posterior al real**, se corrige
+en su ficha, apartado **«Historia de alta y baja»**, con **«Corregir la fecha de
+cese»** en el periodo que corresponda. Solo se corrige una **baja efectiva**: una
+baja programada se cambia de fecha desde «Baja» («Cambiar la fecha o aplicar ya»).
+
+- **Fechas admitidas** (en la fecha del hotel): no posterior a hoy, no anterior a
+  la fecha de alta del periodo y **anterior a la fecha de alta del periodo
+  siguiente**, si la persona fue dada de alta de nuevo. Fuera de eso, el campo lo
+  dice con el límite.
+- **Motivo obligatorio, de 10 a 1000 caracteres.** Cuenta qué pasó, sin datos de
+  salud ni juicios de valor. Se guarda con la corrección pero **no entra en el
+  asiento de auditoría**: el asiento lleva las dos fechas, quién y cuándo.
+- **Antes de confirmar ves la fecha de partida y la nueva.** Después de
+  confirmar, la ficha muestra la corrección registrada; **la fecha anterior no
+  desaparece**: queda guardada con quién la cambió, cuándo y por qué.
+
+**Qué efectos tiene, y qué no:**
+
+- **Los días que gana el periodo admiten tramos a mano** (§5.1), pero **los
+  fichajes que se rechazaron esos días no se reprocesan**: añade lo que falte
+  desde su registro horario.
+- **Adelantar la fecha no borra nada**: lo que hubiera registrado después de la
+  nueva fecha se conserva, pero queda fuera del periodo de alta. Revisa su
+  registro horario y sus ausencias.
+- **Las tarjetas siguen revocadas.** Corregir el cese no reactiva nada.
+- **El plazo de conservación de la ficha cuenta desde la fecha corregida.**
+- **Corregir un cese anterior no mueve la fecha de fin del contrato que se cerró
+  al dar de alta de nuevo a la persona.** Ese contrato se
+  cerró con la fecha de cese de entonces y la conserva. Si el periodo corregido
+  tiene una readmisión después, el diálogo te lo recuerda: si las horas
+  contratadas de esos días deben cambiar, registra un contrato nuevo (§2.3).
 
 ### …alguien no puede fichar
 
