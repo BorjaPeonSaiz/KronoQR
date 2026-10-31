@@ -22,6 +22,7 @@ use App\Modules\Workforce\Application\Port\EmployeeImportSource;
 use App\Modules\Workforce\Application\Port\EmployeePinRepository;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
 use App\Modules\Workforce\Application\Port\EmploymentContractRepository;
+use App\Modules\Workforce\Application\Port\EmploymentRecordReader;
 use App\Modules\Workforce\Application\Port\ManagementAccountLookup;
 use App\Modules\Workforce\Application\Port\OffboardingMetrics;
 use App\Modules\Workforce\Application\Port\ParentRowLocks;
@@ -63,6 +64,7 @@ use App\Modules\Workforce\Infrastructure\Console\ApplyScheduledOffboardingsComma
 use App\Modules\Workforce\Infrastructure\Console\CorrectSiteTimezoneCommand;
 use App\Modules\Workforce\Infrastructure\Metrics\RedisOffboardingMetrics;
 use App\Modules\Workforce\Infrastructure\Metrics\RedisPinMetrics;
+use App\Modules\Workforce\Infrastructure\Persistence\DatabaseEmploymentRecordReader;
 use App\Modules\Workforce\Infrastructure\Persistence\DatabaseManagementAccountLookup;
 use App\Modules\Workforce\Infrastructure\Persistence\DatabaseParentRowLocks;
 use App\Modules\Workforce\Infrastructure\Persistence\EloquentAbsenceRepository;
@@ -116,6 +118,10 @@ final class WorkforceServiceProvider extends ServiceProvider
         // RN-23, ADR-056: si ya hay registro horario, leido de `shift_entries`
         // sin importar `Attendance`. Es lo que fija la zona horaria del centro.
         $this->app->bind(WorkRecordPresence::class, DatabaseWorkRecordPresence::class);
+
+        // RN-27, RN-13: los periodos de la ficha de `rrhh+` con su baja efectiva
+        // y las correcciones de su fecha de cese, en una sola lectura.
+        $this->app->bind(EmploymentRecordReader::class, DatabaseEmploymentRecordReader::class);
 
         /*
          * Importacion masiva de plantilla (RF-GP-05).

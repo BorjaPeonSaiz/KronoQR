@@ -7,10 +7,11 @@ namespace App\Modules\Workforce\Application\Query;
 use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Shared\Domain\ValueObject\AccessScope;
-use App\Modules\Shared\Domain\ValueObject\EmploymentPeriod;
 use App\Modules\Shared\Domain\ValueObject\EmploymentStatus;
 use App\Modules\Workforce\Application\Port\EmployeePinRepository;
 use App\Modules\Workforce\Application\Port\EmployeeRepository;
+use App\Modules\Workforce\Application\Port\EmploymentPeriodRecord;
+use App\Modules\Workforce\Application\Port\EmploymentRecordReader;
 use App\Modules\Workforce\Application\Port\PinStatus;
 use App\Modules\Workforce\Domain\Model\Employee;
 
@@ -49,6 +50,7 @@ final readonly class EmployeeQueries
         private EmployeeRepository $employees,
         private EmployeePinRepository $pins,
         private PersonalDataAccessLog $disclosures,
+        private EmploymentRecordReader $employmentRecords,
     ) {}
 
     /**
@@ -148,13 +150,18 @@ final readonly class EmployeeQueries
 
     /**
      * Los periodos de alta de la persona, del mas antiguo al mas reciente
-     * (RN-27). Los pide la ficha; el listado no.
+     * (RN-27), cada uno con el instante de su baja efectiva y las correcciones
+     * de su fecha de cese en orden cronologico (RN-13, regla dura 5). Los pide
+     * la ficha de `rrhh+`; el listado no.
      *
-     * @return list<EmploymentPeriod>
+     * Sin asiento propio, por lo mismo que {@see find()}: es parte de la ficha,
+     * y el motivo de una correccion solo lo ve quien puede corregirla.
+     *
+     * @return list<EmploymentPeriodRecord>
      */
     public function employmentPeriods(string $uuid): array
     {
-        return UseCaseInstrumentation::run('workforce.read_employment_periods', fn (): array => $this->employees->employmentHistory($uuid)->periods);
+        return UseCaseInstrumentation::run('workforce.read_employment_periods', fn (): array => $this->employmentRecords->periodsOf($uuid));
     }
 
     /**
