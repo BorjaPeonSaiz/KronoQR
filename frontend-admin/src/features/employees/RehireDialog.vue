@@ -38,7 +38,7 @@ import { addCivilDays } from './employmentDates'
 import { parsePositiveHours, WEEKLY_HOURS_MAX, ANNUAL_HOURS_MAX } from './employmentLimits'
 import EmploymentProblemNotice from './EmploymentProblemNotice.vue'
 import { type EmploymentProblemKey, staleProblemKey } from './employmentProblems'
-import { rehireEmployee } from './employees.api'
+import { getEmployee, rehireEmployee } from './employees.api'
 import { rehireDateWarnings } from './rehirePlan'
 
 const props = defineProps<{
@@ -109,11 +109,28 @@ function hours(value: number | null): string {
       })
 }
 
+// Cuando se hizo efectiva la baja: la ficha de detalle lo trae en su ultimo periodo
+// (`offboarded_at`). La lista de Plantilla no trae los periodos, asi que se pide el detalle;
+// mientras llega (o si falla) el aviso se aproxima por el cese.
+const detail = useQuery({
+  queryKey: ['employee', props.employee.uuid] as const,
+  queryFn: () => getEmployee(props.employee.uuid),
+  enabled: props.employee.employment_periods === undefined,
+  retry: false,
+})
+const offboardedAt = computed<string | null | undefined>(
+  () =>
+    (props.employee.employment_periods ?? detail.data.value?.employment_periods)?.at(-1)
+      ?.offboarded_at,
+)
+
 const warnings = computed(() =>
   rehireDateWarnings({
     hiredAt: hiredAt.value,
     terminatedAt: props.employee.terminated_at,
     today,
+    timezone: props.timezone,
+    offboardedAt: offboardedAt.value,
   }),
 )
 

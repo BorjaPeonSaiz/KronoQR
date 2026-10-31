@@ -14,7 +14,8 @@
 import FormField from '@kronoqr/web-kit/components/FormField.vue'
 import { formatCivilDate, todayInZone } from '@kronoqr/web-kit/datetime'
 import { isApiError } from '@kronoqr/web-kit/http'
-import { computed, nextTick, ref } from 'vue'
+import { useQueryClient } from '@tanstack/vue-query'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { usePersonName } from '@/shared/people/personName'
 import type { Employee, RehiredEmployee } from '@/shared/api/types'
@@ -24,7 +25,7 @@ import ConfirmDialog from '@/shared/ui/ConfirmDialog.vue'
 import { revealElement } from '@/shared/ui/revealElement'
 import DateWarnings from './DateWarnings.vue'
 import { addCivilDays } from './employmentDates'
-import { rehireEmployees } from './employees.api'
+import { getEmployee, rehireEmployees } from './employees.api'
 import { isFutureHire, isRecentTermination } from './rehirePlan'
 
 const props = defineProps<{
@@ -140,8 +141,56 @@ const dateErrors = computed<readonly string[]>(() => {
   return own
 })
 
+// Cuando se hizo efectiva la baja de cada una. La lista no trae los periodos: se pide el detalle
+// de las primeras `MAX_DETAIL_LOOKUPS` (de cinco en cinco) y el resto se aproxima por el cese,
+// que peca de aviso de mas. Pedir 500 fichas para un aviso no compensa.
+const MAX_DETAIL_LOOKUPS = 50
+const LOOKUP_CONCURRENCY = 5
+const queryClient = useQueryClient()
+const offboardedAtByUuid = ref(new Map<string, string | null>())
+
+onMounted(async () => {
+  const pending = props.people
+    .filter((person) => person.employment_periods === undefined)
+    .slice(0, MAX_DETAIL_LOOKUPS)
+
+  for (let index = 0; index < pending.length; index += LOOKUP_CONCURRENCY) {
+    await Promise.all(
+      pending.slice(index, index + LOOKUP_CONCURRENCY).map(async (person) => {
+        try {
+          const detail = await queryClient.fetchQuery({
+            queryKey: ['employee', person.uuid] as const,
+            queryFn: () => getEmployee(person.uuid),
+            staleTime: 60_000,
+          })
+          const next = new Map(offboardedAtByUuid.value)
+
+          next.set(person.uuid, detail.employment_periods?.at(-1)?.offboarded_at ?? null)
+          offboardedAtByUuid.value = next
+        } catch {
+          // Sin detalle, el aviso se aproxima por el cese.
+        }
+      }),
+    )
+  }
+})
+
+function offboardedAtOf(person: Employee): string | null | undefined {
+  return person.employment_periods !== undefined
+    ? person.employment_periods.at(-1)?.offboarded_at
+    : offboardedAtByUuid.value.get(person.uuid)
+}
+
 const recentCount = computed(
-  () => props.people.filter((person) => isRecentTermination(person.terminated_at, today)).length,
+  () =>
+    props.people.filter((person) =>
+      isRecentTermination({
+        offboardedAt: offboardedAtOf(person),
+        terminatedAt: person.terminated_at,
+        today,
+        timezone: props.timezone,
+      }),
+    ).length,
 )
 
 const futureHire = computed(() => isFutureHire(hiredAt.value, today))

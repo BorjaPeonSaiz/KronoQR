@@ -3,7 +3,13 @@ import { announcement, clearAnnouncement } from '@kronoqr/web-kit/announcer'
 import RehireDialog from '@/features/employees/RehireDialog.vue'
 import es from '@/shared/i18n/locales/es.json'
 import type { Employee } from '@/shared/api/types'
-import { employee, employmentContract, rehired } from './support/fixtures'
+import {
+  EMPLOYEE_UUID,
+  employee,
+  employmentContract,
+  employmentPeriodRecord,
+  rehired,
+} from './support/fixtures'
 import { jsonResponse, mountView, problemResponse, settle, stubFetch } from './support/harness'
 
 // «Dar de alta de nuevo» a una persona (RN-27, ADR-062 §6, RF-GP-01, RF-GP-03,
@@ -31,6 +37,7 @@ interface Calls {
 function stubApi(
   extra?: (url: string, init: RequestInit | undefined) => Response | null,
   contracts = [employmentContract({ valid_to: '2026-08-31', is_current: false })],
+  detail?: Employee,
 ): Calls {
   const calls: Calls = { rehire: [], urls: [] }
 
@@ -48,6 +55,11 @@ function stubApi(
           { id: 4, name: 'Cocina' },
         ],
       })
+    }
+
+    // La lista de Plantilla no trae los periodos: el dialogo pide el detalle de la ficha.
+    if (url === `/api/v1/employees/${EMPLOYEE_UUID}` && detail !== undefined) {
+      return jsonResponse(detail)
     }
 
     if (url.endsWith('/contracts')) {
@@ -294,6 +306,49 @@ describe('RehireDialog: los dos avisos del propietario (31-10-2026)', () => {
     expect(wrapper.find('input[type="date"]').attributes('aria-invalid')).toBe('true')
     expect(wrapper.find('[data-test="rehire-recent-warning"]').exists()).toBe(false)
     expect(wrapper.find('[data-test="date-warnings"]').element.children).toHaveLength(0)
+  })
+
+  it('desde la lista pide el detalle y avisa si la baja se hizo efectiva hoy, aunque su cese sea antiguo', async () => {
+    // Cese del 31 de agosto, registrado esta mañana: el cese solo no lo diria.
+    stubApi(undefined, undefined, {
+      ...former(),
+      employment_periods: [
+        employmentPeriodRecord({
+          terminated_at: '2026-08-31',
+          offboarded_at: '2026-11-02T08:00:00Z',
+        }),
+      ],
+    })
+
+    const wrapper = await mountDialog()
+
+    expect(wrapper.find('[data-test="rehire-recent-warning"]').text()).toContain(
+      'espera a que los quioscos estén sincronizados',
+    )
+  })
+
+  it('con el detalle en la mano manda offboarded_at: un cese de ayer efectivo ayer no avisa', async () => {
+    stubApi(undefined, undefined, {
+      ...former({ terminated_at: '2026-11-01' }),
+      employment_periods: [
+        employmentPeriodRecord({
+          terminated_at: '2026-11-01',
+          offboarded_at: '2026-11-01T22:00:04Z',
+        }),
+      ],
+    })
+
+    const wrapper = await mountDialog(former({ terminated_at: '2026-11-01' }))
+
+    expect(wrapper.find('[data-test="rehire-recent-warning"]').exists()).toBe(false)
+  })
+
+  it('si no llega el detalle aproxima por el cese de hoy o de ayer, que peca de aviso de mas', async () => {
+    stubApi()
+
+    const wrapper = await mountDialog(former({ terminated_at: '2026-11-01' }))
+
+    expect(wrapper.find('[data-test="rehire-recent-warning"]').exists()).toBe(true)
   })
 
   it('una baja antigua no lleva el aviso de sincronizacion', async () => {

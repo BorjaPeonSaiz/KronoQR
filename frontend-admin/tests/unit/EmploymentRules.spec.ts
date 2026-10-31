@@ -83,23 +83,59 @@ describe('avisos de fecha de un alta o una readmision (decision del 31-10-2026)'
     expect(isFutureHire('2026-10-15', '')).toBe(false)
   })
 
-  it('la baja de hoy (o de ayer, aplicada hoy por la tarea) pide esperar a los quioscos', () => {
-    expect(isRecentTermination(TODAY, TODAY)).toBe(true)
-    expect(isRecentTermination('2026-10-01', TODAY)).toBe(true)
-    expect(isRecentTermination('2026-09-30', TODAY)).toBe(false)
-    expect(isRecentTermination(null, TODAY)).toBe(false)
-    expect(isRecentTermination(TODAY, '')).toBe(false)
+  const ZONE = 'Europe/Madrid'
+
+  it('la baja efectiva hoy en la zona del centro pide esperar a los quioscos, sea cual sea su cese', () => {
+    // 22:30 UTC del 1 de octubre ya es el 2 en Madrid (CEST); 21:30 UTC del 1, aun el 1.
+    const effective = (offboardedAt: string | null | undefined, terminatedAt = '2026-09-20') =>
+      isRecentTermination({ offboardedAt, terminatedAt, today: TODAY, timezone: ZONE })
+
+    expect(effective('2026-10-01T22:30:00Z')).toBe(true)
+    expect(effective('2026-10-02T08:00:00Z')).toBe(true)
+    expect(effective('2026-10-01T21:30:00Z')).toBe(false)
+    // Una baja retroactiva registrada esta mañana cuenta, aunque su cese sea de hace dias...
+    expect(effective('2026-10-02T08:00:00Z', '2026-09-01')).toBe(true)
+    // ...y una de cese de hoy registrada hace tiempo no.
+    expect(effective('2026-09-30T08:00:00Z', TODAY)).toBe(false)
+    expect(effective(null, TODAY)).toBe(false)
+  })
+
+  it('sin offboarded_at (la lista no trae el detalle) aproxima por el cese de hoy o de ayer', () => {
+    const approx = (terminatedAt: string | null, today = TODAY) =>
+      isRecentTermination({ offboardedAt: undefined, terminatedAt, today, timezone: ZONE })
+
+    expect(approx(TODAY)).toBe(true)
+    expect(approx('2026-10-01')).toBe(true)
+    expect(approx('2026-09-30')).toBe(false)
+    expect(approx(null)).toBe(false)
+    expect(approx(TODAY, '')).toBe(false)
+  })
+
+  it('sin la zona del centro no adivina con un instante que si conoce', () => {
+    expect(
+      isRecentTermination({
+        offboardedAt: '2026-10-02T08:00:00Z',
+        terminatedAt: TODAY,
+        today: TODAY,
+        timezone: undefined,
+      }),
+    ).toBe(false)
   })
 
   it('una fecha de alta que no pasa del cese se detecta antes de enviar', () => {
-    const input = { terminatedAt: '2026-10-15', today: TODAY }
+    const input = { terminatedAt: '2026-10-15', today: TODAY, timezone: ZONE, offboardedAt: null }
 
     expect(rehireDateWarnings({ ...input, hiredAt: '2026-10-15' }).notAfterTermination).toBe(true)
     expect(rehireDateWarnings({ ...input, hiredAt: '2026-10-16' }).notAfterTermination).toBe(false)
     expect(rehireDateWarnings({ ...input, hiredAt: '' }).notAfterTermination).toBe(false)
     expect(
-      rehireDateWarnings({ terminatedAt: null, today: TODAY, hiredAt: '2026-10-16' })
-        .notAfterTermination,
+      rehireDateWarnings({
+        terminatedAt: null,
+        today: TODAY,
+        timezone: ZONE,
+        offboardedAt: null,
+        hiredAt: '2026-10-16',
+      }).notAfterTermination,
     ).toBe(false)
   })
 })

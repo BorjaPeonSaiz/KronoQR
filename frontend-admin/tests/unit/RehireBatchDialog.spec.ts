@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import RehireBatchDialog from '@/features/employees/RehireBatchDialog.vue'
 import es from '@/shared/i18n/locales/es.json'
 import type { Employee } from '@/shared/api/types'
-import { employee, rehired } from './support/fixtures'
+import { employee, employmentPeriodRecord, rehired } from './support/fixtures'
 import { jsonResponse, mountView, problemResponse, settle, stubFetch } from './support/harness'
 
 // Readmision en lote con fecha comun (RN-27, ADR-062 §6, pedido del 18-10-2026):
@@ -28,10 +28,30 @@ const C = '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b03'
 
 const PEOPLE = [former(A, 'Ana'), former(B, 'Beto'), former(C, 'Carla')]
 
-function stubApi(respond?: (init: RequestInit) => Response): Array<Record<string, unknown>> {
+function stubApi(
+  respond?: (init: RequestInit) => Response,
+  details: Record<string, string | null> = {},
+): Array<Record<string, unknown>> {
   const bodies: Array<Record<string, unknown>> = []
 
   stubFetch((url, init) => {
+    // El detalle de cada ficha (la lista no trae los periodos): solo las que la prueba declara.
+    const uuid = /^\/api\/v1\/employees\/([0-9a-f-]{36})$/.exec(url)?.[1]
+
+    if (uuid !== undefined && uuid in details) {
+      const person = PEOPLE.find((candidate) => candidate.uuid === uuid) ?? former(uuid, 'X')
+
+      return jsonResponse({
+        ...person,
+        employment_periods: [
+          employmentPeriodRecord({
+            terminated_at: person.terminated_at,
+            offboarded_at: details[uuid] ?? null,
+          }),
+        ],
+      })
+    }
+
     if (url === '/api/v1/employees/rehire' && init?.method === 'POST') {
       bodies.push(JSON.parse(String(init.body)))
 
@@ -239,5 +259,34 @@ describe('RehireBatchDialog (RN-27, la vuelta de la temporada)', () => {
     expect(wrapper.find('[data-test="rehire-future-warning"]').text()).toContain(
       'los fichajes anteriores a esa fecha se rechazan',
     )
+  })
+})
+
+describe('RehireBatchDialog: el aviso de sincronizacion sale de offboarded_at (31-10-2026)', () => {
+  it('cuenta solo a quien se dio de baja hoy en la zona del centro, no por su cese', async () => {
+    // Ana: cese de ayer pero efectiva hace dias; Beto: cese de hace un mes, registrada esta mañana.
+    stubApi(undefined, { [A]: '2027-03-26T08:00:00Z', [B]: '2027-03-29T07:00:00Z' })
+
+    const wrapper = await mountBatch([
+      former(A, 'Ana', '2027-03-28'),
+      former(B, 'Beto', '2027-02-20'),
+    ])
+
+    await settle()
+
+    expect(wrapper.find('[data-test="rehire-recent-warning"]').text()).toContain('1 persona')
+  })
+
+  it('si el detalle de alguna no llega, esa se aproxima por el cese', async () => {
+    stubApi(undefined, { [A]: '2027-03-26T08:00:00Z' })
+
+    const wrapper = await mountBatch([
+      former(A, 'Ana', '2027-03-20'),
+      former(B, 'Beto', '2027-03-28'),
+    ])
+
+    await settle()
+
+    expect(wrapper.find('[data-test="rehire-recent-warning"]').text()).toContain('1 persona')
   })
 })

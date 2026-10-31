@@ -12,12 +12,13 @@
 // «Hoy» es la fecha civil del CENTRO (ADR-040), que calcula quien llama; sin ella
 // (`''`) no se adivina nada y no hay avisos. Son avisos, no bloqueos: el servidor
 // decide y la tablet nunca bloquea al empleado (regla dura 19).
+import { todayInZone } from '@kronoqr/web-kit/datetime'
 import { addCivilDays } from './employmentDates'
 
 export interface RehireDateWarnings {
   /** La fecha de alta es posterior a hoy: los fichajes anteriores se rechazan. */
   futureHire: boolean
-  /** La baja es de hoy (o de ayer, aplicada hoy por la tarea): esperar a la sincronizacion. */
+  /** La baja se hizo efectiva hoy (en la zona del centro): esperar a la sincronizacion. */
   recentTermination: boolean
   /** La fecha de alta no es posterior al cese: el servidor responde `422`. */
   notAfterTermination: boolean
@@ -30,6 +31,9 @@ export interface RehireDateInput {
   terminatedAt: string | null
   /** Hoy en la zona del centro, o vacio si aun no se conoce. */
   today: string
+  timezone: string | undefined
+  /** Cuando se hizo efectiva la baja (ver `isRecentTermination`). */
+  offboardedAt: string | null | undefined
 }
 
 /** Aviso del alta con fecha futura (sirve tambien para el alta de una persona nueva). */
@@ -37,25 +41,53 @@ export function isFutureHire(hiredAt: string, today: string): boolean {
   return today !== '' && hiredAt !== '' && hiredAt > today
 }
 
+export interface RecentTerminationInput {
+  /**
+   * Instante UTC en que la baja se hizo efectiva (`EmploymentPeriodRecord.offboarded_at`).
+   * `null`: la baja no es efectiva. `undefined`: todavia no se conoce (la ficha no trae el
+   * detalle o aun no ha llegado); entonces se aproxima por el cese.
+   */
+  offboardedAt: string | null | undefined
+  /** Fecha de cese del periodo, para la aproximacion cuando no se conoce `offboardedAt`. */
+  terminatedAt: string | null
+  /** Hoy en la zona del centro, o vacio si aun no se conoce. */
+  today: string
+  timezone: string | undefined
+}
+
 /**
- * La baja es «de hoy»: el cese es hoy, o fue ayer y la tarea que aplica las bajas
- * programadas la hizo efectiva hoy (corre el dia civil siguiente al cese). El
- * contrato no expone el instante en que la baja se hizo efectiva
- * (`employment_periods.offboarded_at`), asi que esto es la mejor aproximacion y
- * peca de aviso de mas, nunca de menos.
+ * La baja «es de hoy»: se hizo efectiva hoy, en la fecha civil del CENTRO (ADR-040), sea
+ * cual sea su fecha de cese (una baja retroactiva registrada esta manana tambien cuenta, y
+ * una programada con cese ayer la hace efectiva la tarea hoy). Hasta ese momento los
+ * quioscos pueden seguir tratando a la persona como de alta.
+ *
+ * Sin `offboardedAt` (la lista de Plantilla no trae el detalle de periodos) se aproxima
+ * por el cese de hoy o de ayer: peca de aviso de mas, nunca de menos.
  */
-export function isRecentTermination(terminatedAt: string | null, today: string): boolean {
+export function isRecentTermination(input: RecentTerminationInput): boolean {
+  const { offboardedAt, terminatedAt, today, timezone } = input
+
+  if (today === '') {
+    return false
+  }
+
+  if (offboardedAt === null) {
+    return false
+  }
+
+  if (offboardedAt !== undefined) {
+    return timezone !== undefined && todayInZone(timezone, new Date(offboardedAt)) === today
+  }
+
   return (
-    terminatedAt !== null &&
-    today !== '' &&
-    (terminatedAt === today || terminatedAt === addCivilDays(today, -1))
+    terminatedAt !== null && (terminatedAt === today || terminatedAt === addCivilDays(today, -1))
   )
 }
 
 export function rehireDateWarnings(input: RehireDateInput): RehireDateWarnings {
   return {
     futureHire: isFutureHire(input.hiredAt, input.today),
-    recentTermination: isRecentTermination(input.terminatedAt, input.today),
+    recentTermination: isRecentTermination(input),
     notAfterTermination:
       input.hiredAt !== '' && input.terminatedAt !== null && input.hiredAt <= input.terminatedAt,
   }
