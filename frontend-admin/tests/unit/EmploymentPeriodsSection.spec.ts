@@ -280,7 +280,15 @@ describe('TerminationCorrectionDialog: corregir la fecha de cese (RN-27, RL-04)'
     await settle(1)
 
     expect(confirm.attributes('aria-disabled')).toBeDefined()
+    // Mientras se escribe no se grita: el error sale al salir del campo.
+    expect(dialog(wrapper).text()).not.toContain('Escribe al menos 10 caracteres.')
+    expect(dialog(wrapper).find('textarea').attributes('aria-invalid')).toBeUndefined()
+
+    await dialog(wrapper).find('textarea').trigger('blur')
+    await settle(1)
+
     expect(dialog(wrapper).text()).toContain('Escribe al menos 10 caracteres.')
+    expect(dialog(wrapper).find('textarea').attributes('aria-invalid')).toBe('true')
 
     await dialog(wrapper).find('textarea').setValue('Trabajó hasta el 2 según el cuadrante')
     await settle(1)
@@ -291,6 +299,26 @@ describe('TerminationCorrectionDialog: corregir la fecha de cese (RN-27, RL-04)'
     expect(preview.text()).toMatch(/2 sep/)
     expect(preview.text()).toContain('Trabajó hasta el 2 según el cuadrante')
     expect(confirm.attributes('aria-disabled')).toBeUndefined()
+  })
+
+  it('al intentar confirmar sin motivo dice que falta y lleva el foco al campo, sin enviar nada', async () => {
+    const spy = stubFetch(() => jsonResponse({}))
+    const wrapper = await mountSection([PAST], { attach: true })
+
+    await openCorrection(wrapper)
+    await dialog(wrapper).find<HTMLInputElement>('input[type="date"]').setValue('2026-09-02')
+    await settle(1)
+
+    expect(dialog(wrapper).text()).not.toContain('Escribe al menos 10 caracteres.')
+
+    // El boton bloqueado conserva el foco y el clic avisa, en lugar de quedarse mudo.
+    await dialog(wrapper).find('[data-test="confirm-dialog-confirm"]').trigger('click')
+    await settle(1)
+
+    expect(dialog(wrapper).text()).toContain('Escribe al menos 10 caracteres.')
+    expect(document.activeElement).toBe(dialog(wrapper).find('textarea').element)
+    expect(spy).not.toHaveBeenCalled()
+    wrapper.unmount()
   })
 
   it('el motivo no pasa de 1 000 caracteres y cuenta los que lleva', async () => {

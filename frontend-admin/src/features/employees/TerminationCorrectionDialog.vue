@@ -94,10 +94,14 @@ const dateErrors = computed<readonly string[]>(() => {
 })
 
 const reasonLength = computed(() => reason.value.trim().length)
+
+// «Escribe al menos 10 caracteres» no se enseña desde la primera letra: nadie ha terminado de
+// escribir. Sale al salir del campo o al intentar confirmar (ver `onBlocked`).
+const reasonTouched = ref(false)
 const reasonErrors = computed<readonly string[]>(() => {
   const serverErrors = isApiError(error.value) ? (error.value.fieldErrors['reason'] ?? []) : []
 
-  if (reason.value !== '' && reasonLength.value < REASON_MIN_LENGTH) {
+  if (reasonTouched.value && reasonLength.value < REASON_MIN_LENGTH) {
     return [t('employees.correction.reasonTooShort', { min: REASON_MIN_LENGTH })]
   }
 
@@ -143,6 +147,17 @@ const changes = computed<Change[]>(() => [
     to: reasonLength.value === 0 ? t('common.empty') : reason.value.trim(),
   },
 ])
+
+/** Se pulso confirmar sin poder: se dice que falta y el foco va al primer campo que lo necesita. */
+function onBlocked(): void {
+  reasonTouched.value = true
+
+  if (dateErrors.value.length > 0 || terminatedAt.value === '' || direction.value === 'same') {
+    dateInput.value?.focus()
+  } else if (reasonLength.value < REASON_MIN_LENGTH) {
+    reasonInput.value?.focus()
+  }
+}
 
 async function confirm(): Promise<void> {
   busy.value = true
@@ -195,6 +210,7 @@ const inputClass =
     :confirm-disabled="confirmDisabled"
     @cancel="emit('close')"
     @confirm="confirm"
+    @blocked="onBlocked"
   >
     <template #error="{ error: failure }">
       <EmploymentProblemNotice :error="failure" />
@@ -243,6 +259,7 @@ const inputClass =
           ref="reasonInput"
           v-model="reason"
           rows="3"
+          @blur="reasonTouched = true"
           :class="inputClass"
           :aria-invalid="field.invalid ? 'true' : undefined"
           :aria-describedby="field.describedBy"

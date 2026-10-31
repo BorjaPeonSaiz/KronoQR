@@ -567,10 +567,14 @@ const selectClass =
         :description="hasFilters ? t('employees.empty.filtered') : t('employees.empty.description')"
       />
 
-      <!-- Dar de alta de nuevo a varias personas: solo con el filtro «De baja» (RN-27). -->
+      <!-- Dar de alta de nuevo a varias personas: solo con el filtro «De baja» (RN-27). Con
+           alguien marcado la barra se queda arriba al bajar por la tabla: el boton no se pierde. -->
       <div
         v-if="rows.length > 0 && terminatedView"
         class="mt-4 flex flex-wrap items-center gap-3"
+        :class="
+          selection.size > 0 ? 'sticky top-0 z-10 border-b border-kq-border bg-kq-surface py-2' : ''
+        "
         data-test="rehire-toolbar"
       >
         <p class="max-w-prose text-kq-text-muted">

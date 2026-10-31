@@ -9,7 +9,7 @@ import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import { useI18n } from 'vue-i18n'
 import BaseDialog from './BaseDialog.vue'
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     title: string
     confirmLabel: string
@@ -28,7 +28,23 @@ withDefaults(
   { busy: false, tone: 'normal', size: 'normal', confirmDisabled: false },
 )
 
-const emit = defineEmits<{ confirm: []; cancel: [] }>()
+const emit = defineEmits<{
+  confirm: []
+  cancel: []
+  /**
+   * Se pulso «confirmar» con un dato obligatorio sin completar. El boton deshabilitado no
+   * conserva el clic (conserva el foco, `aria-disabled`), asi que quien abre el dialogo
+   * se entera aqui y puede enseñar que falta, en vez de un boton mudo.
+   */
+  blocked: []
+}>()
+
+/** En captura y registrado antes que la directiva que traga el clic: corre aunque este bloqueado. */
+function onAttempt(): void {
+  if (props.confirmDisabled && !props.busy) {
+    emit('blocked')
+  }
+}
 
 const { t } = useI18n()
 </script>
@@ -64,6 +80,7 @@ const { t } = useI18n()
             ? 'bg-kq-danger text-kq-on-danger'
             : 'bg-kq-primary-strong text-kq-on-primary'
         "
+        @click.capture="onAttempt"
         @click="emit('confirm')"
       >
         {{ busy ? t('common.saving') : confirmLabel }}

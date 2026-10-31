@@ -283,6 +283,29 @@ describe('Plantilla con el filtro «De baja» (RN-27)', () => {
     expect(wrapper.find('[data-test="selection-summary"]').exists()).toBe(false)
   })
 
+  it('la barra del lote se queda fija arriba solo cuando hay una seleccion', async () => {
+    stubApi([former(A, 'Ana'), former(B, 'Beto')])
+
+    const wrapper = await mountList()
+
+    expect(wrapper.find('[data-test="rehire-toolbar"]').classes()).not.toContain('sticky')
+
+    await wrapper.findAll('[data-test="select-row"]')[0]?.setValue(true)
+    await settle(1)
+
+    const bar = wrapper.find('[data-test="rehire-toolbar"]')
+
+    expect(bar.classes()).toContain('sticky')
+    expect(bar.classes()).toContain('top-0')
+    // Opaca: una barra fija con fondo transparente dejaria leer la tabla por debajo.
+    expect(bar.classes()).toContain('bg-kq-surface')
+
+    await wrapper.find('[data-test="selection-clear"]').trigger('click')
+    await settle(1)
+
+    expect(wrapper.find('[data-test="rehire-toolbar"]').classes()).not.toContain('sticky')
+  })
+
   it('«Quitar la selección» la vacia', async () => {
     stubApi([former(A, 'Ana')])
 
