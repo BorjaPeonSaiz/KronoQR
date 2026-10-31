@@ -424,7 +424,7 @@
       "action": "Dar de baja",
       "confirmAction": "Confirmar la baja",
       "alreadyTerminated": "Esta persona está de baja desde el {date}. Su historial sigue disponible.",
-      "dateHint": "No puede ser anterior a la fecha de alta. Con la fecha de hoy o una posterior, la baja se programa; con una anterior, es efectiva al confirmar. Desde esa fecha cuenta la retención del registro.",
+      "dateHint": "No puede ser anterior a la fecha de alta. Abajo ves qué pasa según la fecha. Desde ella cuenta la retención del registro.",
       "reasonLabel": "Motivo del cese",
       "reasonHint": "Queda en el registro de auditoría. Sin datos de salud ni juicios de valor.",
       "reasonPlaceholder": "Elige un motivo",
@@ -453,7 +453,7 @@
       "outcomeScheduled": "Baja programada: seguirá fichando hasta el {date}, incluido. Hoy no cambia nada.",
       "outcomeImmediate": "Baja efectiva al confirmar: su tarjeta se revoca y deja de poder fichar en el acto. No se deshace; la única vuelta es «Dar de alta de nuevo» con una fecha posterior al cese.",
       "outcomeNoEffect": "Baja sin efectos: la persona nunca llegó a empezar. Queda de baja con el alta y el cese el mismo día y no ocupa plaza en la licencia.",
-      "scheduledKeepsClocking": "Hasta el {date}, incluido, sigue fichando con normalidad, también la salida de su último turno de noche.",
+      "scheduledKeepsClocking": "Su último turno de noche se ficha con normalidad, también la salida si termina después de medianoche.",
       "scheduledApplies": "El día siguiente, el sistema aplica la baja solo: su tarjeta QR queda revocada, deja de poder fichar y se cierran sus sesiones del portal. Si tiene un turno o una pausa abiertos, espera como mucho hasta el segundo día después del cese.",
       "scheduledCancel": "Hasta esa fecha puedes anular la baja o cambiarla desde esta ficha. Pasada la fecha, ya no.",
       "scheduledSummary": "Baja programada: la persona ficha hasta el {date}, incluido. Después, el sistema aplica la baja solo.",
@@ -528,7 +528,7 @@
       "confirmAction": "Registrar la corrección",
       "explanation": "Úsalo cuando la fecha de cese se puso antes del último día que la persona trabajó de verdad, o después. No se borra nada: la fecha anterior queda guardada con quién la cambió, cuándo y por qué.",
       "reasonLabel": "Motivo de la corrección",
-      "reasonHint": "Entre {min} y {max} caracteres. Se guarda con la corrección, no en el asiento de auditoría: cuenta qué pasó, sin datos de salud ni juicios de valor.",
+      "reasonHint": "Entre {min} y {max} caracteres. Cuenta qué pasó, sin datos de salud ni juicios de valor. Se guarda con la corrección.",
       "reasonCounter": "{chars} de {max} caracteres",
       "reasonTooShort": "Escribe al menos {min} caracteres.",
       "reasonTooLong": "El motivo admite como máximo {max} caracteres.",
@@ -555,7 +555,7 @@
       "hiredAtLabel": "Fecha de alta",
       "hiredAtHint": "Hoy por defecto. Tiene que ser posterior a su fecha de cese ({date}).",
       "notAfterTermination": "La fecha de alta tiene que ser posterior a la de cese ({date}). Elige un día más tarde.",
-      "futureHire": "Fecha de alta futura ({date}): los fichajes anteriores a esa fecha se rechazan. La persona no podrá fichar hasta ese día.",
+      "futureHire": "Fecha de alta futura ({date}): hasta ese día no se podrá fichar, y los fichajes anteriores a esa fecha se rechazan. Si alguien empieza antes, pon la fecha de su primer día.",
       "recentTermination": "La baja es reciente (de hoy o de ayer): espera a que los quioscos estén sincronizados antes de que esta persona fiche con su tarjeta nueva. Puedes comprobarlo en Quioscos: sin fichajes pendientes. Hasta entonces un quiosco puede tratarla todavía como de baja.",
       "contract": {
         "label": "Contrato",
@@ -596,6 +596,7 @@
         "explanation": "Cada persona tiene un PIN nuevo. Anótalos o entrégalos ahora: no se podrán volver a consultar.",
         "caption": "PIN nuevos de las personas dadas de alta de nuevo",
         "deliveryLater": "La entrega en mano se registra después, desde la ficha de cada persona.",
+        "next": "Al continuar podrás imprimir las tarjetas nuevas.",
         "notedLabel": "He anotado o entregado estos PIN.",
         "continue": "Continuar"
       }

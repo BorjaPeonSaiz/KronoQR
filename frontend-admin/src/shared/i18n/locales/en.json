@@ -424,7 +424,7 @@
       "action": "Offboard employee",
       "confirmAction": "Confirm the offboarding",
       "alreadyTerminated": "This person has been offboarded since {date}. Their history is still available.",
-      "dateHint": "It cannot be earlier than the hiring date. With today’s date or a later one the offboarding is scheduled; with an earlier one it takes effect when you confirm. The record retention period starts counting from it.",
+      "dateHint": "It cannot be earlier than the hiring date. Below you see what happens depending on the date. The record retention period starts counting from it.",
       "reasonLabel": "Reason for leaving",
       "reasonHint": "It goes into the audit log. No health data and no value judgements.",
       "reasonPlaceholder": "Choose a reason",
@@ -453,7 +453,7 @@
       "outcomeScheduled": "Offboarding scheduled: they will keep clocking in until {date}, inclusive. Nothing changes today.",
       "outcomeImmediate": "Offboarding takes effect when you confirm: their card is revoked and they can no longer clock in right away. It cannot be undone; the only way back is “Rehire” with a date after the termination.",
       "outcomeNoEffect": "Offboarding with no effects: the person never got to start. They are left as a former employee with the hiring and termination on the same day, and do not take a seat in the licence.",
-      "scheduledKeepsClocking": "Until {date}, inclusive, they keep clocking in as usual, including the clock-out of their last night shift.",
+      "scheduledKeepsClocking": "Their last night shift is clocked as usual, including the clock-out if it ends after midnight.",
       "scheduledApplies": "The next day the system applies the offboarding by itself: their QR card is revoked, they can no longer clock in and their portal sessions are closed. If they have a shift or a break open, it waits at most until the second day after the termination.",
       "scheduledCancel": "Until that date you can cancel the offboarding or change it from this record. Once the date has passed, you cannot.",
       "scheduledSummary": "Offboarding scheduled: the person clocks in until {date}, inclusive. After that, the system applies the offboarding by itself.",
@@ -528,7 +528,7 @@
       "confirmAction": "Record the correction",
       "explanation": "Use it when the termination date was set before the last day the person really worked, or after it. Nothing is deleted: the previous date is kept with who changed it, when and why.",
       "reasonLabel": "Reason for the correction",
-      "reasonHint": "Between {min} and {max} characters. It is saved with the correction, not in the audit entry: say what happened, with no health data and no value judgements.",
+      "reasonHint": "Between {min} and {max} characters. Say what happened, with no health data and no value judgements. It is saved with the correction.",
       "reasonCounter": "{chars} of {max} characters",
       "reasonTooShort": "Write at least {min} characters.",
       "reasonTooLong": "The reason admits at most {max} characters.",
@@ -555,7 +555,7 @@
       "hiredAtLabel": "Hiring date",
       "hiredAtHint": "Today by default. It has to be after their termination date ({date}).",
       "notAfterTermination": "The hiring date has to be after the termination date ({date}). Choose a later day.",
-      "futureHire": "Future hiring date ({date}): clock-ins before that date are rejected. The person will not be able to clock in until that day.",
+      "futureHire": "Future hiring date ({date}): clocking in is not possible until that day, and clock-ins before that date are rejected. If anyone starts sooner, enter the date of their first day.",
       "recentTermination": "The offboarding is recent (today or yesterday): wait until the kiosks are synchronised before this person clocks in with their new card. You can check it in Kiosks: no pending clock-ins. Until then a kiosk may still treat them as offboarded.",
       "contract": {
         "label": "Contract",
@@ -596,6 +596,7 @@
         "explanation": "Each person has a new PIN. Write them down or hand them over now: they cannot be looked up again.",
         "caption": "New PINs of the rehired people",
         "deliveryLater": "The handover in person is recorded afterwards, from each person’s record.",
+        "next": "When you continue you can print the new cards.",
         "notedLabel": "I have written down or handed over these PINs.",
         "continue": "Continue"
       }
