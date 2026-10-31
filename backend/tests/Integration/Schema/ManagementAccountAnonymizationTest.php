@@ -132,6 +132,36 @@ it('se salta las cuentas activas, las que tienen asientos vivos y las que corrig
         ->and(DB::table('users')->whereIn('id', [$activa, $reciente, $conAsiento])->whereNotNull('anonymized_at')->count())->toBe(0);
 })->group('RL-11', 'RS-07');
 
+it('se salta la cuenta que corrigio una fecha de cese mientras quede su correccion', function (): void {
+    // ADR-062 §7, `2026_10_31_100000`: la ficha de `rrhh+` enseña al autor de
+    // cada correccion del cese (`CorrectionAuthor`, nombre no vacio). Sin
+    // asientos suyos —la particion del año ya se solto—, la correccion la
+    // conserva como autora por si misma.
+    $autora = cuentaDeBaja();
+    $vencida = cuentaDeBaja();
+
+    $persona = WorkforceFixtures::employee(WorkforceFixtures::site(), status: 'terminated', hiredAt: '2010-01-01', terminatedAt: '2012-12-31');
+    $periodo = DB::table('employment_periods')
+        ->join('employees', 'employees.id', '=', 'employment_periods.employee_id')
+        ->where('employees.uuid', $persona)
+        ->value('employment_periods.id');
+
+    DB::table('employment_period_corrections')->insert([
+        'employment_period_id' => $periodo,
+        'previous_terminated_on' => '2012-12-20',
+        'terminated_on' => '2012-12-31',
+        'reason' => 'Trabajo hasta el 31 segun el cuadrante',
+        'corrected_by_user_id' => $autora,
+        'corrected_at' => '2013-01-10 09:00:00+00',
+    ]);
+
+    $minimizadas = array_map(static fn (object $row): int => (int) $row->user_id, cuentaMinimizar(cuentaCorte()));
+
+    expect($minimizadas)->toBe([$vencida])
+        ->and(DB::table('users')->where('id', $autora)->value('name'))->not->toBe('')
+        ->and(DB::table('users')->where('id', $autora)->value('anonymized_at'))->toBeNull();
+})->group('RL-11', 'RS-07', 'RN-27', 'RN-13');
+
 it('rechaza un corte posterior al admisible y un lote fuera de rango', function (): void {
     cuentaDeBaja();
     $tarde = (new DateTimeImmutable(cuentaCorte()))->modify('+1 day')->format('Y-m-d');
