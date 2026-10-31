@@ -17,7 +17,9 @@ use DateTimeImmutable;
  * falta a la escritura.
  *
  * `authorName` es `users.name`: puede salir en la API, nunca en un log tecnico
- * ni en `audit_log`, donde va el uuid (regla dura 21). `reason` es el texto
+ * ni en `audit_log`, donde va el uuid (regla dura 21). Es `null` si y solo si
+ * la cuenta esta minimizada (`authorMinimised`): la correccion no la conserva
+ * (ADR-062 §7, ADR-060 §2) y su nombre ya es `''`. `reason` es el texto
  * libre de RRHH, o el texto fijo con el que lo sustituye la minimizacion de la
  * ficha (ADR-060).
  */
@@ -29,7 +31,8 @@ final readonly class TerminationCorrectionRecord
         public string $terminatedOn,
         public DateTimeImmutable $correctedAt,
         public string $authorUuid,
-        public string $authorName,
+        public ?string $authorName,
         public string $reason,
+        public bool $authorMinimised = false,
     ) {}
 }

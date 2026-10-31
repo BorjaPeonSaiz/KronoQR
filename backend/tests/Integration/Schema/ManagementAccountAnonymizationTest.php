@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Modules\Compliance\Infrastructure\Persistence\DatabaseManagementAccountArchive;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
+use App\Modules\Workforce\Application\Port\EmploymentRecordReader;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -131,6 +132,43 @@ it('se salta las cuentas activas, las que tienen asientos vivos y las que corrig
     expect($minimizadas)->toBe([$vencida])
         ->and(DB::table('users')->whereIn('id', [$activa, $reciente, $conAsiento])->whereNotNull('anonymized_at')->count())->toBe(0);
 })->group('RL-11', 'RS-07');
+
+it('minimiza la cuenta que firmo una correccion del cese cuando vencen sus demas referencias, y el historico la da por minimizada', function (): void {
+    // ADR-062 §7, ADR-060 §2: la correccion del cese no conserva la cuenta. Sin
+    // asientos suyos —la particion del año ya se solto— entra en la regla
+    // general, como la que aparece en `credentials` o `absences`, y el
+    // historico de la ficha la enseña sin nombre.
+    $autora = cuentaDeBaja();
+    $autoraUuid = cuentaTexto(DB::table('users')->where('id', $autora)->value('uuid'));
+
+    $persona = WorkforceFixtures::employee(WorkforceFixtures::site(), status: 'terminated', hiredAt: '2010-01-01', terminatedAt: '2012-12-31');
+    $periodo = DB::table('employment_periods')
+        ->join('employees', 'employees.id', '=', 'employment_periods.employee_id')
+        ->where('employees.uuid', $persona)
+        ->value('employment_periods.id');
+
+    DB::table('employment_period_corrections')->insert([
+        'employment_period_id' => $periodo,
+        'previous_terminated_on' => '2012-12-20',
+        'terminated_on' => '2012-12-31',
+        'reason' => 'Trabajo hasta el 31 segun el cuadrante',
+        'corrected_by_user_id' => $autora,
+        'corrected_at' => '2013-01-10 09:00:00+00',
+    ]);
+
+    $minimizadas = array_map(static fn (object $row): int => (int) $row->user_id, cuentaMinimizar(cuentaCorte()));
+
+    $periodos = app(EmploymentRecordReader::class)->periodsOf($persona);
+    $correccion = $periodos[0]->corrections[0];
+
+    expect($minimizadas)->toBe([$autora])
+        ->and($correccion->authorUuid)->toBe($autoraUuid)
+        ->and($correccion->authorName)->toBeNull()
+        ->and($correccion->authorMinimised)->toBeTrue()
+        // Las fechas y el momento son registro y se conservan (RN-13).
+        ->and($correccion->previousTerminatedOn)->toBe('2012-12-20')
+        ->and($correccion->terminatedOn)->toBe('2012-12-31');
+})->group('RL-11', 'RS-07', 'RN-27', 'RN-13');
 
 it('rechaza un corte posterior al admisible y un lote fuera de rango', function (): void {
     cuentaDeBaja();

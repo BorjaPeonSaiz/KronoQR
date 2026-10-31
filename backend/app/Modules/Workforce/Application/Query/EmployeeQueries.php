@@ -14,6 +14,7 @@ use App\Modules\Workforce\Application\Port\EmploymentPeriodRecord;
 use App\Modules\Workforce\Application\Port\EmploymentRecordReader;
 use App\Modules\Workforce\Application\Port\PinStatus;
 use App\Modules\Workforce\Domain\Model\Employee;
+use DateTimeImmutable;
 
 /**
  * Lecturas de plantilla.
@@ -162,6 +163,23 @@ final readonly class EmployeeQueries
     public function employmentPeriods(string $uuid): array
     {
         return UseCaseInstrumentation::run('workforce.read_employment_periods', fn (): array => $this->employmentRecords->periodsOf($uuid));
+    }
+
+    /**
+     * El instante en que se hizo efectiva la baja de cada persona de la lista
+     * (`Employee.offboarding.offboarded_at`, ADR-062 §4), en una sola consulta.
+     * Es lo que deja al panel avisar de que «la baja fue hoy» sin pedir la
+     * ficha de cada persona. Solo estan las de baja efectiva.
+     *
+     * @param  list<Employee>  $employees
+     * @return array<string, DateTimeImmutable> Indexado por UUID de empleado.
+     */
+    public function offboardedAtFor(array $employees): array
+    {
+        return UseCaseInstrumentation::run('workforce.read_offboarded_at', fn (): array => $this->employmentRecords->offboardedAtOf(array_values(array_map(
+            static fn (Employee $employee): string => $employee->uuid,
+            array_filter($employees, static fn (Employee $employee): bool => $employee->status === EmploymentStatus::TERMINATED),
+        ))));
     }
 
     /**

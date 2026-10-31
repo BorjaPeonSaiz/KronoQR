@@ -27,8 +27,9 @@ use Illuminate\Database\ConnectionInterface;
  * Deptrac), la misma licencia que {@see DatabaseManagementAccountLookup}. El
  * autor se une con `JOIN` dentro del `LEFT JOIN`: `corrected_by_user_id` es
  * `NOT NULL` con clave ajena, y una correccion sin autor no explica nada
- * (RN-13). La cuenta se conserva como autora mientras quede una correccion
- * suya (`management_account_retention_candidates`): su nombre no es `''`.
+ * (RN-13). **La correccion no conserva la cuenta** (ADR-062 §7, ADR-060 §2):
+ * minimizada, su nombre es `''` y aqui sale como `null` con
+ * `authorMinimised`, nunca como un nombre vacio que parezca un dato.
  *
  * El orden de las correcciones es el de `corrected_at` y, a igualdad, el de
  * `id`, que es el de su insercion: dos correcciones del mismo periodo en la
@@ -52,7 +53,8 @@ final readonly class DatabaseEmploymentRecordReader implements EmploymentRecordR
                    c.corrected_at             AS corrected_at,
                    c.reason                   AS reason,
                    u.uuid::text               AS author_uuid,
-                   u.name                     AS author_name
+                   CASE WHEN u.anonymized_at IS NULL THEN u.name END AS author_name,
+                   (u.anonymized_at IS NOT NULL) AS author_minimised
               FROM employment_periods p
               JOIN employees e ON e.id = p.employee_id
               LEFT JOIN (employment_period_corrections c
@@ -94,8 +96,9 @@ final readonly class DatabaseEmploymentRecordReader implements EmploymentRecordR
                 terminatedOn: $row->string('corrected_terminated_on'),
                 correctedAt: $row->instant('corrected_at'),
                 authorUuid: $row->string('author_uuid'),
-                authorName: $row->string('author_name'),
+                authorName: $row->nullableString('author_name'),
                 reason: $row->string('reason'),
+                authorMinimised: $row->bool('author_minimised'),
             );
         }
 
@@ -107,5 +110,36 @@ final readonly class DatabaseEmploymentRecordReader implements EmploymentRecordR
             ),
             $periods,
         ));
+    }
+
+    public function offboardedAtOf(array $employeeUuids): array
+    {
+        if ($employeeUuids === []) {
+            return [];
+        }
+
+        // El periodo en curso de cada persona es el de `hired_on` mas reciente
+        // (ADR-062 §1): `DISTINCT ON` se queda con el y el `WHERE` de fuera, con
+        // los que tienen la baja efectiva. Una sola sentencia por pagina.
+        $placeholders = implode(', ', array_fill(0, \count($employeeUuids), '?::uuid'));
+
+        $rows = $this->connection->select(<<<SQL
+            SELECT latest.employee_uuid, latest.offboarded_at
+              FROM (SELECT DISTINCT ON (e.id) e.uuid::text AS employee_uuid, p.offboarded_at
+                      FROM employment_periods p
+                      JOIN employees e ON e.id = p.employee_id
+                     WHERE e.uuid IN ({$placeholders})
+                     ORDER BY e.id, p.hired_on DESC) latest
+             WHERE latest.offboarded_at IS NOT NULL
+        SQL, array_map(strtolower(...), $employeeUuids));
+
+        $instants = [];
+
+        foreach ($rows as $raw) {
+            $row = Row::of($raw);
+            $instants[$row->string('employee_uuid')] = $row->instant('offboarded_at');
+        }
+
+        return $instants;
     }
 }

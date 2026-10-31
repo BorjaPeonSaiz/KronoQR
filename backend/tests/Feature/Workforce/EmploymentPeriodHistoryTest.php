@@ -42,7 +42,7 @@ const EMPLOYMENT_HISTORY_SECOND_REASON = 'El cuadrante bueno es el del 17, el ot
  * Omar, de baja desde el 15, con dos correcciones de autores distintos y
  * readmitido el 25.
  *
- * @return array{employee: string, department: int, firstPeriod: string, rrhh: array{uuid: string, name: string}, admin: array{uuid: string, name: string}}
+ * @return array{employee: string, department: int, firstPeriod: string, rrhh: array{uuid: string, name: string, minimised: bool}, admin: array{uuid: string, name: string, minimised: bool}}
  */
 function omarConElCeseCorregidoDosVeces(): array
 {
@@ -84,8 +84,8 @@ function omarConElCeseCorregidoDosVeces(): array
         'employee' => $escenario['employee'],
         'department' => $escenario['department'],
         'firstPeriod' => $periodo,
-        'rrhh' => ['uuid' => $rrhh->uuid, 'name' => $rrhh->name],
-        'admin' => ['uuid' => $admin->uuid, 'name' => $admin->name],
+        'rrhh' => ['uuid' => $rrhh->uuid, 'name' => $rrhh->name, 'minimised' => false],
+        'admin' => ['uuid' => $admin->uuid, 'name' => $admin->name, 'minimised' => false],
     ];
 }
 
@@ -213,7 +213,7 @@ it('una baja programada no tiene offboarded_at ni correcciones', function (): vo
         ->assertJsonPath('employment_periods.0.corrections', []);
 })->group('RN-27', 'RN-14');
 
-it('en una ficha minimizada conserva fechas, autor y momento, y el motivo es el texto fijo', function (): void {
+it('en una ficha minimizada conserva fechas, momento y la autora con su cuenta sin minimizar, y el motivo es el texto fijo', function (): void {
     FrozenTime::at('2026-10-30 09:00:00');
     $persona = WorkforceFixtures::employee(WorkforceFixtures::site(), status: 'terminated', hiredAt: '2010-01-01', terminatedAt: '2012-12-31');
     $rrhh = ManagementUsers::withRole(UserRole::RRHH);
@@ -245,7 +245,7 @@ it('en una ficha minimizada conserva fechas, autor y momento, y el motivo es el 
         ->assertJsonPath('employment_periods.0.corrections.0.previous_terminated_at', '2012-12-31')
         ->assertJsonPath('employment_periods.0.corrections.0.terminated_at', '2012-12-20')
         ->assertJsonPath('employment_periods.0.corrections.0.corrected_at', '2026-10-30T09:00:00.000000Z')
-        ->assertJsonPath('employment_periods.0.corrections.0.corrected_by', ['uuid' => $rrhh->uuid, 'name' => $rrhh->name])
+        ->assertJsonPath('employment_periods.0.corrections.0.corrected_by', ['uuid' => $rrhh->uuid, 'name' => $rrhh->name, 'minimised' => false])
         ->assertJsonPath('employment_periods.0.corrections.0.reason', $migracion::CORRECTION_REASON);
 
     expect($ficha->json('anonymized_at'))->not->toBeNull()
