@@ -50,3 +50,38 @@ it('la huella es la de los uuid readmitidos, ordenados, sin depender del orden d
         ->and(ImportReport::of(str_repeat('a', 64), [ImportRow::rehire(2, filaDeHuella('Ana'), $a, [])], false)->rehireDigest())
         ->not->toBe($uno->rehireDigest());
 })->group('RN-27', 'RF-GP-05');
+
+it('una persona que solo se actualiza no entra en la huella aunque el informe lleve su uuid', function (): void {
+    $readmitida = '01a00000-0000-7000-8000-000000000001';
+    $actualizada = '01a00000-0000-7000-8000-000000000002';
+
+    $soloLaReadmision = ImportReport::of(str_repeat('a', 64), [
+        ImportRow::rehire(2, filaDeHuella('Ana'), $readmitida, []),
+    ], false);
+    $conUnaActualizacion = ImportReport::of(str_repeat('a', 64), [
+        ImportRow::rehire(2, filaDeHuella('Ana'), $readmitida, []),
+        ImportRow::matched(3, filaDeHuella('Eva'), $actualizada, ['department_id']),
+        ImportRow::matched(4, filaDeHuella('Luz'), $actualizada, []),
+    ], false);
+
+    expect($conUnaActualizacion->rehireDigest())->toBe($soloLaReadmision->rehireDigest());
+})->group('RN-27', 'RF-GP-05');
+
+it('sin readmisiones no hay huella aunque haya personas con uuid que se actualizan', function (): void {
+    $informe = ImportReport::of(str_repeat('a', 64), [
+        ImportRow::matched(2, filaDeHuella('Eva'), '01a00000-0000-7000-8000-000000000002', ['locale']),
+    ], false);
+
+    expect($informe->rehireDigest())->toBeNull();
+})->group('RN-27', 'RF-GP-05');
+
+it('la misma persona en dos filas que readmiten cuenta una sola vez', function (): void {
+    $a = '01a00000-0000-7000-8000-000000000001';
+
+    $dosVeces = ImportReport::of(str_repeat('a', 64), [
+        ImportRow::rehire(2, filaDeHuella('Ana'), $a, []),
+        ImportRow::rehire(3, filaDeHuella('Ana'), $a, []),
+    ], false);
+
+    expect($dosVeces->rehireDigest())->toBe(hash('sha256', $a));
+})->group('RN-27', 'RF-GP-05');

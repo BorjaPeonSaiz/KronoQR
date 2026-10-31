@@ -131,3 +131,37 @@ it('acota las marcas del ultimo dia del periodo anterior con su cese, antes y de
 it('en el periodo en curso sin cese no acota las marcas', function (): void {
     expect(marcaRechazadaDelPeriodo(luciaReadmitida(), '2027-06-01', '2027-06-01 06:00', '2027-06-01 14:00'))->toBeNull();
 })->group('RN-27', 'RF-PA-04');
+
+/**
+ * Los limites que el rechazo de la jornada nombra, o `null` si se admite.
+ *
+ * @return array<string, string>|null
+ */
+function limitesDelRechazoDelPeriodo(ManualEntryEligibility $persona, string $fecha): ?array
+{
+    try {
+        $persona->assertWorkDateAllowed(WorkDate::fromIsoDate($fecha, new DateTimeZone('Europe/Madrid')));
+    } catch (WorkDateOutsideEmployment $exception) {
+        return $exception->parameters;
+    }
+
+    return null;
+}
+
+it('de baja otra vez, el rechazo nombra el primer alta y el ultimo cese de toda su historia', function (string $fecha): void {
+    expect(limitesDelRechazoDelPeriodo(luciaReadmitida(EmploymentStatus::TERMINATED, '2027-09-30'), $fecha))
+        ->toBe(['hired_on' => '2026-05-01', 'terminated_on' => '2027-09-30']);
+})->with([
+    'antes del primer alta' => ['2026-04-30'],
+    'despues del ultimo cese' => ['2027-10-01'],
+])->group('RN-27', 'RN-14', 'RF-PA-04');
+
+it('con la baja programada en el periodo en curso, el rechazo nombra ese cese y no el del periodo anterior', function (): void {
+    expect(limitesDelRechazoDelPeriodo(luciaReadmitida(EmploymentStatus::ACTIVE, '2027-09-30'), '2027-10-01'))
+        ->toBe(['terminated_on' => '2027-09-30']);
+})->group('RN-27', 'RN-14', 'RF-PA-04');
+
+it('en el hueco, el rechazo nombra el cese anterior y la readmision siguiente', function (): void {
+    expect(limitesDelRechazoDelPeriodo(luciaReadmitida(), '2027-01-15'))
+        ->toBe(['terminated_on' => '2026-10-31', 'rehired_on' => '2027-04-01']);
+})->group('RN-27', 'RF-PA-04');
