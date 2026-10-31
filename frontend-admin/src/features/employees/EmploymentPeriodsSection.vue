@@ -4,24 +4,37 @@
 // hueco entre dos no admite tramos ni ausencias, y por eso se enseña entero y no
 // solo el ultimo.
 //
+// Cada periodo lleva debajo el historico de correcciones de su fecha de cese (RN-13, RL-04),
+// de la mas antigua a la mas reciente: fecha anterior -> nueva, quien, cuando (en la zona del
+// centro) y el motivo. Viene en la propia ficha, asi que se ve tambien tras recargar: nada se
+// sobrescribe sin rastro.
+//
 // Lo escribe el servidor y aqui solo se pinta: la fecha de alta de un periodo no
 // cambia nunca, y la de cese de una baja efectiva se corrige con motivo y asiento
 // (`TerminationCorrectionDialog`). Nada se edita en la tabla. Corregir es un acto
 // de RRHH y se ofrece solo a quien lleva `employees:*` (cortesia: la policy es la
 // del servidor, regla dura 18).
 import { announce } from '@kronoqr/web-kit/announcer'
-import { formatCivilDate } from '@kronoqr/web-kit/datetime'
+import {
+  FALLBACK_TIMEZONE,
+  formatCivilDate,
+  formatInstantWithZone,
+} from '@kronoqr/web-kit/datetime'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { EMPLOYEES_MANAGE } from '@/features/auth/abilities'
 import { useSessionStore } from '@/features/auth/session.store'
-import type { EmploymentPeriod, EmploymentPeriodCorrection } from '@/shared/api/types'
+import type {
+  EmploymentPeriodCorrection,
+  EmploymentPeriodRecord,
+  TerminationDateCorrectionRecord,
+} from '@/shared/api/types'
 import TerminationCorrectionDialog from './TerminationCorrectionDialog.vue'
 import type { EmploymentProblemKey } from './employmentProblems'
 
 const props = defineProps<{
   employeeUuid: string
-  periods: readonly EmploymentPeriod[]
+  periods: readonly EmploymentPeriodRecord[]
   /** Zona del centro, para acotar la fecha corregida a «hoy». */
   timezone: string | undefined
   /** Una ficha minimizada no se modifica (ADR-060): se lee y nada mas. */
@@ -40,10 +53,9 @@ const session = useSessionStore()
 
 const mayCorrect = computed(() => session.can(EMPLOYEES_MANAGE) && !props.minimised)
 
-const correcting = ref<EmploymentPeriod | null>(null)
-const lastCorrection = ref<EmploymentPeriodCorrection | null>(null)
+const correcting = ref<EmploymentPeriodRecord | null>(null)
 
-function nextPeriodOf(period: EmploymentPeriod): EmploymentPeriod | undefined {
+function nextPeriodOf(period: EmploymentPeriodRecord): EmploymentPeriodRecord | undefined {
   const index = props.periods.findIndex((candidate) => candidate.uuid === period.uuid)
 
   return index === -1 ? undefined : props.periods[index + 1]
@@ -55,7 +67,6 @@ function date(value: string | null): string {
 
 function onCorrected(correction: EmploymentPeriodCorrection): void {
   correcting.value = null
-  lastCorrection.value = correction
   announce(
     t('employees.correction.announce', {
       from: formatCivilDate(correction.previous_terminated_at, locale.value),
@@ -72,7 +83,15 @@ const worthShowing = computed(
   () => props.periods.length > 1 || props.periods.some((period) => period.state === 'terminated'),
 )
 
-const STATE_CLASS: Record<EmploymentPeriod['state'], string> = {
+function moment(correction: TerminationDateCorrectionRecord): string {
+  return formatInstantWithZone(
+    correction.corrected_at,
+    props.timezone ?? FALLBACK_TIMEZONE,
+    locale.value,
+  )
+}
+
+const STATE_CLASS: Record<EmploymentPeriodRecord['state'], string> = {
   active: 'bg-kq-success-soft text-kq-success',
   scheduled: 'bg-kq-warning-soft text-kq-warning',
   terminated: 'bg-kq-danger-soft text-kq-danger',
@@ -87,20 +106,6 @@ const STATE_CLASS: Record<EmploymentPeriod['state'], string> = {
   >
     <h2 class="text-xl font-semibold">{{ t('employees.periods.heading') }}</h2>
     <p class="mt-1 max-w-prose text-kq-text-muted">{{ t('employees.periods.explanation') }}</p>
-
-    <p
-      v-if="lastCorrection !== null"
-      role="status"
-      data-test="last-correction"
-      class="mt-3 rounded-kq-sm border border-kq-border-strong bg-kq-surface-alt p-3 text-kq-text"
-    >
-      {{
-        t('employees.correction.done', {
-          from: formatCivilDate(lastCorrection.previous_terminated_at, locale),
-          to: formatCivilDate(lastCorrection.terminated_at, locale),
-        })
-      }}
-    </p>
 
     <div
       tabindex="0"
@@ -125,36 +130,76 @@ const STATE_CLASS: Record<EmploymentPeriod['state'], string> = {
           </tr>
         </thead>
         <tbody>
-          <tr
-            v-for="period of periods"
-            :key="period.uuid"
-            class="border-b border-kq-border"
-            data-test="employment-period"
-          >
-            <th scope="row" class="px-3 py-2 font-medium">
-              {{ formatCivilDate(period.hired_at, locale) }}
-            </th>
-            <td class="px-3 py-2">{{ date(period.terminated_at) }}</td>
-            <td class="px-3 py-2">
-              <span class="rounded-full px-2 py-0.5 text-sm" :class="STATE_CLASS[period.state]">
-                {{ t(`employees.periods.state.${period.state}`) }}
-              </span>
-            </td>
-            <td v-if="mayCorrect" class="px-3 py-2">
-              <button
-                v-if="period.state === 'terminated'"
-                type="button"
-                data-test="correct-termination"
-                class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-1 text-kq-text hover:bg-kq-surface-alt"
-                @click="correcting = period"
-              >
-                {{ t('employees.correction.action') }}
-                <span class="sr-only">
-                  {{ t('employees.correction.actionFor', { date: date(period.hired_at) }) }}
+          <template v-for="period of periods" :key="period.uuid">
+            <tr
+              :class="period.corrections.length === 0 ? 'border-b border-kq-border' : ''"
+              data-test="employment-period"
+            >
+              <th scope="row" class="px-3 py-2 font-medium">
+                {{ formatCivilDate(period.hired_at, locale) }}
+              </th>
+              <td class="px-3 py-2">{{ date(period.terminated_at) }}</td>
+              <td class="px-3 py-2">
+                <span class="rounded-full px-2 py-0.5 text-sm" :class="STATE_CLASS[period.state]">
+                  {{ t(`employees.periods.state.${period.state}`) }}
                 </span>
-              </button>
-            </td>
-          </tr>
+              </td>
+              <td v-if="mayCorrect" class="px-3 py-2">
+                <button
+                  v-if="period.state === 'terminated'"
+                  type="button"
+                  data-test="correct-termination"
+                  class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-1 text-kq-text hover:bg-kq-surface-alt"
+                  @click="correcting = period"
+                >
+                  {{ t('employees.correction.action') }}
+                  <span class="sr-only">
+                    {{ t('employees.correction.actionFor', { date: date(period.hired_at) }) }}
+                  </span>
+                </button>
+              </td>
+            </tr>
+            <!-- El historico de correcciones del cese de este periodo, sin borrar ninguna. -->
+            <tr
+              v-if="period.corrections.length > 0"
+              class="border-b border-kq-border"
+              data-test="termination-corrections"
+            >
+              <td :colspan="mayCorrect ? 4 : 3" class="px-3 pb-3">
+                <p class="text-sm font-medium text-kq-text-muted">
+                  {{ t('employees.periods.correctionsHeading') }}
+                </p>
+                <ol class="mt-1 flex flex-col gap-2">
+                  <li
+                    v-for="correction of period.corrections"
+                    :key="correction.id"
+                    data-test="termination-correction"
+                  >
+                    <span class="font-medium">
+                      {{
+                        t('employees.periods.correctionDates', {
+                          from: formatCivilDate(correction.previous_terminated_at, locale),
+                          to: formatCivilDate(correction.terminated_at, locale),
+                        })
+                      }}
+                    </span>
+                    <span class="text-kq-text-muted">
+                      ·
+                      {{
+                        t('employees.periods.correctionBy', {
+                          author: correction.corrected_by.name,
+                          moment: moment(correction),
+                        })
+                      }}
+                    </span>
+                    <span class="block max-w-prose whitespace-pre-line break-words">
+                      {{ t('employees.periods.correctionReason', { reason: correction.reason }) }}
+                    </span>
+                  </li>
+                </ol>
+              </td>
+            </tr>
+          </template>
         </tbody>
       </table>
     </div>

@@ -3,8 +3,14 @@ import { announcement, clearAnnouncement } from '@kronoqr/web-kit/announcer'
 import { useSessionStore } from '@/features/auth/session.store'
 import EmploymentPeriodsSection from '@/features/employees/EmploymentPeriodsSection.vue'
 import es from '@/shared/i18n/locales/es.json'
-import type { EmploymentPeriod } from '@/shared/api/types'
-import { EMPLOYEE_UUID, PERIOD_UUID, employmentPeriod, managementUser } from './support/fixtures'
+import type { EmploymentPeriodRecord } from '@/shared/api/types'
+import {
+  EMPLOYEE_UUID,
+  PERIOD_UUID,
+  employmentPeriodRecord,
+  managementUser,
+  terminationCorrection,
+} from './support/fixtures'
 import {
   createTestPinia,
   jsonResponse,
@@ -21,8 +27,8 @@ import {
 const TIMEZONE = 'Europe/Madrid'
 const SECOND_UUID = '019a3b5e-7c00-7d1e-8f2a-3b4c5d6e7f90'
 
-const PAST = employmentPeriod()
-const CURRENT = employmentPeriod({
+const PAST = employmentPeriodRecord()
+const CURRENT = employmentPeriodRecord({
   uuid: SECOND_UUID,
   hired_at: '2026-10-01',
   terminated_at: null,
@@ -30,7 +36,7 @@ const CURRENT = employmentPeriod({
 })
 
 async function mountSection(
-  periods: EmploymentPeriod[],
+  periods: EmploymentPeriodRecord[],
   options: { abilities?: string[]; minimised?: boolean; attach?: boolean } = {},
 ) {
   const pinia = createTestPinia()
@@ -136,7 +142,11 @@ describe('EmploymentPeriodsSection: la historia de alta y baja (RN-27)', () => {
   it('una baja programada se rotula como tal y no se corrige (se cambia de fecha desde la baja)', async () => {
     const wrapper = await mountSection([
       PAST,
-      employmentPeriod({ hired_at: '2026-10-01', terminated_at: '2026-11-30', state: 'scheduled' }),
+      employmentPeriodRecord({
+        hired_at: '2026-10-01',
+        terminated_at: '2026-11-30',
+        state: 'scheduled',
+      }),
     ])
 
     expect(wrapper.text()).toContain(es.employees.periods.state.scheduled)
@@ -147,7 +157,11 @@ describe('EmploymentPeriodsSection: la historia de alta y baja (RN-27)', () => {
   it('un solo periodo sin baja efectiva no pinta la tabla: repite Datos y Baja', async () => {
     const active = await mountSection([CURRENT])
     const scheduled = await mountSection([
-      employmentPeriod({ hired_at: '2026-10-01', terminated_at: '2026-11-30', state: 'scheduled' }),
+      employmentPeriodRecord({
+        hired_at: '2026-10-01',
+        terminated_at: '2026-11-30',
+        state: 'scheduled',
+      }),
     ])
 
     expect(active.find('[data-test="employment-periods"]').exists()).toBe(false)
@@ -177,6 +191,74 @@ describe('EmploymentPeriodsSection: la historia de alta y baja (RN-27)', () => {
     const wrapper = await mountSection([PAST], { minimised: true })
 
     expect(wrapper.find('[data-test="correct-termination"]').exists()).toBe(false)
+  })
+})
+
+describe('EmploymentPeriodsSection: historico de correcciones del cese (RN-13, RL-04)', () => {
+  const CORRECTED = employmentPeriodRecord({
+    terminated_at: '2026-09-02',
+    corrections: [
+      terminationCorrection({
+        id: 1,
+        previous_terminated_at: '2026-08-31',
+        terminated_at: '2026-09-01',
+        reason: 'Primera correccion tras revisar el cuadrante',
+      }),
+      terminationCorrection({
+        id: 2,
+        previous_terminated_at: '2026-09-01',
+        terminated_at: '2026-09-02',
+        corrected_by: { uuid: '0199f0aa-2222-7000-8000-0123456789ab', name: 'Marta Soler' },
+        corrected_at: '2026-11-02T09:12:44.120Z',
+        reason: 'Trabajo hasta el 2\nsegun el cuadrante firmado',
+      }),
+    ],
+  })
+
+  it('enseña cada correccion con la fecha anterior y la nueva, quien, cuando y el motivo, de la mas antigua a la mas reciente', async () => {
+    const wrapper = await mountSection([CORRECTED])
+    const items = wrapper.findAll('[data-test="termination-correction"]')
+
+    expect(items).toHaveLength(2)
+    expect(items[0]?.text()).toContain('De 31 ago 2026 a 1 sept 2026')
+    expect(items[0]?.text()).toContain('Direccion RRHH')
+    expect(items[0]?.text()).toContain('Motivo: Primera correccion tras revisar el cuadrante')
+    expect(items[1]?.text()).toContain('De 1 sept 2026 a 2 sept 2026')
+    expect(items[1]?.text()).toContain('Marta Soler')
+    // El instante sale en la zona del centro, con la zona escrita: 09:12 UTC es 10:12 en Madrid (CET).
+    expect(items[1]?.text()).toContain('10:12')
+    expect(items[1]?.text()).toContain('CET')
+    expect(items[1]?.text()).toContain('Motivo: Trabajo hasta el 2')
+  })
+
+  it('el historico esta en la propia ficha: se ve igual al recargar, sin depender de la sesion', async () => {
+    const wrapper = await mountSection([CORRECTED])
+
+    expect(wrapper.find('[data-test="termination-corrections"]').text()).toContain(
+      es.employees.periods.correctionsHeading,
+    )
+    expect(wrapper.find('[data-test="last-correction"]').exists()).toBe(false)
+  })
+
+  it('un periodo sin correcciones no pinta fila de historico', async () => {
+    const wrapper = await mountSection([PAST])
+
+    expect(wrapper.find('[data-test="termination-corrections"]').exists()).toBe(false)
+  })
+
+  it('el motivo largo conserva sus saltos de linea y no desborda la tabla', async () => {
+    const wrapper = await mountSection([CORRECTED])
+    const reason = wrapper.findAll('[data-test="termination-correction"]')[1]?.find('.block')
+
+    expect(reason?.classes()).toContain('whitespace-pre-line')
+    expect(reason?.classes()).toContain('break-words')
+  })
+
+  it('quien no puede corregir tambien lo ve, con la fila a todo el ancho de la tabla', async () => {
+    const wrapper = await mountSection([CORRECTED], { abilities: ['employees:read'] })
+
+    expect(wrapper.findAll('[data-test="termination-correction"]')).toHaveLength(2)
+    expect(wrapper.find('[data-test="termination-corrections"] td').attributes('colspan')).toBe('3')
   })
 })
 
@@ -253,9 +335,8 @@ describe('TerminationCorrectionDialog: corregir la fecha de cese (RN-27, RL-04)'
     expect(wrapper.emitted('corrected')).toHaveLength(1)
     expect(announcement.value).toContain('31 ago 2026')
     expect(announcement.value).toMatch(/2 sep/)
-    // El dato anterior no desaparece: sigue a la vista junto al nuevo.
-    expect(wrapper.find('[data-test="last-correction"]').text()).toContain('31 ago 2026')
-    expect(wrapper.find('[data-test="last-correction"]').text()).toMatch(/2 sep/)
+    // El historico llega con la ficha releida, no se inventa aqui.
+    expect(wrapper.find('[data-test="termination-correction"]').exists()).toBe(false)
   })
 
   it('nunca admite una fecha posterior a hoy ni anterior al alta del periodo', async () => {

@@ -30,6 +30,9 @@ export type OffboardEmployeeRequest = Schemas['OffboardEmployeeRequest']
 // Baja programada, readmision y correccion de la fecha de cese (RN-14, RN-27, ADR-062).
 export type EmployeeOffboarding = Schemas['EmployeeOffboarding']
 export type EmploymentPeriod = Schemas['EmploymentPeriod']
+/** El periodo de la ficha de rrhh+: lleva `offboarded_at` y sus correcciones del cese (RN-13, RN-27). */
+export type EmploymentPeriodRecord = Schemas['EmploymentPeriodRecord']
+export type TerminationDateCorrectionRecord = Schemas['TerminationDateCorrectionRecord']
 export type RehireContract = Schemas['RehireContract']
 export type RehireEmployeeRequest = Schemas['RehireEmployeeRequest']
 export type RehireEmployeesRequest = Schemas['RehireEmployeesRequest']

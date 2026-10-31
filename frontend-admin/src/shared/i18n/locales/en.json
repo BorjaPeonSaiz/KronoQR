@@ -519,7 +519,11 @@
         "active": "Employed",
         "scheduled": "Offboarding scheduled",
         "terminated": "Former staff"
-      }
+      },
+      "correctionsHeading": "Corrections of the termination date",
+      "correctionDates": "From {from} to {to}",
+      "correctionBy": "{author} · {moment}",
+      "correctionReason": "Reason: {reason}"
     },
     "correction": {
       "action": "Correct the termination date",
@@ -543,8 +547,7 @@
       "consequenceCards": "The cards stay revoked.",
       "consequenceRetention": "The retention period of the record counts from the corrected date.",
       "consequenceContract": "The contract that was closed when this person was rehired keeps its end date: correcting the termination does not move it. If needed, register a new contract.",
-      "announce": "Termination date corrected: from {from} to {to}.",
-      "done": "Last correction recorded: the termination date went from {from} to {to}. The previous date is kept with the reason, your name and the moment."
+      "announce": "Termination date corrected: from {from} to {to}."
     },
     "rehire": {
       "action": "Rehire",

@@ -18,6 +18,7 @@ import type {
   EmployeeWorkDays,
   EmploymentContract,
   EmploymentPeriod,
+  EmploymentPeriodRecord,
   Incident,
   IncidentCollection,
   IssuedSupportGrant,
@@ -35,6 +36,7 @@ import type {
   SupportGrant,
   SupportGrantCollection,
   TemporaryPasswordIssued,
+  TerminationDateCorrectionRecord,
   TwoFactorChallenge,
   TwoFactorEnrolment,
   WorkDayCorrection,
@@ -82,6 +84,42 @@ export function employmentPeriod(overrides: Partial<EmploymentPeriod> = {}): Emp
     hired_at: '2026-03-16',
     terminated_at: '2026-08-31',
     state: 'terminated',
+    ...overrides,
+  }
+}
+
+/**
+ * El periodo tal como lo trae la ficha de rrhh+ (RN-27): con `offboarded_at` (UTC) y sus
+ * correcciones del cese, de la mas antigua a la mas reciente. Una baja efectiva sin
+ * `offboarded_at` explicito se hizo efectiva el dia siguiente al cese.
+ */
+export function employmentPeriodRecord(
+  overrides: Partial<EmploymentPeriodRecord> = {},
+): EmploymentPeriodRecord {
+  const base = employmentPeriod(overrides)
+
+  return {
+    ...base,
+    offboarded_at:
+      base.state === 'terminated' && base.terminated_at !== null
+        ? `${base.terminated_at}T22:00:04.512Z`
+        : null,
+    corrections: [],
+    ...overrides,
+  }
+}
+
+/** Una correccion del cese del historico de un periodo (RN-13, RL-04). */
+export function terminationCorrection(
+  overrides: Partial<TerminationDateCorrectionRecord> = {},
+): TerminationDateCorrectionRecord {
+  return {
+    id: 12,
+    previous_terminated_at: '2026-08-31',
+    terminated_at: '2026-09-02',
+    corrected_at: '2026-11-02T09:12:44.120Z',
+    corrected_by: { uuid: '0199f0aa-1111-7000-8000-0123456789ab', name: 'Direccion RRHH' },
+    reason: 'Trabajo hasta el 2 segun el cuadrante firmado',
     ...overrides,
   }
 }

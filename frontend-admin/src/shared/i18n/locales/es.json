@@ -519,7 +519,11 @@
         "active": "En alta",
         "scheduled": "Baja programada",
         "terminated": "De baja"
-      }
+      },
+      "correctionsHeading": "Correcciones de la fecha de cese",
+      "correctionDates": "De {from} a {to}",
+      "correctionBy": "{author} · {moment}",
+      "correctionReason": "Motivo: {reason}"
     },
     "correction": {
       "action": "Corregir la fecha de cese",
@@ -543,8 +547,7 @@
       "consequenceCards": "Las tarjetas siguen revocadas.",
       "consequenceRetention": "El plazo de conservación de la ficha cuenta desde la fecha corregida.",
       "consequenceContract": "El contrato que se cerró al dar de alta de nuevo a esta persona conserva su fecha de fin: corregir el cese no la mueve. Si hace falta, registra un contrato nuevo.",
-      "announce": "Fecha de cese corregida: del {from} al {to}.",
-      "done": "Última corrección registrada: la fecha de cese pasó del {from} al {to}. La fecha anterior queda guardada con el motivo, tu nombre y el momento."
+      "announce": "Fecha de cese corregida: del {from} al {to}."
     },
     "rehire": {
       "action": "Dar de alta de nuevo",

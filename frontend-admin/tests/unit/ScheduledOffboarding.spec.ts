@@ -10,7 +10,7 @@ import {
   board,
   employee,
   employmentContract,
-  employmentPeriod,
+  employmentPeriodRecord,
   managementUser,
   rehired,
 } from './support/fixtures'
@@ -37,7 +37,11 @@ function scheduled(overrides: Partial<Employee> = {}): Employee {
     terminated_at: '2026-11-15',
     offboarding: { state: 'scheduled', terminated_at: '2026-11-15' },
     employment_periods: [
-      employmentPeriod({ hired_at: '2026-08-14', terminated_at: '2026-11-15', state: 'scheduled' }),
+      employmentPeriodRecord({
+        hired_at: '2026-08-14',
+        terminated_at: '2026-11-15',
+        state: 'scheduled',
+      }),
     ],
     ...overrides,
   })
@@ -50,7 +54,7 @@ function terminated(overrides: Partial<Employee> = {}): Employee {
     hired_at: '2026-03-16',
     terminated_at: '2026-08-31',
     offboarding: { state: 'effective', terminated_at: '2026-08-31' },
-    employment_periods: [employmentPeriod()],
+    employment_periods: [employmentPeriodRecord()],
     ...overrides,
   })
 }
@@ -398,22 +402,50 @@ describe('dar de alta de nuevo desde la ficha (RN-27)', () => {
     )
   })
 
-  it('con la baja de hoy avisa de esperar a los quioscos antes de que fiche', async () => {
-    const { wrapper } = await mountDetail(
-      terminated({
-        terminated_at: '2026-10-31',
-        offboarding: { state: 'effective', terminated_at: '2026-10-31' },
-      }),
-    )
+  /** Una baja de cese `terminatedAt` que se hizo efectiva en `offboardedAt` (UTC). */
+  function offboardedAt(terminatedAt: string, instant: string): Employee {
+    return terminated({
+      terminated_at: terminatedAt,
+      offboarding: { state: 'effective', terminated_at: terminatedAt },
+      employment_periods: [
+        employmentPeriodRecord({
+          terminated_at: terminatedAt,
+          offboarded_at: instant,
+        }),
+      ],
+    })
+  }
+
+  async function openRehireWith(record: Employee, hiredAt: string) {
+    const { wrapper } = await mountDetail(record)
 
     await wrapper.find('[data-test="rehire-open"]').trigger('click')
     await settle(1)
-    await dialog(wrapper).find<HTMLInputElement>('input[type="date"]').setValue('2026-11-01')
+    await dialog(wrapper).find<HTMLInputElement>('input[type="date"]').setValue(hiredAt)
     await settle(1)
+
+    return wrapper
+  }
+
+  it('si la baja se hizo efectiva hoy avisa de esperar a los quioscos antes de que fiche', async () => {
+    // Cese de hace una semana, registrado esta mañana (08:00 UTC del 31 es hoy en Madrid).
+    const wrapper = await openRehireWith(
+      offboardedAt('2026-10-24', '2026-10-31T08:00:00Z'),
+      '2026-11-01',
+    )
 
     expect(dialog(wrapper).find('[data-test="rehire-recent-warning"]').text()).toContain(
       'espera a que los quioscos estén sincronizados',
     )
+  })
+
+  it('una baja de cese de ayer pero efectiva ayer no avisa: lo manda offboarded_at, no el cese', async () => {
+    const wrapper = await openRehireWith(
+      offboardedAt('2026-10-30', '2026-10-30T22:00:04Z'),
+      '2026-11-01',
+    )
+
+    expect(dialog(wrapper).find('[data-test="rehire-recent-warning"]').exists()).toBe(false)
   })
 })
 
