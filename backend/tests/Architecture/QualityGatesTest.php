@@ -156,8 +156,16 @@ it('exige el MSI del 80 por ciento sobre el dominio, acotado y con OPcache apaga
         ->and($unit[1] ?? '')->toContain('base="origin/main"')
         ->and($unit[1] ?? '')->toContain('"${GITHUB_REF}" = "refs/heads/main"')
         ->and($unit[1] ?? '')->not->toMatch('/\bmake mutate\b(?!-changed)/');
-    expect(preg_match('/^  mutation:\n(.*?)\z/ms', $ci, $mutation))->toBe(1);
-    expect($mutation[1] ?? '')->toMatch('/\bmake mutate\b(?!-changed)/');
+    // La pasada global nocturna se reparte en una matriz de partes (31-10-2026,
+    // `make mutate-part`, SIN `--min`) y el 80 % se aplica sumandolas en
+    // `mutation-total`. `make mutate` entero sigue en el Makefile para local.
+    expect(preg_match('/^  mutation:\n(.*?)^  mutation-scope:\n/ms', $ci, $mutation))->toBe(1);
+    expect($mutation[1] ?? '')->toContain('make mutate-part MUTATE_MODULES=')
+        ->and($mutation[1] ?? '')->not->toContain('--min');
+    expect(preg_match('/^  mutation-total:\n(.*?)^  secrets-history:\n/ms', $ci, $total))->toBe(1);
+    expect($total[1] ?? '')->toContain('mutation-log.sh total 80');
+    expect($makefile)->toMatch('/^mutate-part: mutate-canary/m')
+        ->and($makefile)->toContain('--path=$(MUTATE_PART_PATHS) --testsuite=Unit');
 
     // Y ningun comentario vuelve a prometer lo contrario (V2-QB-4): «el 80 % a
     // CADA fichero» sobrevivio en ci.yml a la revision del 02-10 que lo

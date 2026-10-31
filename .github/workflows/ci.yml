@@ -93,8 +93,8 @@
 # -asi el check «③» del mismo SHA dice lo mismo en los dos eventos-, y frente
 # al `before` del push solo en `main` (R6-DV-01/02: antes el disparo manual solo
 # miraba el MSI global y esta puerta no se evaluaba hasta entrar en `main`). La
-# pasada COMPLETA, MSI global, es el job
-# `mutation`, al final del fichero -nocturna y a mano- porque `unit` no puede alojarla: no se ejecuta en `schedule` (ver
+# pasada COMPLETA, MSI global, son los jobs
+# `mutation` (matriz de partes) y `mutation-total` (suma), al final del fichero -nocturna y a mano- porque `unit` no puede alojarla: no se ejecuta en `schedule` (ver
 # mas abajo). El umbral `--min=80` no cambia en ningun caso: lo unico que
 # cambia es cuantos ficheros mide cada pasada.
 #
@@ -121,12 +121,12 @@ on:
         required: false
         default: ""
       full_mutation:
-        description: "Ejecuta tambien la mutacion completa (MSI global, hasta 120 min). Por omision solo corre de noche; el cierre de bloque se apoya en make mutate-changed."
+        description: "Ejecuta tambien la mutacion completa (MSI global, repartida en una matriz de partes de hasta 90 min cada una). Por omision solo corre de noche; el cierre de bloque se apoya en make mutate-changed."
         type: boolean
         required: false
         default: false
   schedule:
-    # Dispara SOLO los jobs nocturnos: `gate-coverage`, `mutation`, `restore-cycle`,
+    # Dispara SOLO los jobs nocturnos: `gate-coverage`, `mutation` (y `mutation-scope`, `mutation-total`), `restore-cycle`,
     # `secrets-history`, `performance` y `performance-kiosk` (ver sus comentarios). Todos los demas de este fichero
     # llevan `if: github.event_name != 'schedule'` -o la variante que ya tenian
     # `clean-install`/`update`, que sin la exclusion explicita habrian
@@ -1637,15 +1637,64 @@ jobs:
   # dominio que la mutacion ve (`make mutate-scope`, M6) y el log entero como
   # artefacto con la puntuacion y los ficheros con mutantes vivos en el resumen
   # (M8, R2-QB-01). El MSI se lee del resumen del run, no de `gh run view --log`.
+  #
+  # REPARTIDA EN PARTES desde el 31-10-2026 (tres jobs: `mutation` en matriz,
+  # `mutation-scope` y `mutation-total`). En un solo runner de 4 vCPU la pasada
+  # entera tardo 64-92 min entre el 16 y el 29-10 y GitHub la corto a los 120
+  # min el 25, 27 y 28 y a los 180 el 30 y el 31 (runs 40176647491, 40477715040,
+  # 40666196611, 41037860602 y 41189683683): el dominio crece (6744-6802
+  # mutantes en 306-308 ficheros) y el mismo runner varia mas de 2x entre
+  # noches. Subir el tope solo aplazaba el corte.
+  #
+  #   · `mutation` (matriz): cada parte muta un grupo de `Modules/*/Domain` en su
+  #     propio runner con `make mutate-part MUTATE_MODULES=...` (canario antes,
+  #     mismas opciones y suite Unit que `make mutate`) y SIN `--min`.
+  #   · `mutation-total`: descarga el log de cada parte, SUMA los mutantes y
+  #     exige el 80 % de RQ-10 sobre el conjunto
+  #     (`mutation-log.sh total 80`). Es el umbral de siempre, global; no se
+  #     exige un 80 % por parte porque seria otro, mas estricto (un modulo al
+  #     78 % con otro al 95 % pueden cumplir el global y no el por parte). Falla tambien si falta el
+  #     log de alguna parte o si alguna termino mal: sin una parte no hay nota.
+  #   · `mutation-scope`: la puerta de lo que la mutacion ve (M6), aparte para
+  #     no pagar su cobertura Xdebug en cada parte.
+  #
+  # El reparto por lineas de codigo ejecutable (sin comentarios ni llaves) de
+  # cada `Domain`: Product 5942 (37 %), Attendance 2295 + Kiosk 421, Compliance
+  # 2087 + Identity 820, Reporting 1841 + Shared 1256 y Workforce 1413. Con la
+  # pasada entera en ~80-90 min un dia normal, la parte de Product es la mas
+  # larga (~30-35 min) y las demas 8-17; mas ~4 min de preparacion, canario y
+  # creacion de mutantes en cada una. Con el runner lento de las noches de
+  # 180 min (2x o mas) la mayor sigue en ~75 min, por debajo de los 90 del
+  # tope. Son estimaciones por tamano: el primer run real las mide (el
+  # resumen de cada parte y las duraciones del run); si una parte pasa de 60,
+  # se parte por modulo. Todos los modulos de `Modules/*/Domain` tienen que
+  # estar en alguna parte: `NightlyMutationMatrixTest` lo vigila en la etapa ②.
   #-----------------------------------------------------------------------------
   mutation:
-    name: "Mutacion completa (RQ-10, nocturna)"
+    name: "Mutacion · ${{ matrix.part }} (RQ-10, nocturna)"
     runs-on: ubuntu-24.04
-    # 180 desde el 28-10-2026: la pasada completa tardo 80 min el 26-10 y se
-    # corto a los 120 el 25, el 27 y el 28. Partirla en varios jobs queda
-    # pendiente (HANDOFF).
-    timeout-minutes: 180
+    # 90 por parte (la pasada entera tardaba hasta 92 min y la parte mayor es
+    # el 37 % de ella): cada parte cabe con margen aunque el runner vaya 2x mas
+    # lento, y una colgada se corta sin llevarse tres horas.
+    timeout-minutes: 90
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_mutation)
+
+    strategy:
+      # Que una parte falle no cancela las demas: el resumen global necesita
+      # todas para dar la nota, y cada una es un runner distinto.
+      fail-fast: false
+      matrix:
+        include:
+          - part: product
+            modules: Product
+          - part: attendance
+            modules: Attendance,Kiosk
+          - part: compliance
+            modules: Compliance,Identity
+          - part: reporting
+            modules: Reporting,Shared
+          - part: workforce
+            modules: Workforce
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -1660,44 +1709,138 @@ jobs:
           # con XDEBUG_MODE=coverage.
           coverage: xdebug
 
+      - name: "Mutacion de ${{ matrix.modules }} (sin minimo propio, el 80 % es global)"
+        # Sin base de datos: `make mutate-part` ejecuta solo la suite `Unit`, y
+        # antes el canario (`make mutate-canary`, R2-QB-06).
+        # El log entero va a un fichero (M8): `gh run view --log` lo corta
+        # antes de la puntuacion. Los pasos siguientes lo resumen y lo suben.
+        # `set -o pipefail`: sin el, el `run:` de GitHub (bash -e sin pipefail)
+        # toma el codigo de `tee`, siempre 0, y la mutacion no podria fallar.
+        env:
+          MUTATE_MODULES: ${{ matrix.modules }}
+          PART: ${{ matrix.part }}
+        run: |
+          set -euo pipefail
+          make mutate-part MUTATE_MODULES="${MUTATE_MODULES}" 2>&1 | tee "${RUNNER_TEMP}/${PART}.log"
+
+      - name: Resumen de la parte
+        if: always()
+        env:
+          PART: ${{ matrix.part }}
+        run: |
+          log="${RUNNER_TEMP}/${PART}.log"
+          if [ -f "${log}" ]; then
+            sh .github/scripts/mutation-log.sh summary "${log}" "Mutacion · ${PART} (RQ-10)" >>"$GITHUB_STEP_SUMMARY"
+          else
+            echo "### Mutacion · ${PART} (RQ-10)" >>"$GITHUB_STEP_SUMMARY"
+          fi
+          {
+            echo ""
+            echo "Esta parte no tiene minimo propio: el MSI >= 80 % es global y lo"
+            echo "calcula el job \`Mutacion completa (RQ-10, nocturna)\` sumando las partes."
+          } >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Subir el log de la parte
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mutacion-parte-${{ matrix.part }}-log
+          path: ${{ runner.temp }}/${{ matrix.part }}.log
+          if-no-files-found: ignore
+          # El log entero de la noche (con todas las partes) lo conserva
+          # `mutation-total` 30 dias; este es el material de partida.
+          retention-days: 7
+
+  mutation-scope:
+    name: "Parte del dominio que la mutacion ve (M6, nocturna)"
+    runs-on: ubuntu-24.04
+    # 48 s medidos en el contenedor (suite Unit con Xdebug) mas la preparacion.
+    timeout-minutes: 30
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_mutation)
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/php-toolchain
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          coverage: xdebug
+
       - name: Parte del dominio que la mutacion ve (cobertura Unit de Modules/*/Domain, M6)
         # `--covered-only` solo muta lo que la suite Unit ejecuta. Esta puerta
         # impide que esa parte encoja sin que nadie lo vea; el umbral y el
         # motivo de no quitar la opcion estan junto a MUTATION_SCOPE_MIN en el
-        # Makefile. Va antes y no despues para que su rojo no dependa de que
-        # la mutacion termine en 120 min.
+        # Makefile. Es un job aparte para que su rojo no dependa de que la
+        # mutacion termine ni de que las partes quepan en su tiempo.
         run: make mutate-scope
 
-      - name: Mutacion COMPLETA sobre Modules/*/Domain (MSI >= 80 %)
-        # Sin base de datos: `make mutate` ejecuta solo la suite `Unit`, y antes
-        # el canario (`make mutate-canary`, R2-QB-06).
-        # `if: always()`: si la puerta de arriba falla, la mutacion se mide
-        # igual; son dos preguntas distintas.
-        # El log entero va a un fichero (M8): `gh run view --log` lo corta
-        # antes de la puntuacion. Los dos pasos siguientes lo resumen y lo
-        # suben como artefacto.
-        # `set -o pipefail`: sin el, el `run:` de GitHub (bash -e sin pipefail)
-        # toma el codigo de `tee`, siempre 0, y la mutacion no podria fallar.
+  mutation-total:
+    name: "Mutacion completa (RQ-10, nocturna)"
+    runs-on: ubuntu-24.04
+    needs: mutation
+    timeout-minutes: 10
+    # `always()`: si una parte falla o se corta, este job igualmente resume las
+    # demas y deja el log entero; luego falla el solo por el resultado de la
+    # matriz. Sin `always()` un `needs` en rojo lo dejaria `skipped`.
+    if: always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_mutation))
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Descargar los logs de las partes
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        # Si ninguna parte llego a subir su log, el paso de abajo lo dice con
+        # un error claro en vez de este.
+        continue-on-error: true
+        with:
+          pattern: mutacion-parte-*-log
+          merge-multiple: true
+          path: ${{ runner.temp }}/partes
+
+      - name: MSI global >= 80 % sumando las partes (RQ-10)
+        env:
+          RESULTADO_PARTES: ${{ needs.mutation.result }}
+        run: |
+          set -euo pipefail
+          set -- "${RUNNER_TEMP}"/partes/*.log
+          if [ ! -e "$1" ]; then
+            echo "::error title=Mutacion nocturna sin logs::Ninguna parte ha subido su log (resultado de la matriz: ${RESULTADO_PARTES}). Abre los jobs «Mutacion · ...» del run: el fallo esta en la preparacion o en el canario."
+            echo "### Mutacion completa (RQ-10)" >>"$GITHUB_STEP_SUMMARY"
+            echo "" >>"$GITHUB_STEP_SUMMARY"
+            echo "**Sin puntuacion global**: ninguna parte ha subido su log." >>"$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          rc=0
+          sh .github/scripts/mutation-log.sh total 80 "$@" >"${RUNNER_TEMP}/mutacion-total.md" || rc=$?
+          cat "${RUNNER_TEMP}/mutacion-total.md" >>"$GITHUB_STEP_SUMMARY"
+          {
+            echo ""
+            echo "MSI >= 80 % sobre Modules/*/Domain, sumando las partes de la matriz. En cada"
+            echo "*push* solo se muta lo que ese push cambia (\`make mutate-changed\`, job"
+            echo "\`unit\`); esta es la pasada completa, nocturna y del disparo manual con"
+            echo "\`full_mutation\`."
+          } >>"$GITHUB_STEP_SUMMARY"
+          if [ "${RESULTADO_PARTES}" != "success" ]; then
+            echo "::error title=Mutacion nocturna incompleta::La matriz de partes ha terminado en «${RESULTADO_PARTES}»: sin todas las partes no hay MSI global. Mira el job de la parte que fallo."
+            exit 1
+          fi
+          exit "${rc}"
+
+      - name: Juntar el log completo de la mutacion
         if: always()
         run: |
           set -euo pipefail
-          make mutate 2>&1 | tee "${RUNNER_TEMP}/mutacion-completa.log"
-
-      - name: Resumen
-        if: always()
-        run: |
-          log="${RUNNER_TEMP}/mutacion-completa.log"
-          if [ -f "${log}" ]; then
-            sh .github/scripts/mutation-log.sh summary "${log}" "Mutacion completa (RQ-10)" >>"$GITHUB_STEP_SUMMARY"
-          else
-            echo "### Mutacion completa (RQ-10)" >>"$GITHUB_STEP_SUMMARY"
-          fi
-          {
-            echo ""
-            echo "MSI >= 80 % sobre Modules/*/Domain. En cada *push* solo se muta lo"
-            echo "que ese push cambia (\`make mutate-changed\`, job \`unit\`); esta es la"
-            echo "pasada completa, nocturna y del disparo manual con \`full_mutation\`."
-          } >>"$GITHUB_STEP_SUMMARY"
+          out="${RUNNER_TEMP}/mutacion-completa.log"
+          : >"${out}"
+          for f in "${RUNNER_TEMP}"/partes/*.log; do
+            [ -e "${f}" ] || continue
+            printf '\n===== parte: %s =====\n' "$(basename "${f}" .log)" >>"${out}"
+            cat "${f}" >>"${out}"
+          done
 
       - name: Subir el log completo de la mutacion
         if: always()

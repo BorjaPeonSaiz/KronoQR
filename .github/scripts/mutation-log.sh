@@ -26,6 +26,15 @@
 #       «[mutate-file] >>>» y «[mutate-file] <<<») no cuentan para la nota
 #       ni para los vivos del conjunto: salen en una tabla propia.
 #
+#   mutation-log.sh total MINIMO FICHERO...
+#       La nota GLOBAL de la mutacion completa nocturna, que se reparte en
+#       partes (`make mutate-part`, una matriz de jobs en ci.yml). Cada
+#       FICHERO es el log de una parte; suma sus mutantes (muertos = tested +
+#       timeout, la formula de Pest), escribe el resumen en Markdown y sale con
+#       1 si el conjunto queda por debajo de MINIMO, si ninguna parte genero
+#       mutantes o si falta el log de alguna parte o no llego al final. Es el
+#       mismo umbral de RQ-10 sobre los mismos mutantes, no uno por parte.
+#
 # FICHERO es la salida de Pest ya capturada, con o sin colores. Con
 # `--parallel` Pest no imprime una linea por mutante, solo los vivos con su
 # diff; por eso el resumen cuenta vivos por fichero y no da la nota de cada
@@ -34,14 +43,14 @@
 # POSIX sh y no bash: lo ejecuta `make`, cuyo sh en la CI es dash.
 #
 # Codigos de salida: 0 bien · 1 el canario no dio lo esperado, o no se
-# encontro el reparto · 2 uso incorrecto.
+# encontro el reparto (en `total`, tambien: MSI global bajo el minimo) · 2 uso incorrecto.
 
 set -eu
 # El IFS se compone con printf: dash no entiende $'\n\t'.
 IFS="$(printf '\n\t')"
 
 uso() {
-  printf 'uso: mutation-log.sh canary ESPERADO FICHERO | summary FICHERO [TITULO]\n' >&2
+  printf 'uso: mutation-log.sh canary ESPERADO FICHERO | summary FICHERO [TITULO] | total MINIMO FICHERO...\n' >&2
   exit 2
 }
 
@@ -162,6 +171,87 @@ summary)
     printf '\nCada fichero por separado (minimo propio, %sMUTATE_FILE_MIN%s):\n\n' '`' '`'
     printf '| Fichero | Puntuacion | Estado |\n|---|---:|---|\n'
     printf '%s\n' "$por_fichero"
+  fi
+  ;;
+total)
+  # La nota GLOBAL de la mutacion completa nocturna, repartida en partes
+  # (`make mutate-part`): suma los mutantes de cada parte y aplica el minimo al
+  # conjunto, con la formula de Pest: (tested + timeout) / todos. Es el mismo
+  # umbral de RQ-10 sobre los mismos mutantes, no uno por parte.
+  [ "$#" -ge 3 ] || uso
+  minimo="$2"
+  shift 2
+  case "$minimo" in '' | *[!0-9]*) uso ;; esac
+  suma_total=0
+  suma_muertos=0
+  fallo=0
+  filas=""
+  vivos=$(mktemp)
+  trap 'rm -f "$vivos"' EXIT
+  for fichero in "$@"; do
+    nombre=$(basename "$fichero" .log)
+    if [ ! -r "$fichero" ]; then
+      printf '[mutation-log] ERROR: falta el log de la parte %s (%s): la parte no termino o no subio su artefacto.\n' "$nombre" "$fichero" >&2
+      fallo=1
+      continue
+    fi
+    linea=$(reparto "$fichero")
+    if [ -z "$linea" ]; then
+      printf '[mutation-log] ERROR: la parte %s no tiene la linea «Mutations:» de Pest: no llego al final. Mira su log en el artefacto.\n' "$nombre" >&2
+      fallo=1
+      continue
+    fi
+    cuenta=$(printf '%s\n' "$linea" | awk -F', ' '
+      { for (i = 1; i <= NF; i++) {
+          split($i, p, " "); n = p[1] + 0; etiqueta = p[2]
+          if (etiqueta == "tested" || etiqueta == "timeout") { muertos += n; total += n }
+          else if (etiqueta == "untested" || etiqueta == "uncovered" || etiqueta == "pending") { total += n }
+          else { desconocida = 1 }
+      } }
+      END { if (desconocida) print "ERR"; else print total + 0, muertos + 0 }')
+    if [ "$cuenta" = "ERR" ]; then
+      printf '[mutation-log] ERROR: la parte %s tiene un estado de mutante desconocido en «%s». Si Pest ha cambiado el formato, adapta .github/scripts/mutation-log.sh; no se aprueba a ciegas.\n' "$nombre" "$linea" >&2
+      fallo=1
+      continue
+    fi
+    parte_total=${cuenta% *}
+    parte_muertos=${cuenta#* }
+    suma_total=$((suma_total + parte_total))
+    suma_muertos=$((suma_muertos + parte_muertos))
+    filas="${filas}$(printf '| %s | %s | %s |' "$nombre" "$parte_muertos" "$parte_total")
+"
+    limpia "$fichero" | sed -n 's/^ \{0,1\}UNTESTED \([^ ]*\) .*/\1/p' >>"$vivos"
+  done
+  printf '### Mutacion completa (RQ-10)\n\n'
+  if [ -n "$filas" ]; then
+    printf '| Parte | Muertos (tested + timeout) | Mutantes |\n|---|---:|---:|\n'
+    printf '%s' "$filas"
+    printf '\n'
+  fi
+  if [ "$fallo" -ne 0 ]; then
+    printf '**Sin puntuacion global**: alguna parte no llego al final (detalle en el log del job y en el artefacto de esa parte).\n'
+    exit 1
+  fi
+  if [ "$suma_total" -eq 0 ]; then
+    printf '**Sin puntuacion global**: ninguna parte ha generado mutantes. Pest daria la pasada por suspensa; aqui tambien.\n'
+    exit 1
+  fi
+  nota=$(awk -v m="$suma_muertos" -v t="$suma_total" 'BEGIN { printf "%.2f", m * 100 / t }')
+  printf '| | |\n|---|---|\n'
+  printf '| Puntuacion global (MSI) | **%s %%** |\n' "$nota"
+  printf '| Minimo exigido | %s %% |\n' "$minimo"
+  printf '| Mutantes (todas las partes) | %s, de ellos %s muertos |\n\n' "$suma_total" "$suma_muertos"
+  if [ -s "$vivos" ]; then
+    printf 'Ficheros con mutantes vivos, de mas a menos. El diff de cada uno esta en el artefacto de su parte.\n\n'
+    printf '| Vivos | Fichero |\n|---:|---|\n'
+    sort "$vivos" | uniq -c | sort -k1,1nr -k2,2 | awk '{ printf "| %s | `%s` |\n", $1, $2 }'
+  else
+    printf 'Ningun mutante vivo.\n'
+  fi
+  if [ $((suma_muertos * 100)) -lt $((minimo * suma_total)) ]; then
+    printf '\n**Por debajo del minimo**: Mutation score below expected: %s %%. Minimum: %s %%.\n' "$nota" "$minimo"
+    printf '[mutation-log] ERROR: MSI global %s %% por debajo del %s %% (RQ-10). Se escribe la prueba que mata los mutantes vivos de arriba; no se baja el umbral.\n' "$nota" "$minimo" >&2
+    exit 1
   fi
   ;;
 *) uso ;;

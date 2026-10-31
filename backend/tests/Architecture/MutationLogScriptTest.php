@@ -306,13 +306,121 @@ it('declara el canario como suite propia y como codigo medido', function (): voi
 it('mide de noche la parte del dominio que la mutacion ve y deja el log entero como artefacto', function (): void {
     $ci = Repo::contents('.github/workflows/ci.yml');
 
-    expect(preg_match('/^  mutation:\n(.*?)^  secrets-history:\n/ms', $ci, $mutation))->toBe(1);
-    expect($mutation[1] ?? '')->toContain('run: make mutate-scope')
-        ->and($mutation[1] ?? '')->toContain('tee "${RUNNER_TEMP}/mutacion-completa.log"')
-        ->and($mutation[1] ?? '')->toContain('mutation-log.sh summary')
-        ->and($mutation[1] ?? '')->toContain('name: mutacion-completa-log');
+    // La mutacion nocturna son tres jobs (31-10-2026): la matriz de partes
+    // (`mutation`), la puerta de lo que la mutacion ve (`mutation-scope`) y la
+    // suma (`mutation-total`), que es la que deja el log entero.
+    expect(preg_match('/^  mutation:\n(.*?)^  mutation-scope:\n/ms', $ci, $parte))->toBe(1);
+    expect($parte[1] ?? '')->toContain('make mutate-part MUTATE_MODULES="${MUTATE_MODULES}"')
+        ->and($parte[1] ?? '')->toContain('tee "${RUNNER_TEMP}/${PART}.log"')
+        ->and($parte[1] ?? '')->toContain('mutation-log.sh summary')
+        ->and($parte[1] ?? '')->toContain('name: mutacion-parte-${{ matrix.part }}-log');
+
+    expect(preg_match('/^  mutation-scope:\n(.*?)^  mutation-total:\n/ms', $ci, $alcance))->toBe(1);
+    expect($alcance[1] ?? '')->toContain('run: make mutate-scope');
+
+    expect(preg_match('/^  mutation-total:\n(.*?)^  secrets-history:\n/ms', $ci, $total))->toBe(1);
+    expect($total[1] ?? '')->toContain('mutation-log.sh total 80')
+        ->and($total[1] ?? '')->toContain('name: mutacion-completa-log');
 
     expect(preg_match('/^  unit:\n(.*?)^  integration:\n/ms', $ci, $unit))->toBe(1);
     expect($unit[1] ?? '')->toContain('tee "${RUNNER_TEMP}/mutacion-acotada.log"')
         ->and($unit[1] ?? '')->toContain('name: mutacion-acotada-log');
+})->group('RQ-10');
+
+/**
+ * Ejecuta `mutation-log.sh total` sobre varios logs de parte fabricados.
+ *
+ * @param  array<string, string>  $partes  Nombre de la parte => salida de Pest.
+ * @return array{0: int|null, 1: string}
+ */
+function mutationLogScriptTotal(int $minimo, array $partes): array
+{
+    $directorio = sys_get_temp_dir().'/mutation-total-'.bin2hex(random_bytes(4));
+    mkdir($directorio);
+    $ficheros = [];
+    foreach ($partes as $nombre => $salida) {
+        $ficheros[] = $directorio.'/'.$nombre.'.log';
+        file_put_contents(end($ficheros), $salida);
+    }
+
+    $script = new Process(['sh', Repo::file('.github/scripts/mutation-log.sh'), 'total', (string) $minimo, ...$ficheros]);
+    $script->run();
+    array_map('unlink', glob($directorio.'/*.log') ?: []);
+    rmdir($directorio);
+
+    return [$script->getExitCode(), $script->getOutput().$script->getErrorOutput()];
+}
+
+it('suma los mutantes de todas las partes y exige el minimo sobre el conjunto, no sobre cada parte', function (): void {
+    // Una parte al 78 % y otra al 98 %: ninguna regla «80 % por parte» lo
+    // aceptaria, y el conjunto (1025 de 1250 = 82 %) cumple RQ-10.
+    $partes = [
+        'product' => mutationLogScriptPestOutput('220 untested, 780 tested', '78.00%'),
+        'workforce' => mutationLogScriptPestOutput('5 untested, 245 tested', '98.00%'),
+    ];
+    [$codigo, $texto] = mutationLogScriptTotal(80, $partes);
+
+    expect($codigo)->toBe(0)
+        ->and($texto)->toContain('82.00 %')
+        ->and($texto)->toContain('| product | 780 | 1000 |')
+        ->and($texto)->toContain('| workforce | 245 | 250 |');
+})->group('RQ-10');
+
+it('cuenta los tiempos agotados como muertos, como hace Pest, y los pendientes y sin cubrir como vivos', function (): void {
+    // (60 tested + 20 timeout) / (60 + 20 + 10 untested + 5 uncovered + 5 pending) = 80 %
+    [$codigo] = mutationLogScriptTotal(80, [
+        'a' => mutationLogScriptPestOutput('10 untested, 5 uncovered, 5 pending, 20 timeout, 60 tested', '80.00%'),
+    ]);
+    [$suspenso] = mutationLogScriptTotal(81, [
+        'a' => mutationLogScriptPestOutput('10 untested, 5 uncovered, 5 pending, 20 timeout, 60 tested', '80.00%'),
+    ]);
+
+    expect($codigo)->toBe(0)
+        ->and($suspenso)->toBe(1);
+})->group('RQ-10');
+
+it('suspende la mutacion global por debajo del minimo y dice cuanto', function (): void {
+    [$codigo, $texto] = mutationLogScriptTotal(80, [
+        'a' => mutationLogScriptPestOutput('40 untested, 60 tested', '60.00%'),
+        'b' => mutationLogScriptPestOutput('10 untested, 90 tested', '90.00%'),
+    ]);
+
+    expect($codigo)->toBe(1)
+        ->and($texto)->toContain('Mutation score below expected: 75.00 %. Minimum: 80 %.');
+})->group('RQ-10');
+
+it('no da nota global si una parte no llego al final, aunque las demas sean perfectas', function (): void {
+    [$codigo, $texto] = mutationLogScriptTotal(80, [
+        'a' => mutationLogScriptPestOutput('1 untested, 99 tested', '99.00%'),
+        'b' => "  7 Mutations for 1 Files created\n  x.xx.x.\n",
+    ]);
+
+    expect($codigo)->toBe(1)
+        ->and($texto)->toContain('la parte b no tiene la linea «Mutations:»')
+        ->and($texto)->toContain('Sin puntuacion global');
+})->group('RQ-10');
+
+it('no aprueba una mutacion global sin ningun mutante ni un estado de mutante que no conoce', function (): void {
+    [$vacio, $textoVacio] = mutationLogScriptTotal(80, [
+        'a' => mutationLogScriptPestOutput('0 tested', '0.00%'),
+    ]);
+    [$raro, $textoRaro] = mutationLogScriptTotal(80, [
+        'a' => mutationLogScriptPestOutput('3 flaky, 97 tested', '97.00%'),
+    ]);
+
+    expect($vacio)->toBe(1)
+        ->and($textoVacio)->toContain('ninguna parte ha generado mutantes')
+        ->and($raro)->toBe(1)
+        ->and($textoRaro)->toContain('estado de mutante desconocido');
+})->group('RQ-10');
+
+it('lista los vivos de todas las partes en el resumen global', function (): void {
+    [$codigo, $texto] = mutationLogScriptTotal(80, [
+        'a' => mutationLogScriptPestOutput('2 untested, 98 tested', '98.00%', "   UNTESTED  app/Modules/Shared/Domain/Money.php  > Line 3: Plus - ID: 1\n   UNTESTED  app/Modules/Shared/Domain/Money.php  > Line 4: Minus - ID: 2\n"),
+        'b' => mutationLogScriptPestOutput('1 untested, 99 tested', '99.00%', "   UNTESTED  app/Modules/Product/Domain/Support/Licence.php  > Line 9: Equal - ID: 3\n"),
+    ]);
+
+    expect($codigo)->toBe(0)
+        ->and($texto)->toContain('| 2 | `app/Modules/Shared/Domain/Money.php` |')
+        ->and($texto)->toContain('| 1 | `app/Modules/Product/Domain/Support/Licence.php` |');
 })->group('RQ-10');

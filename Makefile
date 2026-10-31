@@ -250,7 +250,7 @@ endif
 .PHONY: help up down restart build ps logs shell seed test test-unit test-integration test-performance e2e-performance \
         test-arch test-contract quality tools-ready php-lint deptrac rector sh-lint api-lint sast \
         sast-community trivy-fs trivy-image secrets-scan sbom build-ci-images release-gate nginx-smoke \
-        traceability traceability-check docs-consistency deps-audit-php deps-audit-js coverage coverage-now mutate mutate-canary mutate-scope mutate-changed e2e load-test dast clean changelog changelog-check tool-versions \
+        traceability traceability-check docs-consistency deps-audit-php deps-audit-js coverage coverage-now mutate mutate-part mutate-canary mutate-scope mutate-changed e2e load-test dast clean changelog changelog-check tool-versions \
         backup backup-verify restore-drill restore-drill-pitr observability-check
 
 help: ## Muestra esta ayuda
@@ -292,6 +292,7 @@ help: ## Muestra esta ayuda
 	@echo "  make coverage         Cobertura: dominio 90, global 75 por ciento"
 	@echo "  make coverage-now     Cobertura actual, sin umbral"
 	@echo "  make mutate           Mutacion COMPLETA sobre el dominio, MSI 80 por ciento (nocturna y a mano)"
+	@echo "  make mutate-part      Una parte de la mutacion completa por modulos (MUTATE_MODULES=A,B); la nocturna las reparte en una matriz"
 	@echo "  make mutate-changed   Mutacion acotada a los ficheros de dominio de este push (etapa 3 de la CI)"
 	@echo "  make mutate-canary    Canario: la mutacion distingue un mutante vivo de uno muerto (antes de las dos)"
 	@echo "  make mutate-scope     Parte del dominio que la mutacion ve: cobertura de la suite Unit (nocturna)"
@@ -1310,6 +1311,40 @@ else
 # arranque de los procesos hijos como ErrorException: no dejar ninguno.
 	$(RUN_APP_XDEBUG) sh -c 'PHP_INI_SCAN_DIR=":$$(pwd)/tools/mutation" $(PEST) $(MUTATE_OPTIONS) --path=$(MUTATE_PATHS) --testsuite=Unit --min=80'
 endif
+
+# LA MUTACION COMPLETA POR PARTES (nocturna, 31-10-2026).
+#
+# `make mutate` en un solo runner de 4 vCPU tardo 64-92 min entre el 16 y el 29-10 y
+# GitHub la corto a los 120 min el 25, 27 y 28 y a los 180 el 30 y 31: el dominio
+# crece (6744-6802 mutantes en 306-308 ficheros) y el runner varia 2x entre noches.
+# El job nocturno `mutation` de ci.yml la reparte ahora en una matriz de partes,
+# una por grupo de modulos, cada una en su runner: `make mutate-part
+# MUTATE_MODULES=Attendance,Kiosk`. Mismas MUTATE_OPTIONS, misma suite Unit, mismo
+# canario antes (`mutate-canary` es requisito de este objetivo).
+#
+# Lo UNICO que cambia es el `--min`: una parte NO lo lleva. El 80 % de RQ-10 es
+# GLOBAL (todo Modules/*/Domain) y Pest da una nota por ejecucion; si cada parte
+# exigiera su 80 %, un modulo al 78 % y otro al 95 % -que pueden cumplir el umbral
+# global- pondrian la noche en rojo, es decir, el umbral seria OTRO, mas estricto
+# y no el de RQ-10. En cambio, sin `--min` la parte solo falla si el entorno falla
+# (canario, Pest roto). El MSI lo calcula el job `mutation-total` sumando los
+# mutantes de todas las partes (`.github/scripts/mutation-log.sh total`): la nota
+# es (muertos + timeout) / todos, la misma formula que Pest, sobre los mismos
+# mutantes; el umbral sigue siendo `--min=80` entero sobre el conjunto.
+#
+# Un grupo cuyo dominio no genera mutantes (Kiosk, por ejemplo, si la suite Unit
+# no lo ejecuta) sale con 0 mutantes y codigo 0, sin `--min`. Que TODOS los
+# modulos de `Modules/*/Domain` esten en alguna parte de la matriz lo vigila
+# `NightlyMutationMatrixTest`: un modulo nuevo sin parte hace fallar la etapa ②.
+MUTATE_MODULES ?=
+MUTATE_PART_PATHS := $(subst $(space),$(comma),$(foreach m,$(subst $(comma),$(space),$(MUTATE_MODULES)),app/Modules/$(m)/Domain))
+
+mutate-part: mutate-canary ## Una parte de la mutacion completa: make mutate-part MUTATE_MODULES=Attendance,Kiosk (sin --min; el MSI lo suma el job mutation-total)
+	@test -n "$(MUTATE_MODULES)" || { echo "[make] ERROR: falta MUTATE_MODULES. Ejemplo: make mutate-part MUTATE_MODULES=Attendance,Kiosk"; exit 2; }
+	@for m in $(subst $(comma),$(space),$(MUTATE_MODULES)); do \
+		[ -d "backend/app/Modules/$$m/Domain" ] || { echo "[make] ERROR: backend/app/Modules/$$m/Domain no existe. Modulos con dominio: $(notdir $(patsubst %/Domain,%,$(wildcard backend/app/Modules/*/Domain)))"; exit 2; }; \
+	done
+	$(RUN_APP_XDEBUG) sh -c 'PHP_INI_SCAN_DIR=":$$(pwd)/tools/mutation" $(PEST) $(MUTATE_OPTIONS) --path=$(MUTATE_PART_PATHS) --testsuite=Unit'
 
 # `mutate` completo tarda 37-57 min medidos en la CI (comentario de arriba) y
 # no cabe en las etapas 1-3 de cada push (doc 02 §10.1). Decision
