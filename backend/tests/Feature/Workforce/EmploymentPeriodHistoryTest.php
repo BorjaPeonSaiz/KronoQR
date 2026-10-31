@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Modules\Compliance\Domain\ValueObject\AuditAction;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use App\Modules\Workforce\Infrastructure\Persistence\Department;
 use Illuminate\Support\Facades\DB;
@@ -9,6 +10,7 @@ use Spectator\Spectator;
 use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
+use Tests\Support\Http\AuthorizationMatrix;
 use Tests\Support\Identity\Credentials;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Time\FrozenTime;
@@ -152,17 +154,44 @@ it('no da los periodos ni sus correcciones al responsable del departamento', fun
         ->and($cuerpo)->not->toContain('corrections');
 })->group('RN-27', 'RF-ID-03', 'RS-05');
 
-it('deniega la ficha, y con ella el historico, al auditor y al quiosco', function (): void {
+it('deniega la ficha, y con ella el historico, a cada actor que la matriz no autoriza', function (string $actor): void {
     $omar = omarConElCeseCorregidoDosVeces();
+    $token = AuthorizationMatrix::tokenFor($actor, ['employee' => $omar['employee'], 'responsable' => '']);
 
-    Api::as(ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::AUDITOR)))
+    $respuesta = Api::as($token)
         ->get('/api/v1/employees/'.$omar['employee'])
-        ->assertValidResponse(403);
+        ->assertStatus(403)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:forbidden');
 
-    Api::as(AttendanceFixtures::kioskToken())
+    $cuerpo = (string) $respuesta->getContent();
+
+    // Una denegacion por rol o por ambito de token no deja `access.denied`:
+    // solo la de alcance (doc 02 §9.4, doc 07 A-16).
+    expect($cuerpo)->not->toContain(EMPLOYMENT_HISTORY_FIRST_REASON)
+        ->and($cuerpo)->not->toContain('2026-10-17')
+        ->and(DB::table('audit_log')->where('action', AuditAction::AccessDenied->value)->count())->toBe(0);
+})->with(fn (): array => array_values(array_diff(
+    AuthorizationMatrix::actors(),
+    AuthorizationMatrix::routes()['GET api/v1/employees/{uuid}'],
+)))->group('RN-27', 'RS-05', 'RQ-07');
+
+it('deniega el historico al responsable de otro departamento y lo deja en auditoria', function (): void {
+    $omar = omarConElCeseCorregidoDosVeces();
+    $jefeDeCocina = ManagementUsers::withRole(UserRole::RESPONSABLE_DEPARTAMENTO);
+    $cocina = WorkforceFixtures::department(WorkforceFixtures::onlySiteId(), 'Cocina');
+    Department::query()->whereKey($cocina)->update(['manager_user_id' => $jefeDeCocina->id]);
+
+    $respuesta = Api::as(ManagementUsers::tokenFor($jefeDeCocina))
         ->get('/api/v1/employees/'.$omar['employee'])
-        ->assertStatus(403);
-})->group('RN-27', 'RS-05');
+        ->assertStatus(403)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:forbidden');
+
+    $asiento = DB::table('audit_log')->where('action', AuditAction::AccessDenied->value)->sole();
+
+    expect((string) $respuesta->getContent())->not->toContain(EMPLOYMENT_HISTORY_FIRST_REASON)
+        ->and((string) json_encode($asiento))->toContain($omar['employee'])
+        ->and((string) json_encode($asiento))->not->toContain(EMPLOYMENT_HISTORY_FIRST_REASON);
+})->group('RN-27', 'RF-ID-03', 'RS-05', 'RQ-07');
 
 it('una baja programada no tiene offboarded_at ni correcciones', function (): void {
     FrozenTime::at('2026-10-30 09:00:00');
