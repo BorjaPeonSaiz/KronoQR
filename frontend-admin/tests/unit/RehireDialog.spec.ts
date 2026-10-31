@@ -454,3 +454,51 @@ describe('RehireDialog: errores, cada uno con su «que hacer» (RN-27)', () => {
     expect(calls.urls).toEqual(['/api/v1/employees/0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b99/rehire'])
   })
 })
+
+describe('RehireDialog: «hoy» es el del centro a medianoche, tambien la noche del cambio de hora (ADR-040, RN-27)', () => {
+  it.each([
+    // 00:00 del 25 en Madrid (CEST) y todavia el 24 en UTC.
+    {
+      ahora: '2026-10-24T22:00:00Z',
+      propuesta: '2026-10-25',
+      efectiva: '2026-10-24T21:59:59Z',
+      avisa: false,
+    },
+    {
+      ahora: '2026-10-24T22:00:00Z',
+      propuesta: '2026-10-25',
+      efectiva: '2026-10-24T22:00:00Z',
+      avisa: true,
+    },
+    // 23:59:59 del 25 en Madrid, ya CET: con el desfase del verano seria el 26.
+    {
+      ahora: '2026-10-25T22:59:59Z',
+      propuesta: '2026-10-25',
+      efectiva: '2026-10-25T22:30:00Z',
+      avisa: true,
+    },
+    // 00:00 del 26 en Madrid: la baja de hace media hora ya fue «ayer».
+    {
+      ahora: '2026-10-25T23:00:00Z',
+      propuesta: '2026-10-26',
+      efectiva: '2026-10-25T22:30:00Z',
+      avisa: false,
+    },
+  ])(
+    'a las $ahora propone $propuesta y una baja efectiva a las $efectiva avisa: $avisa',
+    async ({ ahora, propuesta, efectiva, avisa }) => {
+      vi.setSystemTime(new Date(ahora))
+      stubApi(undefined, undefined, {
+        ...former(),
+        employment_periods: [
+          employmentPeriodRecord({ terminated_at: '2026-08-31', offboarded_at: efectiva }),
+        ],
+      })
+
+      const wrapper = await mountDialog()
+
+      expect(wrapper.find<HTMLInputElement>('input[type="date"]').element.value).toBe(propuesta)
+      expect(wrapper.find('[data-test="rehire-recent-warning"]').exists()).toBe(avisa)
+    },
+  )
+})

@@ -236,3 +236,71 @@ describe('los 409 de la baja, la readmision y la correccion (RN-14, RN-27)', () 
     expect(rehirableEmployeeUuid(new TypeError('x'))).toBeNull()
   })
 })
+
+describe('isRecentTermination en el borde de medianoche de la zona del centro (ADR-040, RN-27)', () => {
+  const MADRID = 'Europe/Madrid'
+
+  it.each([
+    // 2 de octubre, CEST (UTC+2): el dia va de las 22:00 UTC del 1 a las 21:59:59.999 UTC del 2.
+    { hoy: '2026-10-02', instante: '2026-10-01T21:59:59.999Z', esDeHoy: false },
+    { hoy: '2026-10-02', instante: '2026-10-01T22:00:00.000Z', esDeHoy: true },
+    { hoy: '2026-10-02', instante: '2026-10-02T21:59:59.999Z', esDeHoy: true },
+    { hoy: '2026-10-02', instante: '2026-10-02T22:00:00.000Z', esDeHoy: false },
+    // 25 de octubre, cambio de hora: empieza en CEST (22:00 UTC del 24) y acaba en CET (23:00 UTC del 25).
+    { hoy: '2026-10-25', instante: '2026-10-24T21:59:59.999Z', esDeHoy: false },
+    { hoy: '2026-10-25', instante: '2026-10-24T22:00:00.000Z', esDeHoy: true },
+    { hoy: '2026-10-25', instante: '2026-10-25T22:59:59.999Z', esDeHoy: true },
+    { hoy: '2026-10-25', instante: '2026-10-25T23:00:00.000Z', esDeHoy: false },
+    // 29 de marzo, cambio de hora: empieza en CET (23:00 UTC del 28) y acaba en CEST (22:00 UTC del 29).
+    { hoy: '2026-03-29', instante: '2026-03-28T22:59:59.999Z', esDeHoy: false },
+    { hoy: '2026-03-29', instante: '2026-03-28T23:00:00.000Z', esDeHoy: true },
+    { hoy: '2026-03-29', instante: '2026-03-29T21:59:59.999Z', esDeHoy: true },
+    { hoy: '2026-03-29', instante: '2026-03-29T22:00:00.000Z', esDeHoy: false },
+  ])(
+    'una baja efectiva a las $instante es de hoy ($hoy) en Madrid: $esDeHoy',
+    ({ hoy, instante, esDeHoy }) => {
+      expect(
+        isRecentTermination({
+          offboardedAt: instante,
+          terminatedAt: '2026-01-15',
+          today: hoy,
+          timezone: MADRID,
+        }),
+      ).toBe(esDeHoy)
+    },
+  )
+
+  it('la fecha civil es la de la zona del centro que se le da, no la de Madrid ni la del navegador', () => {
+    // 22:30 UTC del 1 de octubre: el 2 en Madrid, todavia el 1 en Canarias.
+    const enZona = (timezone: string) =>
+      isRecentTermination({
+        offboardedAt: '2026-10-01T22:30:00Z',
+        terminatedAt: '2026-01-15',
+        today: '2026-10-02',
+        timezone,
+      })
+
+    expect(enZona('Europe/Madrid')).toBe(true)
+    expect(enZona('Atlantic/Canary')).toBe(false)
+  })
+
+  it.each([
+    { hoy: '2027-01-01', cese: '2026-12-31', aviso: true },
+    { hoy: '2027-01-01', cese: '2026-12-30', aviso: false },
+    { hoy: '2026-03-01', cese: '2026-02-28', aviso: true },
+    { hoy: '2028-03-01', cese: '2028-02-29', aviso: true },
+    { hoy: '2028-03-01', cese: '2028-02-28', aviso: false },
+  ])(
+    'sin offboarded_at, «ayer» de $hoy es $cese por calendario: $aviso',
+    ({ hoy, cese, aviso }) => {
+      expect(
+        isRecentTermination({
+          offboardedAt: undefined,
+          terminatedAt: cese,
+          today: hoy,
+          timezone: MADRID,
+        }),
+      ).toBe(aviso)
+    },
+  )
+})
