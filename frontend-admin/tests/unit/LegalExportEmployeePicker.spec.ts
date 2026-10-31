@@ -25,6 +25,14 @@ const AMRANI = {
   status: 'terminated',
   hired_at: '2022-03-01',
   terminated_at: '2026-02-15',
+  employment_periods: [
+    {
+      uuid: '0199f0c2-5555-7000-8000-000000000001',
+      hired_at: '2022-03-01',
+      terminated_at: '2026-02-15',
+      state: 'terminated',
+    },
+  ],
 }
 
 const OTHER = {
@@ -35,6 +43,14 @@ const OTHER = {
   status: 'active',
   hired_at: '2024-01-10',
   terminated_at: null,
+  employment_periods: [
+    {
+      uuid: '0199f0c2-5555-7000-8000-000000000002',
+      hired_at: '2024-01-10',
+      terminated_at: null,
+      state: 'active',
+    },
+  ],
 }
 
 async function mountPicker(): Promise<Awaited<ReturnType<typeof mountView>>> {
@@ -252,5 +268,94 @@ describe('buscador de la persona de la exportacion', () => {
 
     expect(wrapper.text()).toContain(es.errors.forbidden.title)
     expect(wrapper.text()).not.toContain('403')
+  })
+})
+
+// Todos los periodos de alta de la persona, no solo el ultimo (RN-27, ADR-062,
+// RF-IN-05): el rango de la exportacion puede caer en cualquiera de ellos.
+describe('buscador de la persona de la exportacion: periodos de alta (RN-27)', () => {
+  const READMITIDA = {
+    uuid: '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b92',
+    first_name: 'Lucia',
+    last_name: 'Ferrer',
+    department: { id: 3, name: 'Cocina' },
+    status: 'active',
+    hired_at: '2027-04-01',
+    terminated_at: null,
+    employment_periods: [
+      {
+        uuid: '0199f0c2-5555-7000-8000-000000000011',
+        hired_at: '2025-04-01',
+        terminated_at: '2025-10-31',
+        state: 'terminated',
+      },
+      {
+        uuid: '0199f0c2-5555-7000-8000-000000000012',
+        hired_at: '2026-04-01',
+        terminated_at: '2026-10-31',
+        state: 'terminated',
+      },
+      {
+        uuid: '0199f0c2-5555-7000-8000-000000000013',
+        hired_at: '2027-04-01',
+        terminated_at: null,
+        state: 'active',
+      },
+    ],
+  }
+
+  async function search(person: unknown) {
+    stubFetch(() => jsonResponse({ data: [person], truncated: false }))
+    const wrapper = await mountPicker()
+
+    await typeTerm(wrapper, 'ferrer')
+    await buttonWith(wrapper, picker.search).trigger('click')
+    await settle()
+
+    return wrapper
+  }
+
+  it('enseña cada periodo de alta de una persona readmitida, no solo el ultimo', async () => {
+    const wrapper = await search(READMITIDA)
+    const periods = wrapper.findAll('[data-test="match-period"]').map((item) => item.text())
+
+    expect(periods).toHaveLength(3)
+    expect(periods[0]).toContain('1 abr 2025')
+    expect(periods[0]).toContain('31 oct 2025')
+    expect(periods[1]).toContain('1 abr 2026')
+    expect(periods[1]).toContain('31 oct 2026')
+    expect(periods[2]).toBe('Desde el 1 abr 2027, sin baja')
+  })
+
+  it('el grupo de periodos tiene nombre para quien usa lector de pantalla', async () => {
+    const wrapper = await search(READMITIDA)
+
+    expect(wrapper.find('[data-test="match-periods"] .sr-only').text()).toBe(
+      `${picker.periodsLegend}:`,
+    )
+  })
+
+  it('una baja programada se rotula como tal, con su fecha', async () => {
+    const wrapper = await search({
+      ...READMITIDA,
+      employment_periods: [
+        {
+          uuid: '0199f0c2-5555-7000-8000-000000000014',
+          hired_at: '2026-04-01',
+          terminated_at: '2026-11-30',
+          state: 'scheduled',
+        },
+      ],
+    })
+
+    expect(wrapper.find('[data-test="match-period"]').text()).toBe(
+      'Desde el 1 abr 2026, baja programada para el 30 nov 2026',
+    )
+  })
+
+  it('el uuid de los periodos tampoco se ve', async () => {
+    const wrapper = await search(READMITIDA)
+
+    expect(wrapper.text()).not.toContain('0199f0c2-5555')
   })
 })

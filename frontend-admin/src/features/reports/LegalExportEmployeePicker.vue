@@ -14,6 +14,10 @@
 //    consultas: el resultado vive en este componente y muere con el.
 //  - **El UUID se guarda pero no se ensena.** La persona se reconoce por su
 //    nombre, su departamento y su situacion; el identificador es fontaneria.
+//  - **Todos sus periodos de alta, no solo el ultimo** (RN-27, ADR-062). Una
+//    persona readmitida trabajo en varios, y el rango de la exportacion puede caer
+//    en cualquiera: `hired_at` y `terminated_at` solos harian creer que solo
+//    trabajo en el ultimo. Cada periodo sale con su alta, su cese o «sin baja».
 //
 // El componente vive dentro del `<form>` de la exportacion: Intro en el campo NO
 // debe enviarla, asi que no hay `<form>` anidado y Intro se intercepta.
@@ -25,7 +29,11 @@ import { isApiError } from '@kronoqr/web-kit/http'
 import { computed, nextTick, ref, useId, useTemplateRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { usePersonName } from '@/shared/people/personName'
-import type { LegalExportEmployeeMatch, LegalExportEmployeeSearch } from '@/shared/api/types'
+import type {
+  EmploymentPeriod,
+  LegalExportEmployeeMatch,
+  LegalExportEmployeeSearch,
+} from '@/shared/api/types'
 import { searchLegalExportEmployees } from './legalExport.api'
 
 type SearchMode = 'text' | 'nationalId'
@@ -96,6 +104,21 @@ function describe(match: LegalExportEmployeeMatch): string {
   }
 
   return parts.join(' · ')
+}
+
+/** Un periodo de alta en una linea: «Del 1 mar 2022 al 15 feb 2026», «Desde el … , sin baja»... */
+function periodText(period: EmploymentPeriod): string {
+  const from = formatCivilDate(period.hired_at, locale.value)
+
+  if (period.terminated_at === null) {
+    return t('reports.legalExport.picker.periodOpen', { from })
+  }
+
+  const to = formatCivilDate(period.terminated_at, locale.value)
+
+  return period.state === 'scheduled'
+    ? t('reports.legalExport.picker.periodScheduled', { from, to })
+    : t('reports.legalExport.picker.periodRange', { from, to })
 }
 
 function clearResults(): void {
@@ -305,7 +328,24 @@ function change(): void {
               :value="match.uuid"
               class="mt-1"
             />
-            <span>{{ describe(match) }}</span>
+            <span>
+              {{ describe(match) }}
+              <span
+                v-if="match.employment_periods.length > 0"
+                class="block text-sm text-kq-text-muted"
+                data-test="match-periods"
+              >
+                <span class="sr-only">{{ t('reports.legalExport.picker.periodsLegend') }}:</span>
+                <span
+                  v-for="period of match.employment_periods"
+                  :key="period.uuid"
+                  class="block"
+                  data-test="match-period"
+                >
+                  {{ periodText(period) }}
+                </span>
+              </span>
+            </span>
           </label>
           <div>
             <button

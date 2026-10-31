@@ -2,8 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import EmployeesImportStep from '@/features/onboarding/steps/EmployeesImportStep.vue'
 import { useSetupStore } from '@/features/onboarding/setup.store'
 import es from '@/shared/i18n/locales/es.json'
-import { employeeImportReport, setupStatus, setupSteps } from './support/fixtures'
-import { createTestPinia, jsonResponse, mountView, settle, stubFetch } from './support/harness'
+import { EMPLOYEE_UUID, employeeImportReport, setupStatus, setupSteps } from './support/fixtures'
+import {
+  createTestPinia,
+  jsonResponse,
+  mountView,
+  problemResponse,
+  settle,
+  stubFetch,
+} from './support/harness'
 
 // Paso 6 (RF-GP-05): importacion masiva, dos fases. `validate` no escribe
 // nada; `apply` exige `confirm_checksum` con el `sha256` de la validacion.
@@ -265,5 +272,211 @@ describe('EmployeesImportStep', () => {
     await settle()
 
     expect(useSetupStore(pinia).stepState('employees')).toBe('skipped')
+  })
+})
+
+// La importacion que readmite (RN-27, ADR-062 §6, RF-GP-05, pedido del 18-10-2026):
+// una fila cuyo documento es de una persona de baja se propone como readmision en
+// el resumen previo, con aviso y no como el 409 de antes, y se aplica al confirmar.
+describe('EmployeesImportStep: filas que readmiten (RN-27)', () => {
+  const DIGEST = 'c'.repeat(64)
+
+  function rehireReport(overrides: Partial<ReturnType<typeof employeeImportReport>> = {}) {
+    return employeeImportReport({
+      summary: { create: 0, update: 0, unchanged: 0, reject: 1, rehire: 1 },
+      rehire_digest: DIGEST,
+      rows: [
+        {
+          line: 2,
+          label: 'Lucia Ferrer',
+          outcome: 'rehire',
+          employee_uuid: EMPLOYEE_UUID,
+          changes: [],
+          messages: [
+            {
+              code: 'rehire_proposed',
+              severity: 'warning',
+              column: null,
+              detail: 'Esta persona esta de baja: al aplicar se le da de alta de nuevo.',
+            },
+            {
+              code: 'rehire_ignores_identity_changes',
+              severity: 'warning',
+              column: 'email',
+              detail: 'El correo del fichero no se aplica.',
+            },
+          ],
+        },
+        {
+          line: 3,
+          label: 'Marta Vidal',
+          outcome: 'reject',
+          employee_uuid: null,
+          changes: [],
+          messages: [
+            {
+              code: 'rehire_identity_mismatch',
+              severity: 'error',
+              column: null,
+              detail: 'Coincide con una persona de baja solo por el correo.',
+            },
+          ],
+        },
+      ],
+      ...overrides,
+    })
+  }
+
+  async function validated(report = rehireReport()) {
+    stubFetch(() => jsonResponse(report))
+
+    const wrapper = await mountView(EmployeesImportStep, { pinia: createTestPinia() })
+
+    await selectFile(wrapper)
+    await wrapper.find('[data-test="validate"]').trigger('click')
+    await settle()
+
+    return wrapper
+  }
+
+  it('enseña la fila como «Dar de alta de nuevo», con el aviso del servidor y su «que hacer»', async () => {
+    const wrapper = await validated()
+    const row = wrapper.find('[data-test="import-row-2"]')
+
+    expect(row.text()).toContain(es.onboarding.steps.employees.outcomes.rehire)
+    expect(row.text()).toContain('al aplicar se le da de alta de nuevo')
+    expect(row.text()).toContain(es.onboarding.steps.employees.messageAdvice.rehire_proposed)
+    expect(row.text()).toContain(
+      es.onboarding.steps.employees.messageAdvice.rehire_ignores_identity_changes,
+    )
+  })
+
+  it('cuenta las readmisiones en el resumen y pide revisarlas antes de aplicar', async () => {
+    const wrapper = await validated()
+
+    expect(wrapper.find('[data-test="report-status"]').text()).toContain('1 altas de nuevo')
+
+    const notice = wrapper.find('[data-test="rehire-notice"]')
+
+    expect(notice.attributes('role')).toBe('status')
+    expect(notice.text()).toContain('1 persona de baja')
+    // Los dos avisos del propietario (31-10-2026), tambien aqui.
+    expect(notice.text()).toContain('los fichajes anteriores a esa fecha se rechazan')
+    expect(notice.text()).toContain('espera a que los quioscos estén sincronizados')
+  })
+
+  it('el rechazo por identidad dice que hacer: corregir el documento o el nombre, o hacerlo desde la ficha', async () => {
+    const wrapper = await validated()
+    const row = wrapper.find('[data-test="import-row-3"]')
+
+    expect(row.text()).toContain(es.onboarding.steps.employees.outcomes.reject)
+    expect(row.text()).toContain('Coincide con una persona de baja solo por el correo.')
+    expect(row.find('[data-test="message-advice"]').text()).toBe(
+      es.onboarding.steps.employees.messageAdvice.rehire_identity_mismatch,
+    )
+  })
+
+  it('un mensaje que no es de la readmision no lleva «que hacer» añadido', async () => {
+    const wrapper = await validated(
+      employeeImportReport({
+        rows: [
+          {
+            line: 2,
+            label: 'Marta Vidal',
+            outcome: 'update',
+            employee_uuid: EMPLOYEE_UUID,
+            changes: [],
+            messages: [
+              {
+                code: 'hired_at_not_updated',
+                severity: 'warning',
+                column: 'hired_at',
+                detail: 'x',
+              },
+            ],
+          },
+        ],
+      }),
+    )
+
+    expect(wrapper.find('[data-test="message-advice"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="rehire-notice"]').exists()).toBe(false)
+  })
+
+  it('al aplicar manda el rehire_digest y cuenta que se ha dado de alta de nuevo y como imprimir la tarjeta', async () => {
+    const sent: Array<FormDataEntryValue | null> = []
+
+    stubFetch(async (_url, init) => {
+      const body = init?.body as FormData
+
+      if (body.get('mode') === 'apply') {
+        sent.push(body.get('confirm_rehire_digest'))
+
+        return jsonResponse(rehireReport({ mode: 'apply' }))
+      }
+
+      return jsonResponse(rehireReport())
+    })
+
+    const wrapper = await mountView(EmployeesImportStep, { pinia: createTestPinia() })
+
+    await selectFile(wrapper)
+    await wrapper.find('[data-test="validate"]').trigger('click')
+    await settle()
+    await wrapper.find('[data-test="apply"]').trigger('click')
+    await settle()
+
+    expect(sent).toEqual([DIGEST])
+    expect(wrapper.find('[data-test="report-status"]').text()).toContain('1 dadas de alta de nuevo')
+    expect(wrapper.find('[data-test="rehired-notice"]').text()).toContain('tarjeta nueva pendiente')
+    expect(wrapper.find('[data-test="rehire-notice"]').exists()).toBe(false)
+  })
+
+  it('si el servidor responde 409 explica que lo revisado ya no es lo que se aplicaria, y obliga a validar de nuevo', async () => {
+    stubFetch(async (_url, init) => {
+      const body = init?.body as FormData
+
+      return body.get('mode') === 'apply'
+        ? problemResponse(409, 'urn:kronoqr:problem:conflict')
+        : jsonResponse(rehireReport())
+    })
+
+    const wrapper = await mountView(EmployeesImportStep, { pinia: createTestPinia() })
+
+    await selectFile(wrapper)
+    await wrapper.find('[data-test="validate"]').trigger('click')
+    await settle()
+    await wrapper.find('[data-test="apply"]').trigger('click')
+    await settle()
+
+    const notice = wrapper.find('[data-test="import-stale"]')
+
+    expect(notice.attributes('role')).toBe('alert')
+    expect(notice.text()).toContain(es.onboarding.steps.employees.stale.title)
+    expect(notice.text()).toContain('Pulsa «Validar» otra vez')
+    // El informe viejo ya no vale: «Aplicar» desaparece hasta que se vuelva a validar.
+    expect(wrapper.find('[data-test="apply"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="import-row-2"]').exists()).toBe(false)
+
+    await wrapper.find('[data-test="validate"]').trigger('click')
+    await settle()
+
+    expect(wrapper.find('[data-test="import-stale"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="apply"]').exists()).toBe(true)
+  })
+
+  it('un fallo de red no es el aviso de resumen obsoleto: es el aviso general', async () => {
+    stubFetch(() => {
+      throw new TypeError('Failed to fetch')
+    })
+
+    const wrapper = await mountView(EmployeesImportStep, { pinia: createTestPinia() })
+
+    await selectFile(wrapper)
+    await wrapper.find('[data-test="validate"]').trigger('click')
+    await settle()
+
+    expect(wrapper.find('[data-test="import-stale"]').exists()).toBe(false)
+    expect(wrapper.find('[role="alert"]').text()).toContain(es.errors.network.title)
   })
 })

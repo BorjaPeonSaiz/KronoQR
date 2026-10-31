@@ -44,6 +44,14 @@ const PERSON = {
   status: 'terminated',
   hired_at: '2022-03-01',
   terminated_at: '2026-02-15',
+  employment_periods: [
+    {
+      uuid: '0199f0c2-5555-7000-8000-000000000001',
+      hired_at: '2022-03-01',
+      terminated_at: '2026-02-15',
+      state: 'terminated',
+    },
+  ],
 }
 
 function inputWith(wrapper: Wrapper, label: string): DOMWrapper<HTMLInputElement> {
