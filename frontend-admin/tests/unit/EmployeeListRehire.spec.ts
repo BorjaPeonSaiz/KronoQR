@@ -558,12 +558,16 @@ describe('Plantilla «De baja»: la seleccion del lote entre paginas y su tope (
     await settle(1)
     await pagina(wrapper, es.common.pagination.next)
     await settle()
-    await wrapper.find('[data-test="select-row"]').setValue(true)
+    const rechazada = wrapper.find<HTMLInputElement>('[data-test="select-row"]')
+
+    await rechazada.setValue(true)
     await settle(1)
 
     expect(wrapper.find('[data-test="selection-summary"]').text()).toBe(
       '500 personas seleccionadas',
     )
+    // La casilla rechazada no se queda marcada: ni a la vista ni para el lector de pantalla.
+    expect(rechazada.element.checked).toBe(false)
     expect(wrapper.find('[data-test="rehire-toolbar"] [role="status"]').text()).toContain('500')
 
     await wrapper.find('[data-test="rehire-selected"]').trigger('click')
@@ -575,6 +579,77 @@ describe('Plantilla «De baja»: la seleccion del lote entre paginas y su tope (
 
     expect(enviadas).toHaveLength(500)
     expect(enviadas).not.toContain(uuidDe(500))
+  })
+
+  it('el aviso del tope se va en cuanto se desmarca a alguien, sin esperar a «Quitar la seleccion»', async () => {
+    const quinientasUna = deBaja(501)
+
+    stubApi(quinientasUna, paginas(quinientasUna))
+
+    const wrapper = await mountList()
+    const aviso = () => wrapper.find('[data-test="rehire-toolbar"] [role="status"]')
+
+    await wrapper.find('[data-test="select-all"]').setValue(true)
+    await settle(1)
+
+    expect(aviso().exists()).toBe(true)
+
+    await wrapper.findAll('[data-test="select-row"]')[0]?.setValue(false)
+    await settle(1)
+
+    expect(wrapper.find('[data-test="selection-summary"]').text()).toBe(
+      '499 personas seleccionadas',
+    )
+    expect(aviso().exists()).toBe(false)
+  })
+
+  it('con el tope alcanzado a medias, la casilla de cabecera no queda marcada como si estuvieran todas', async () => {
+    const quinientasUna = deBaja(501)
+
+    stubApi(quinientasUna, paginas(quinientasUna))
+
+    const wrapper = await mountList()
+    const cabecera = wrapper.find<HTMLInputElement>('[data-test="select-all"]')
+
+    await cabecera.setValue(true)
+    await settle(1)
+
+    expect(cabecera.element.checked).toBe(false)
+  })
+
+  it('una readmision individual solo quita de la seleccion a esa persona, no la vacia', async () => {
+    stubApi([former(A, 'Ana'), former(B, 'Beto'), former(C, 'Carla')])
+
+    const wrapper = await mountList()
+    const casillas = wrapper.findAll('[data-test="select-row"]')
+
+    // Se prepara un lote con Ana y Carla y, mientras, se da de alta de nuevo a Beto a solas.
+    await casillas[0]?.setValue(true)
+    await casillas[2]?.setValue(true)
+    await settle(1)
+    await wrapper.findAll('[data-test="rehire-row"]')[1]?.trigger('click')
+    await settle()
+    await confirm(wrapper).trigger('click')
+    await settle()
+
+    expect(wrapper.find('[data-test="selection-summary"]').text()).toBe('2 personas seleccionadas')
+  })
+
+  it('si Beto estaba en la seleccion, su readmision individual lo quita y deja a los demas', async () => {
+    stubApi([former(A, 'Ana'), former(B, 'Beto')])
+
+    const wrapper = await mountList()
+    const casillas = wrapper.findAll('[data-test="select-row"]')
+
+    await casillas[0]?.setValue(true)
+    await casillas[1]?.setValue(true)
+    await settle(1)
+    await wrapper.findAll('[data-test="rehire-row"]')[1]?.trigger('click')
+    await settle()
+    await confirm(wrapper).trigger('click')
+    await settle()
+
+    expect(wrapper.find('[data-test="selection-summary"]').text()).toBe('1 persona seleccionada')
   })
 
   it('«Quitar la selección» retira tambien el aviso del tope', async () => {

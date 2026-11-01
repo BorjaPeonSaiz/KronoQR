@@ -317,26 +317,40 @@ const someRowsSelected = computed(
     rehirableRows.value.some((employee) => selection.value.has(employee.uuid)),
 )
 
-function setSelected(employee: Employee, selected: boolean): void {
+/**
+ * El aviso del tope se queda mientras la seleccion este llena; en cuanto cabe alguien mas
+ * (porque se desmarco a una persona) deja de ser verdad y se quita.
+ */
+function refreshLimitNotice(size: number): void {
+  if (size < REHIRE_MAX_SELECTION) {
+    selectionLimitReached.value = false
+  }
+}
+
+function setSelected(employee: Employee, box: HTMLInputElement): void {
   const next = new Map(selection.value)
 
-  if (!selected) {
+  if (!box.checked) {
     next.delete(employee.uuid)
+    refreshLimitNotice(next.size)
   } else if (next.size < REHIRE_MAX_SELECTION) {
     next.set(employee.uuid, employee)
   } else {
     selectionLimitReached.value = true
+    // La casilla no se re-pinta sola (su `:checked` era falso antes y despues): se desmarca a mano,
+    // o quedaria marcada —y un lector de pantalla diria «marcada»— sin que esa persona entre.
+    box.checked = false
   }
 
   selection.value = next
   announce(t('employees.announce.selected', next.size))
 }
 
-function toggleAllRows(selected: boolean): void {
+function toggleAllRows(box: HTMLInputElement): void {
   const next = new Map(selection.value)
 
   for (const employee of rehirableRows.value) {
-    if (!selected) {
+    if (!box.checked) {
       next.delete(employee.uuid)
     } else if (next.size < REHIRE_MAX_SELECTION) {
       next.set(employee.uuid, employee)
@@ -345,7 +359,13 @@ function toggleAllRows(selected: boolean): void {
     }
   }
 
+  if (!box.checked) {
+    refreshLimitNotice(next.size)
+  }
+
   selection.value = next
+  // Con el tope alcanzado a medias, la cabecera no esta del todo marcada: que lo diga la casilla.
+  box.checked = allRowsSelected.value
   announce(t('employees.announce.selected', next.size))
 }
 
@@ -380,7 +400,16 @@ function onRehired(results: RehiredEmployee[]): void {
   rehiring.value = null
   rehiringBatch.value = false
   rehireResults.value = results
-  clearSelection()
+  // Se quita de la seleccion a quien se acaba de dar de alta, y solo a esa gente: una readmision
+  // individual no tira la seleccion que se estaba preparando para el lote.
+  const next = new Map(selection.value)
+
+  for (const result of results) {
+    next.delete(result.employee.uuid)
+  }
+
+  selection.value = next
+  refreshLimitNotice(next.size)
   announce(
     results.length === 1
       ? t('employees.announce.rehired')
@@ -635,7 +664,7 @@ const selectClass =
                   :indeterminate="someRowsSelected"
                   :disabled="rehirableRows.length === 0"
                   :aria-label="t('employees.table.selectAll')"
-                  @change="toggleAllRows(($event.target as HTMLInputElement).checked)"
+                  @change="toggleAllRows($event.target as HTMLInputElement)"
                 />
               </th>
               <th scope="col" class="px-3 py-2">{{ t('employees.table.name') }}</th>
@@ -674,7 +703,7 @@ const selectClass =
                       ),
                     })
                   "
-                  @change="setSelected(employee, ($event.target as HTMLInputElement).checked)"
+                  @change="setSelected(employee, $event.target as HTMLInputElement)"
                 />
               </td>
               <th scope="row" class="px-3 py-2 font-medium">
@@ -772,6 +801,7 @@ const selectClass =
       v-if="rehireResults !== null"
       :results="rehireResults"
       @done="closeRehireResults"
+      @pin-delivered="refetch()"
     />
 
     <PinRevealDialog
