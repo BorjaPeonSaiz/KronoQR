@@ -297,7 +297,7 @@ Lo que conviene saber del bloque 5:
 - `package.sh` deja fuera del paquete los runbooks internos `fallo-de-ci.md` y `triaje-hallazgos-seguridad.md` (I10). Ningún documento que viaja puede enlazarlos: lo comprueban `ClientDocumentationTest` y `check-package-links.sh`.
 - La guía de RRHH §5.4 (es/en) explica «Este tramo terminó en pausa» y RN-05 (ADR-058).
 
-**Siguiente acción (31-10-2026):** en una **sesión nueva** (decisión del usuario, por contexto), tareas 25.6 y 25.7 del bloque 25 (panel, `frontend-panel` + `ui-ux`) en la rama `feat/panel-baja-readmision`, ya creada desde `main` `cd89182c` con las decisiones del 31-10 en su primer commit. Primer commit: título del B25 sigue ⬜ hasta cerrar 25.7. Lo que deben incluir está en «Pendiente» → «Bloque 25 de la 2.3.0». Después: B32, B33 parcial, 34.1, B35 y el bloque final solo con orden del propietario.
+**Siguiente acción (01-11-2026):** integrar la 25.6 y la 25.7 (`feat/panel-baja-readmision`: CI manual, PR y merge; revisiones ya hechas y corregidas) y la nocturna repartida (`ci/nocturna-por-modulo`, PR #219). El primer commit del bloque siguiente marca ✅ el título del B25. Después: B32, B33 parcial, 34.1, B35 y el bloque final solo con orden del propietario.
 
 **B17 a B26 y B24 integrados** (orden del 15-10-2026: un PR por bloque en verde):
 - B17 (#161), B18 (#162), B19 (#167), B20 (#168) y B21 (#169).
@@ -374,11 +374,11 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
 
 ## Pendiente
 
-### Bloque 25 de la 2.3.0: lo que queda para 25.6 y 25.7 (31-10-2026)
+### Bloque 25 de la 2.3.0: 25.6 y 25.7 hechas (01-11-2026)
 
-- **Panel (25.6, 25.7):** baja con fecha futura y su anulación («Aplicar ya» quita el `apply_now` fijo que el panel envía desde la 25.2); readmisión individual y en lote («Dar de alta de nuevo» en la ficha y en Plantilla «De baja»); paso de importación con `rehire` (`summary.rehire`, `rehire_proposed`, `rehire_identity_mismatch`, `rehire_ignores_identity_changes`; el panel ya envía `confirm_rehire_digest`); corrección de la fecha de cese; `employment_periods` en la ficha y en la búsqueda de la exportación legal (`LegalExportEmployeeMatch.employment_periods`). Textos «Qué hacer» es/en.
-- **Guía de RRHH (es/en):** corregir un cese anterior no mueve el `valid_to` del contrato cerrado al readmitir; cómo localizar por quiosco y hora los rechazos de PIN sin persona para completar la salida de un turno de noche del día del cese.
-- **Pruebas:** E2E de la importación con readmisión y del panel de baja/readmisión; mutación de `Absence::fallsWithin`, `ImportReport::rehireDigest`, la cota de `ManualEntryEligibility`, `OffboardedPinPolicy` y `OffboardedPinHolder`.
+- **Panel (25.6, 25.7) hecho** en `feat/panel-baja-readmision` (`frontend-panel` + `ui-ux` + `qa-testing`; revisiones de código y seguridad apto con correcciones, corregidas): baja programada, vencida y anulación; readmisión individual y en lote; importación con readmisión; corrección del cese con histórico (autor minimizado si su cuenta lo está: la corrección **no** retiene la cuenta, ADR-060 §2); periodos en la exportación legal; los dos avisos del 31-10; guía de RRHH es/en y consulta para IT en `operacion.md` §18. Contrato: `EmploymentPeriodRecord`, `TerminationCorrectionAuthor`, `offboarded_at` en `EmployeeOffboarding` (también en el listado de `rrhh+`). Doc 07 §6: fila nueva del motivo libre de las correcciones (pendiente del DPO).
+- **Pendiente:** el host tiene `frontend-admin/node_modules` desfasado (5 pruebas de virtualización fallan solo ahí; en el contenedor pasan): `npm ci` en el host. Las pruebas dejan cientos de directorios `/tmp/kq-doctor-am-*` en el contenedor `kronoqr-app`: buscar qué prueba no los borra. Capturas de la guía en el bloque final.
+- **Para quien opere en un worktree:** `make traceability` lee el checkout principal (`REPO_PATH=/var/www/repo`); detalle en Engram `entorno/matriz-desde-worktree`.
 - **Decidido por el propietario (31-10-2026):** se **aceptan** los tres residuales de doc 07 §6 (bloqueo RS-12 con la cola de alguien de baja; PIN del periodo anterior si se readmite o se hace `reset_pin` antes de sincronizar; salida de un turno de noche del día del cese llegada tras la baja). La 25.6 añade **dos avisos en el panel**: al dar un alta o una readmisión con fecha futura, «los fichajes anteriores a esa fecha se rechazan»; y al readmitir con la baja de hoy, «espera a que los quioscos estén sincronizados» (fila 25.6 del plan). La **incidencia del fichaje anterior al alta** pasa a la 2.4.0 («Fuera de la 2.3.0» del plan). El **apartado para el DPO** en `docs/cliente/obligaciones-legales.md` va en el bloque final, tarea 7.
 - **Validación jurídica (asesoría y DPO del cliente):** retención de periodos y motivos de un readmitido; atribuir un fichaje rechazado a quien ya no tiene relación laboral; visibilidad de bajas programadas para el responsable.
 
