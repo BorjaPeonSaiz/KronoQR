@@ -2068,15 +2068,17 @@ jobs:
     name: "Cobertura (RNF-M-01)"
     runs-on: ubuntu-24.04
     # 75 desde el 31-10-2026. Antes 50 (R6-DV-08), calibrado con 16-25 min de
-    # septiembre; la suite entera con Xdebug (>5000 pruebas) mide hoy 32-50 min
-    # y la variacion entre runners es de +-50 %. Medido (`make coverage`, solo
-    # el paso): PR 32, 35, 36, 41 y 48 min (29-10 al 31-10); noche 32, 33, 35,
-    # 41, 41, 43 y 44 min (22-10 al 30-10), y el 31-10 GitHub la corto a los 50
-    # (run 41189683683) sin terminar. NO es un problema de la noche: es el mismo
+    # septiembre; la suite entera con Xdebug (>5000 pruebas) tarda hoy bastante
+    # mas y varia +-50 % entre runners. Medido (`make coverage`, solo el paso):
+    # PR 32, 35, 36, 41 y 48 min (29-10 al 31-10); noche 32, 33, 35, 41, 41, 43 y
+    # 44 min (22-10 al 30-10). El peor tiempo que termino fue de 48 min, y el
+    # 31-10 otro run se corto en los 50 del tope SIN TERMINAR (run 41189683683):
+    # 50 fue el corte, no una medida. NO es un problema de la noche: es el mismo
     # job, en un runner propio (nada compite con el: los demas jobs nocturnos
-    # corren en otros runners) y el PR roza el mismo limite (47,6 min el 29-10).
-    # Que pasara en el PR y en el manual era suerte de runner. 75 = 1,5x el peor
-    # caso medido (50); si algun dia llega a 60, se parte la suite, no se sube.
+    # corren en otros runners) y el PR roza el mismo limite. Que pasara en el PR
+    # y en el manual era suerte de runner. 75 deja ~1,5x sobre el peor que
+    # termino. El paso «Presupuesto» de abajo avisa por encima de 3600 s (60 min):
+    # ahi se parte la suite, no se sube el tope.
     # El check «Cobertura (RNF-M-01)» no cambia de nombre.
     timeout-minutes: 75
     if: github.event_name == 'pull_request' || inputs.coverage
@@ -2134,7 +2136,23 @@ jobs:
         uses: ./.github/actions/chrome-for-pdf
 
       - name: Cobertura — dominio >= 90 %, global >= 75 % (doc 02 §9.2)
-        run: make coverage
+        run: |
+          echo "MEDIDA_INICIO=$(date +%s)" >>"$GITHUB_ENV"
+          make coverage
+
+      - name: Presupuesto de la cobertura (60 min)
+        # Termometro, no puerta (el tope duro es timeout-minutes): avisa cuando la
+        # suite con Xdebug se acerca al tope, para partirla antes de que corte.
+        if: always()
+        env:
+          PRESUPUESTO: "3600"
+        run: |
+          [ -n "${MEDIDA_INICIO:-}" ] || exit 0
+          duracion=$(($(date +%s) - MEDIDA_INICIO))
+          echo "Presupuesto de la cobertura: ${duracion} s medidos de ${PRESUPUESTO} s (make coverage)." >>"$GITHUB_STEP_SUMMARY"
+          if [ "$duracion" -gt "$PRESUPUESTO" ]; then
+            echo "::warning title=Presupuesto excedido::La cobertura (make coverage) ha tardado ${duracion} s frente a los ${PRESUPUESTO} s: parte la suite o la cobertura, no subas el tope (runbooks/fallo-de-ci.md)."
+          fi
 
       - name: Resumen
         if: always()

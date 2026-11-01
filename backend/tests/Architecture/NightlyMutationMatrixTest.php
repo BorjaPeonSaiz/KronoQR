@@ -108,13 +108,14 @@ it('da a cada parte un tope que cabe con margen y no cancela las demas si una fa
         ->and(count(nightlyMutationMatrixParts()))->toBeGreaterThanOrEqual(4);
 })->group('RQ-10');
 
-it('suma las partes en un job que corre aunque una falle y descarga lo que las partes suben', function (): void {
+it('suma las partes en un job que corre aunque una falle, pero no si el run se cancela', function (): void {
     $ci = Repo::contents('.github/workflows/ci.yml');
     $total = nightlyMutationMatrixJob('.github/workflows/ci.yml', 'mutation-total');
     $condicion = nightlyMutationMatrixText($total, 'if');
 
     expect($total['needs'] ?? null)->toBe('mutation')
-        ->and($condicion)->toContain('always()')
+        ->and($condicion)->toContain('!cancelled()')
+        ->and($condicion)->not->toContain('always()')
         ->and($condicion)->toContain("github.event_name == 'schedule'")
         ->and($condicion)->toContain('inputs.full_mutation')
         // Lo que sube cada parte es lo que descarga el total.
@@ -126,12 +127,40 @@ it('suma las partes en un job que corre aunque una falle y descarga lo que las p
         ->and($ci)->toContain('needs.mutation.result');
 })->group('RQ-10');
 
-it('lleva las tres piezas de la mutacion nocturna a los mismos eventos', function (): void {
-    $condicion = "github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_mutation)";
+/**
+ * Los pasos de un job, como mapas.
+ *
+ * @return list<array<string, mixed>>
+ */
+function nightlyMutationMatrixSteps(string $job): array
+{
+    return nightlyMutationMatrixWorkflowSteps('ci.yml', $job);
+}
 
-    expect(nightlyMutationMatrixText(nightlyMutationMatrixJob('.github/workflows/ci.yml', 'mutation'), 'if'))->toBe($condicion)
-        ->and(nightlyMutationMatrixText(nightlyMutationMatrixJob('.github/workflows/ci.yml', 'mutation-scope'), 'if'))->toBe($condicion)
-        ->and(nightlyMutationMatrixText(nightlyMutationMatrixJob('.github/workflows/ci.yml', 'mutation-total'), 'if'))->toBe('always() && ('.$condicion.')');
+it('pasa al total una ruta por cada parte de la matriz, y un log que falta es un error, no una parte menos', function (): void {
+    $pasos = nightlyMutationMatrixSteps('mutation-total');
+    $esperadas = null;
+    foreach ($pasos as $paso) {
+        $entorno = $paso['env'] ?? null;
+        if (is_array($entorno) && isset($entorno['PARTES_ESPERADAS'])) {
+            $esperadas = $entorno['PARTES_ESPERADAS'];
+            $script = nightlyMutationMatrixText($paso, 'run');
+        }
+    }
+    $enLaLista = is_string($esperadas) ? preg_split('/\s+/', trim($esperadas)) : [];
+    $enLaMatriz = array_keys(nightlyMutationMatrixParts());
+    sort($enLaMatriz);
+    sort($enLaLista);
+
+    expect($enLaLista)->toBe($enLaMatriz, 'PARTES_ESPERADAS de `mutation-total` y matrix.include de `mutation` tienen que ser las mismas partes.')
+        ->and($script ?? '')->toContain('${RUNNER_TEMP}/partes/${parte}.log')
+        // Nunca un glob: con `partes/*.log` una parte que no baja se omite en silencio.
+        ->and($script ?? '')->not->toContain('partes/*.log');
+
+    foreach ($pasos as $paso) {
+        // Un artefacto que no baja pone el job en rojo; no se traga.
+        expect($paso)->not->toHaveKey('continue-on-error');
+    }
 })->group('RQ-10');
 
 it('deja a la cobertura un tope por encima de lo medido en octubre, sin cambiar el nombre del check protegido', function (): void {
@@ -150,3 +179,44 @@ it('explica en el runbook como se lee la mutacion nocturna repartida', function 
         ->and($runbook)->toContain('mutacion-parte-')
         ->and($runbook)->toContain('make mutate-part');
 })->group('RQ-10');
+
+it('lleva las tres piezas de la mutacion nocturna a los mismos eventos', function (): void {
+    $condicion = "github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_mutation)";
+
+    expect(nightlyMutationMatrixText(nightlyMutationMatrixJob('.github/workflows/ci.yml', 'mutation'), 'if'))->toBe($condicion)
+        ->and(nightlyMutationMatrixText(nightlyMutationMatrixJob('.github/workflows/ci.yml', 'mutation-scope'), 'if'))->toBe($condicion)
+        ->and(nightlyMutationMatrixText(nightlyMutationMatrixJob('.github/workflows/ci.yml', 'mutation-total'), 'if'))->toBe('${{ !cancelled() && ('.$condicion.') }}');
+})->group('RQ-10');
+
+it('avisa cuando una parte de la mutacion o la cobertura pasan de 60 min, que es cuando hay que partirlas', function (): void {
+    // El runbook dice «si pasa de 60 min, se parte»; sin una medida que lo avise
+    // esa regla no la ejecuta nadie. Mismo patron que el presupuesto de la etapa ①.
+    foreach (['mutation' => 'ci.yml', 'coverage' => 'gates.yml'] as $job => $workflow) {
+        $presupuestos = array_values(array_filter(
+            nightlyMutationMatrixWorkflowSteps($workflow, $job),
+            static fn (array $paso): bool => str_starts_with((string) ($paso['name'] ?? ''), 'Presupuesto de la '),
+        ));
+        expect($presupuestos)->toHaveCount(1, "El job {$job} de {$workflow} necesita su paso «Presupuesto».");
+
+        $paso = $presupuestos[0];
+        $entorno = nightlyMutationMatrixMap($paso['env'] ?? null, 'env del presupuesto');
+        expect($entorno['PRESUPUESTO'] ?? null)->toBe('3600')
+            ->and($paso['if'] ?? null)->toBe('always()')
+            ->and(nightlyMutationMatrixText($paso, 'run'))->toContain('::warning title=Presupuesto excedido::');
+    }
+})->group('RQ-10', 'RNF-M-01');
+
+/**
+ * Los pasos de un job de un workflow, como mapas.
+ *
+ * @return list<array<string, mixed>>
+ */
+function nightlyMutationMatrixWorkflowSteps(string $workflow, string $job): array
+{
+    $pasos = nightlyMutationMatrixJob('.github/workflows/'.$workflow, $job)['steps'] ?? null;
+
+    return array_map(
+        static fn (mixed $paso): array => nightlyMutationMatrixMap($paso, 'un paso de '.$job),
+        is_array($pasos) ? array_values($pasos) : [],
+    );
+}

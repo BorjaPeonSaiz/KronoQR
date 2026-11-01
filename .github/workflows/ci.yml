@@ -7,9 +7,9 @@
 #                             el CONJUNTO de ficheros de Domain que el cambio toca
 #                             (`make mutate-changed`, frente a `origin/main` en toda
 #                             rama y en `workflow_dispatch`);
-#                             la completa (`make mutate`, MSI global) es el job
-#                             `mutation`, al final del fichero:
-#                             nocturna y en `workflow_dispatch`
+#                             la completa (MSI global) son los jobs `mutation` (matriz de
+#                             partes, `make mutate-part`) y `mutation-total` (suma el MSI),
+#                             al final del fichero: nocturna y en `workflow_dispatch`
 #   ③b Trazabilidad           qa:traceability --check · docs:consistency --check (dentro del job ③, al final)
 #   ④ Integracion             Pest --testsuite=Integration con PostgreSQL real   ~10-15 min
 #                             (invariantes SQL, MigrationsRoundTripTest, los caminos
@@ -503,7 +503,8 @@ jobs:
     # 90 (R6-DV-08). Con la mutacion completa aqui el job tardo hasta 57,2 min
     # de los 60 que tenia: un runner algo mas lento lo mataba por tiempo con
     # todo en verde. Desde el 02-10-2026 este job solo muta lo que la rama
-    # cambia (`make mutate-changed`; la completa vive en el job `mutation`):
+    # cambia (`make mutate-changed`; la completa vive en los jobs `mutation`
+    # y `mutation-total`):
     # lo normal son 4-15 min. El tope de 90 cubre el PEOR caso razonable, una
     # rama que toca casi todo el dominio y paga la mutacion entera (37-57 min
     # medidos) mas el resto del job, con el doble de margen. Medidas de los
@@ -1658,17 +1659,17 @@ jobs:
   #   · `mutation-scope`: la puerta de lo que la mutacion ve (M6), aparte para
   #     no pagar su cobertura Xdebug en cada parte.
   #
-  # El reparto por lineas de codigo ejecutable (sin comentarios ni llaves) de
-  # cada `Domain`: Product 5942 (37 %), Attendance 2295 + Kiosk 421, Compliance
-  # 2087 + Identity 820, Reporting 1841 + Shared 1256 y Workforce 1413. Con la
-  # pasada entera en ~80-90 min un dia normal, la parte de Product es la mas
-  # larga (~30-35 min) y las demas 8-17; mas ~4 min de preparacion, canario y
-  # creacion de mutantes en cada una. Con el runner lento de las noches de
-  # 180 min (2x o mas) la mayor sigue en ~75 min, por debajo de los 90 del
-  # tope. Son estimaciones por tamano: el primer run real las mide (el
-  # resumen de cada parte y las duraciones del run); si una parte pasa de 60,
-  # se parte por modulo. Todos los modulos de `Modules/*/Domain` tienen que
-  # estar en alguna parte: `NightlyMutationMatrixTest` lo vigila en la etapa ②.
+  # El reparto se hizo por lineas de codigo ejecutable de cada `Domain` y el
+  # primer run real (41244105016, disparo manual del 31-10-2026) lo midio:
+  # product 1505 mutantes y ~27 min de Pest (29 min de job), attendance,
+  # compliance y reporting 20-21 min de Pest (22 de job) y workforce 7,5 min
+  # (9 de job); 7006 mutantes en total, 6400 muertos, MSI global 91,35 %. Con el
+  # runner lento de las noches de 180 min (2x o mas) la mayor quedaria en ~60-75
+  # min, por debajo de los 90 del tope. Cada parte mide su propio tiempo y avisa
+  # con `::warning title=Presupuesto excedido::` por encima de 3600 s: es la
+  # senal para partirla por modulo en esta matriz. Todos los modulos de
+  # `Modules/*/Domain` tienen que estar en alguna parte:
+  # `NightlyMutationMatrixTest` lo vigila en la etapa ②.
   #-----------------------------------------------------------------------------
   mutation:
     name: "Mutacion · ${{ matrix.part }} (RQ-10, nocturna)"
@@ -1721,7 +1722,27 @@ jobs:
           PART: ${{ matrix.part }}
         run: |
           set -euo pipefail
+          echo "MEDIDA_INICIO=$(date +%s)" >>"$GITHUB_ENV"
           make mutate-part MUTATE_MODULES="${MUTATE_MODULES}" 2>&1 | tee "${RUNNER_TEMP}/${PART}.log"
+
+      - name: Presupuesto de la parte (60 min)
+        # Termometro, no puerta: a los 3600 s se avisa de que la parte hay que
+        # partirla por modulo en la matriz (el tope duro es el timeout-minutes).
+        # Mismo patron que el «Presupuesto de la etapa» de ①.
+        if: always()
+        env:
+          PART: ${{ matrix.part }}
+          PRESUPUESTO: "3600"
+        run: |
+          [ -n "${MEDIDA_INICIO:-}" ] || exit 0
+          duracion=$(($(date +%s) - MEDIDA_INICIO))
+          {
+            echo ""
+            echo "Presupuesto de la parte: ${duracion} s medidos de ${PRESUPUESTO} s (make mutate-part, canario incluido)."
+          } >>"$GITHUB_STEP_SUMMARY"
+          if [ "$duracion" -gt "$PRESUPUESTO" ]; then
+            echo "::warning title=Presupuesto excedido::La parte de mutacion ${PART} ha tardado ${duracion} s frente a los ${PRESUPUESTO} s: partela por modulo en la matriz de ci.yml (runbooks/fallo-de-ci.md)."
+          fi
 
       - name: Resumen de la parte
         if: always()
@@ -1781,10 +1802,12 @@ jobs:
     runs-on: ubuntu-24.04
     needs: mutation
     timeout-minutes: 10
-    # `always()`: si una parte falla o se corta, este job igualmente resume las
-    # demas y deja el log entero; luego falla el solo por el resultado de la
-    # matriz. Sin `always()` un `needs` en rojo lo dejaria `skipped`.
-    if: always() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_mutation))
+    # `!cancelled()` y no `always()`: si una parte falla o se corta, este job
+    # igualmente resume las demas y deja el log entero (luego falla el solo por
+    # el resultado de la matriz; sin esto un `needs` en rojo lo dejaria
+    # `skipped`), pero un run CANCELADO a mano o por la concurrencia no debe
+    # arrancar un job que sumaria logs a medias.
+    if: ${{ !cancelled() && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_mutation)) }}
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -1792,28 +1815,30 @@ jobs:
           persist-credentials: false
 
       - name: Descargar los logs de las partes
+        # Sin `continue-on-error`: un artefacto que no baja es un job en rojo, no
+        # una parte menos en la suma. Los pasos siguientes se ejecutan igual
+        # (`!cancelled()`) para dejar el resumen y el log de lo que haya.
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        # Si ninguna parte llego a subir su log, el paso de abajo lo dice con
-        # un error claro en vez de este.
-        continue-on-error: true
         with:
           pattern: mutacion-parte-*-log
           merge-multiple: true
           path: ${{ runner.temp }}/partes
 
       - name: MSI global >= 80 % sumando las partes (RQ-10)
+        if: ${{ !cancelled() }}
         env:
           RESULTADO_PARTES: ${{ needs.mutation.result }}
+          # Las partes ESPERADAS, una por entrada de `matrix.include` del job
+          # `mutation`: `NightlyMutationMatrixTest` comprueba que esta lista y la
+          # matriz son la misma. El script recibe una ruta por parte esperada,
+          # no `partes/*.log`: un log que falta es un error, no una parte menos.
+          PARTES_ESPERADAS: "product attendance compliance reporting workforce"
         run: |
           set -euo pipefail
-          set -- "${RUNNER_TEMP}"/partes/*.log
-          if [ ! -e "$1" ]; then
-            echo "::error title=Mutacion nocturna sin logs::Ninguna parte ha subido su log (resultado de la matriz: ${RESULTADO_PARTES}). Abre los jobs «Mutacion · ...» del run: el fallo esta en la preparacion o en el canario."
-            echo "### Mutacion completa (RQ-10)" >>"$GITHUB_STEP_SUMMARY"
-            echo "" >>"$GITHUB_STEP_SUMMARY"
-            echo "**Sin puntuacion global**: ninguna parte ha subido su log." >>"$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
+          set --
+          for parte in ${PARTES_ESPERADAS}; do
+            set -- "$@" "${RUNNER_TEMP}/partes/${parte}.log"
+          done
           rc=0
           sh .github/scripts/mutation-log.sh total 80 "$@" >"${RUNNER_TEMP}/mutacion-total.md" || rc=$?
           cat "${RUNNER_TEMP}/mutacion-total.md" >>"$GITHUB_STEP_SUMMARY"
@@ -1824,6 +1849,9 @@ jobs:
             echo "\`unit\`); esta es la pasada completa, nocturna y del disparo manual con"
             echo "\`full_mutation\`."
           } >>"$GITHUB_STEP_SUMMARY"
+          if [ "${rc}" -ne 0 ]; then
+            echo "::error title=Mutacion nocturna sin MSI global::El MSI global no llega al 80 % o falta/esta rota alguna parte (matriz: ${RESULTADO_PARTES}). El detalle esta en el resumen del job."
+          fi
           if [ "${RESULTADO_PARTES}" != "success" ]; then
             echo "::error title=Mutacion nocturna incompleta::La matriz de partes ha terminado en «${RESULTADO_PARTES}»: sin todas las partes no hay MSI global. Mira el job de la parte que fallo."
             exit 1
