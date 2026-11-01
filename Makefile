@@ -250,7 +250,7 @@ endif
 .PHONY: help up down restart build ps logs shell seed test test-unit test-integration test-performance e2e-performance \
         test-arch test-contract quality tools-ready php-lint deptrac rector sh-lint api-lint sast \
         sast-community trivy-fs trivy-image secrets-scan sbom build-ci-images release-gate nginx-smoke \
-        traceability traceability-check docs-consistency deps-audit-php deps-audit-js coverage coverage-now mutate mutate-canary mutate-scope mutate-changed e2e load-test dast clean changelog changelog-check tool-versions \
+        traceability traceability-check docs-consistency deps-audit-php deps-audit-js coverage coverage-now mutate mutate-part mutate-canary mutate-scope mutate-changed e2e load-test dast clean changelog changelog-check tool-versions \
         backup backup-verify restore-drill restore-drill-pitr observability-check
 
 help: ## Muestra esta ayuda
@@ -291,7 +291,8 @@ help: ## Muestra esta ayuda
 	@echo "  make docs-consistency  Coherencia documental (RQ-12, RNF-M-04)"
 	@echo "  make coverage         Cobertura: dominio 90, global 75 por ciento"
 	@echo "  make coverage-now     Cobertura actual, sin umbral"
-	@echo "  make mutate           Mutacion COMPLETA sobre el dominio, MSI 80 por ciento (nocturna y a mano)"
+	@echo "  make mutate           Mutacion COMPLETA sobre el dominio de una vez, MSI 80 por ciento (local; la nocturna usa mutate-part)"
+	@echo "  make mutate-part      Una parte de la mutacion completa por modulos (MUTATE_MODULES=A,B); la nocturna las reparte en una matriz"
 	@echo "  make mutate-changed   Mutacion acotada a los ficheros de dominio de este push (etapa 3 de la CI)"
 	@echo "  make mutate-canary    Canario: la mutacion distingue un mutante vivo de uno muerto (antes de las dos)"
 	@echo "  make mutate-scope     Parte del dominio que la mutacion ve: cobertura de la suite Unit (nocturna)"
@@ -1251,7 +1252,7 @@ mutate-canary: ## Canario de la mutacion: la pasada distingue un mutante vivo de
 # MUTATION_SCOPE_MIN. Es la fraccion del dominio que la mutacion puede ver.
 # Un modulo nuevo sin pruebas unitarias la baja y la noche lo dice. El umbral
 # es la cifra medida, redondeada hacia abajo: se sube cuando se mida mas, no
-# se baja para dejar pasar un fichero. Corre de noche, en el job `mutation`,
+# se baja para dejar pasar un fichero. Corre de noche, en el job `mutation-scope`,
 # y no en cada push: es la suite Unit con Xdebug (48 s en el contenedor).
 # Con el bind mount de Docker Desktop la cifra local sale mas baja (faltan
 # ficheros en el recorrido de app/): se mide en una copia o en la CI.
@@ -1261,6 +1262,15 @@ MUTATION_SCOPE_CLOVER := storage/framework/cache/clover-unit.xml
 mutate-scope: ## Fraccion del dominio que la mutacion ve: cobertura Unit de Modules/*/Domain >= MUTATION_SCOPE_MIN (M6)
 	$(RUN_APP_XDEBUG) $(PEST) --testsuite=Unit --coverage-clover=$(MUTATION_SCOPE_CLOVER)
 	$(RUN_APP) php tools/coverage-gate.php $(MUTATION_SCOPE_CLOVER) $(MUTATION_SCOPE_MIN) 'app/Modules/*/Domain/*'
+
+# La orden de Pest de la mutacion del dominio, UNA sola para `mutate` y para
+# `mutate-part` (la nocturna por partes). Solo cambian dos variables: la ruta
+# (`MUTATE_PATHS`, todo Modules/*/Domain, o las del grupo de la parte) y el
+# minimo (`MUTATE_MIN`, 80 de RQ-10; vacio = sin `--min`, que es lo que lleva
+# una parte porque el 80 % es del conjunto). Es una variable recursiva (`=`)
+# para que el valor de la receta que la usa sea el de su objetivo.
+MUTATE_MIN ?= 80
+MUTATE_RUN  = $(RUN_APP_XDEBUG) sh -c 'PHP_INI_SCAN_DIR=":$$(pwd)/tools/mutation" $(PEST) $(MUTATE_OPTIONS) --path=$(MUTATE_PATHS) --testsuite=Unit$(if $(MUTATE_MIN), --min=$(MUTATE_MIN))'
 
 mutate: mutate-canary ## Mutacion sobre el dominio, MSI mayor o igual a 80 por ciento
 ifeq ($(DOMAIN_MODELS),)
@@ -1308,8 +1318,44 @@ else
 # --parallel de la suite COMPLETA vive en pruebas Feature, que aqui no corren.
 # Un `use` sin efecto (clase global en un fichero sin namespace) rompe el
 # arranque de los procesos hijos como ErrorException: no dejar ninguno.
-	$(RUN_APP_XDEBUG) sh -c 'PHP_INI_SCAN_DIR=":$$(pwd)/tools/mutation" $(PEST) $(MUTATE_OPTIONS) --path=$(MUTATE_PATHS) --testsuite=Unit --min=80'
+	$(MUTATE_RUN)
 endif
+
+# LA MUTACION COMPLETA POR PARTES (nocturna, 31-10-2026).
+#
+# `make mutate` en un solo runner de 4 vCPU tardo 64-92 min entre el 16 y el 29-10 y
+# GitHub la corto a los 120 min el 25, 27 y 28 y a los 180 el 30 y 31: el dominio
+# crece (6744-6802 mutantes en 306-308 ficheros) y el runner varia 2x entre noches.
+# El job nocturno `mutation` de ci.yml la reparte ahora en una matriz de partes,
+# una por grupo de modulos, cada una en su runner: `make mutate-part
+# MUTATE_MODULES=Attendance,Kiosk`. Mismas MUTATE_OPTIONS, misma suite Unit, mismo
+# canario antes (`mutate-canary` es requisito de este objetivo).
+#
+# Lo UNICO que cambia es el `--min`: una parte NO lo lleva. El 80 % de RQ-10 es
+# GLOBAL (todo Modules/*/Domain) y Pest da una nota por ejecucion; si cada parte
+# exigiera su 80 %, un modulo al 78 % y otro al 95 % -que pueden cumplir el umbral
+# global- pondrian la noche en rojo, es decir, el umbral seria OTRO, mas estricto
+# y no el de RQ-10. En cambio, sin `--min` la parte solo falla si el entorno falla
+# (canario, Pest roto). El MSI lo calcula el job `mutation-total` sumando los
+# mutantes de todas las partes (`.github/scripts/mutation-log.sh total`): la nota
+# es (muertos + timeout) / todos, la misma formula que Pest, sobre los mismos
+# mutantes; el umbral sigue siendo `--min=80` entero sobre el conjunto.
+#
+# Un grupo cuyo dominio no genera mutantes (Kiosk, por ejemplo, si la suite Unit
+# no lo ejecuta) sale con 0 mutantes y codigo 0, sin `--min`. Que TODOS los
+# modulos de `Modules/*/Domain` esten en alguna parte de la matriz lo vigila
+# `NightlyMutationMatrixTest`: un modulo nuevo sin parte hace fallar la etapa ②.
+MUTATE_MODULES ?=
+MUTATE_PART_PATHS := $(subst $(space),$(comma),$(foreach m,$(subst $(comma),$(space),$(MUTATE_MODULES)),app/Modules/$(m)/Domain))
+
+mutate-part: MUTATE_PATHS = $(MUTATE_PART_PATHS)
+mutate-part: MUTATE_MIN =
+mutate-part: mutate-canary ## Una parte de la mutacion completa: make mutate-part MUTATE_MODULES=Attendance,Kiosk (sin --min; el MSI lo suma el job mutation-total)
+	@test -n "$(MUTATE_MODULES)" || { echo "[make] ERROR: falta MUTATE_MODULES. Ejemplo: make mutate-part MUTATE_MODULES=Attendance,Kiosk"; exit 2; }
+	@for m in $(subst $(comma),$(space),$(MUTATE_MODULES)); do \
+		[ -d "backend/app/Modules/$$m/Domain" ] || { echo "[make] ERROR: backend/app/Modules/$$m/Domain no existe. Modulos con dominio: $(notdir $(patsubst %/Domain,%,$(wildcard backend/app/Modules/*/Domain)))"; exit 2; }; \
+	done
+	$(MUTATE_RUN)
 
 # `mutate` completo tarda 37-57 min medidos en la CI (comentario de arriba) y
 # no cabe en las etapas 1-3 de cada push (doc 02 §10.1). Decision
