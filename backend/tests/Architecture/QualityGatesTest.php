@@ -156,8 +156,22 @@ it('exige el MSI del 80 por ciento sobre el dominio, acotado y con OPcache apaga
         ->and($unit[1] ?? '')->toContain('base="origin/main"')
         ->and($unit[1] ?? '')->toContain('"${GITHUB_REF}" = "refs/heads/main"')
         ->and($unit[1] ?? '')->not->toMatch('/\bmake mutate\b(?!-changed)/');
-    expect(preg_match('/^  mutation:\n(.*?)\z/ms', $ci, $mutation))->toBe(1);
-    expect($mutation[1] ?? '')->toMatch('/\bmake mutate\b(?!-changed)/');
+    // La pasada global nocturna se reparte en una matriz de partes (31-10-2026,
+    // `make mutate-part`, SIN `--min`) y el 80 % se aplica sumandolas en
+    // `mutation-total`. `make mutate` entero sigue en el Makefile para local.
+    expect(preg_match('/^  mutation:\n(.*?)^  mutation-scope:\n/ms', $ci, $mutation))->toBe(1);
+    expect($mutation[1] ?? '')->toContain('make mutate-part MUTATE_MODULES=')
+        ->and($mutation[1] ?? '')->not->toContain('--min');
+    expect(preg_match('/^  mutation-total:\n(.*?)^  secrets-history:\n/ms', $ci, $total))->toBe(1);
+    expect($total[1] ?? '')->toContain('mutation-log.sh total 80');
+    // UNA sola orden de Pest para `mutate` y `mutate-part`: cambian la ruta y el
+    // minimo (vacio en la parte), no el texto de la receta.
+    expect($makefile)->toMatch('/^mutate-part: mutate-canary/m')
+        ->and($makefile)->toMatch('/^MUTATE_MIN \?= 80$/m')
+        ->and($makefile)->toMatch('/^mutate-part: MUTATE_MIN =\s*$/m')
+        ->and($makefile)->toContain('mutate-part: MUTATE_PATHS = $(MUTATE_PART_PATHS)')
+        ->and(substr_count($makefile, '--path=$(MUTATE_PATHS) --testsuite=Unit'))->toBe(1)
+        ->and(substr_count($makefile, "\t\$(MUTATE_RUN)\n"))->toBe(2);
 
     // Y ningun comentario vuelve a prometer lo contrario (V2-QB-4): «el 80 % a
     // CADA fichero» sobrevivio en ci.yml a la revision del 02-10 que lo
@@ -1369,7 +1383,7 @@ it('aplica en el PR los umbrales de cobertura de RNF-M-01, 90 de dominio y 75 gl
     $gates = qualityGatesWorkflow('.github/workflows/gates.yml');
     $makefile = repoContents('Makefile');
 
-    expect($gates)->toContain('run: make coverage')
+    expect($gates)->toMatch('/^\s+make coverage$/m')
         ->and($makefile)->toMatch('/^DOMAIN_COVERAGE_MIN\s*:=\s*90\s*$/m')
         ->and($makefile)->toMatch('/^GLOBAL_COVERAGE_MIN\s*:=\s*75\s*$/m')
         ->and($makefile)->toContain('--min=$(GLOBAL_COVERAGE_MIN)')
