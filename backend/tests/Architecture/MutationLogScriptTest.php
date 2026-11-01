@@ -109,7 +109,7 @@ it('ejecuta el canario con las mismas opciones que la mutacion del dominio y ant
         ->and($makefile)->toMatch('/^mutate: mutate-canary\b/m')
         ->and($makefile)->toContain('$(MAKE) --no-print-directory mutate-canary || exit $$?;')
         ->and($makefile)->toContain('$(PEST) $(MUTATE_OPTIONS) --path=tests/MutationCanary/MutationCanary.php --testsuite=MutationCanary')
-        ->and($makefile)->toContain('$(PEST) $(MUTATE_OPTIONS) --path=$(MUTATE_PATHS) --testsuite=Unit --min=80')
+        ->and($makefile)->toContain('$(PEST) $(MUTATE_OPTIONS) --path=$(MUTATE_PATHS) --testsuite=Unit$(if $(MUTATE_MIN), --min=$(MUTATE_MIN))')
         ->and($makefile)->toContain('$(PEST) $(MUTATE_OPTIONS) --path=$$paths --testsuite=Unit --min=80')
         ->and($makefile)->toContain('mutation-log.sh" canary "$(MUTATION_CANARY_EXPECTED)"');
 })->group('RQ-10');
