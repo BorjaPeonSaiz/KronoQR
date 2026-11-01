@@ -291,7 +291,7 @@ help: ## Muestra esta ayuda
 	@echo "  make docs-consistency  Coherencia documental (RQ-12, RNF-M-04)"
 	@echo "  make coverage         Cobertura: dominio 90, global 75 por ciento"
 	@echo "  make coverage-now     Cobertura actual, sin umbral"
-	@echo "  make mutate           Mutacion COMPLETA sobre el dominio, MSI 80 por ciento (nocturna y a mano)"
+	@echo "  make mutate           Mutacion COMPLETA sobre el dominio de una vez, MSI 80 por ciento (local; la nocturna usa mutate-part)"
 	@echo "  make mutate-part      Una parte de la mutacion completa por modulos (MUTATE_MODULES=A,B); la nocturna las reparte en una matriz"
 	@echo "  make mutate-changed   Mutacion acotada a los ficheros de dominio de este push (etapa 3 de la CI)"
 	@echo "  make mutate-canary    Canario: la mutacion distingue un mutante vivo de uno muerto (antes de las dos)"
@@ -1252,7 +1252,7 @@ mutate-canary: ## Canario de la mutacion: la pasada distingue un mutante vivo de
 # MUTATION_SCOPE_MIN. Es la fraccion del dominio que la mutacion puede ver.
 # Un modulo nuevo sin pruebas unitarias la baja y la noche lo dice. El umbral
 # es la cifra medida, redondeada hacia abajo: se sube cuando se mida mas, no
-# se baja para dejar pasar un fichero. Corre de noche, en el job `mutation`,
+# se baja para dejar pasar un fichero. Corre de noche, en el job `mutation-scope`,
 # y no en cada push: es la suite Unit con Xdebug (48 s en el contenedor).
 # Con el bind mount de Docker Desktop la cifra local sale mas baja (faltan
 # ficheros en el recorrido de app/): se mide en una copia o en la CI.
@@ -1262,6 +1262,15 @@ MUTATION_SCOPE_CLOVER := storage/framework/cache/clover-unit.xml
 mutate-scope: ## Fraccion del dominio que la mutacion ve: cobertura Unit de Modules/*/Domain >= MUTATION_SCOPE_MIN (M6)
 	$(RUN_APP_XDEBUG) $(PEST) --testsuite=Unit --coverage-clover=$(MUTATION_SCOPE_CLOVER)
 	$(RUN_APP) php tools/coverage-gate.php $(MUTATION_SCOPE_CLOVER) $(MUTATION_SCOPE_MIN) 'app/Modules/*/Domain/*'
+
+# La orden de Pest de la mutacion del dominio, UNA sola para `mutate` y para
+# `mutate-part` (la nocturna por partes). Solo cambian dos variables: la ruta
+# (`MUTATE_PATHS`, todo Modules/*/Domain, o las del grupo de la parte) y el
+# minimo (`MUTATE_MIN`, 80 de RQ-10; vacio = sin `--min`, que es lo que lleva
+# una parte porque el 80 % es del conjunto). Es una variable recursiva (`=`)
+# para que el valor de la receta que la usa sea el de su objetivo.
+MUTATE_MIN ?= 80
+MUTATE_RUN  = $(RUN_APP_XDEBUG) sh -c 'PHP_INI_SCAN_DIR=":$$(pwd)/tools/mutation" $(PEST) $(MUTATE_OPTIONS) --path=$(MUTATE_PATHS) --testsuite=Unit$(if $(MUTATE_MIN), --min=$(MUTATE_MIN))'
 
 mutate: mutate-canary ## Mutacion sobre el dominio, MSI mayor o igual a 80 por ciento
 ifeq ($(DOMAIN_MODELS),)
@@ -1309,7 +1318,7 @@ else
 # --parallel de la suite COMPLETA vive en pruebas Feature, que aqui no corren.
 # Un `use` sin efecto (clase global en un fichero sin namespace) rompe el
 # arranque de los procesos hijos como ErrorException: no dejar ninguno.
-	$(RUN_APP_XDEBUG) sh -c 'PHP_INI_SCAN_DIR=":$$(pwd)/tools/mutation" $(PEST) $(MUTATE_OPTIONS) --path=$(MUTATE_PATHS) --testsuite=Unit --min=80'
+	$(MUTATE_RUN)
 endif
 
 # LA MUTACION COMPLETA POR PARTES (nocturna, 31-10-2026).
@@ -1339,12 +1348,14 @@ endif
 MUTATE_MODULES ?=
 MUTATE_PART_PATHS := $(subst $(space),$(comma),$(foreach m,$(subst $(comma),$(space),$(MUTATE_MODULES)),app/Modules/$(m)/Domain))
 
+mutate-part: MUTATE_PATHS = $(MUTATE_PART_PATHS)
+mutate-part: MUTATE_MIN =
 mutate-part: mutate-canary ## Una parte de la mutacion completa: make mutate-part MUTATE_MODULES=Attendance,Kiosk (sin --min; el MSI lo suma el job mutation-total)
 	@test -n "$(MUTATE_MODULES)" || { echo "[make] ERROR: falta MUTATE_MODULES. Ejemplo: make mutate-part MUTATE_MODULES=Attendance,Kiosk"; exit 2; }
 	@for m in $(subst $(comma),$(space),$(MUTATE_MODULES)); do \
 		[ -d "backend/app/Modules/$$m/Domain" ] || { echo "[make] ERROR: backend/app/Modules/$$m/Domain no existe. Modulos con dominio: $(notdir $(patsubst %/Domain,%,$(wildcard backend/app/Modules/*/Domain)))"; exit 2; }; \
 	done
-	$(RUN_APP_XDEBUG) sh -c 'PHP_INI_SCAN_DIR=":$$(pwd)/tools/mutation" $(PEST) $(MUTATE_OPTIONS) --path=$(MUTATE_PART_PATHS) --testsuite=Unit'
+	$(MUTATE_RUN)
 
 # `mutate` completo tarda 37-57 min medidos en la CI (comentario de arriba) y
 # no cabe en las etapas 1-3 de cada push (doc 02 §10.1). Decision
