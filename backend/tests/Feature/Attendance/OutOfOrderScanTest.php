@@ -20,6 +20,7 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\EmployeePins;
+use Tests\Support\Workforce\WorkforceFixtures;
 
 /*
  * RN-18, el **fichaje irreconciliable**, desde los tres endpoints de escritura
@@ -756,3 +757,212 @@ it('saca del lote la entrada que cae dentro del turno de noche ya fichado', func
         ->and(DB::table('scan_events')->where('result', 'rejected_out_of_order')->count())->toBe(1)
         ->and(AttendanceFixtures::projectionDivergences())->toBe([]);
 })->group('RN-18', 'RN-02', 'RF-KI-04');
+
+// --- El mismo suelo de tiempo que cualquier rechazo (RS-03, A-13) -----------
+//
+// Enmienda de ADR-005 (2.3.0, tarea 33.6): todo rechazo de las tres puertas se
+// rellena en `UnprocessableScanGuard` hasta `2 x security.rejection_floor_ms`,
+// el mismo suelo que el descarte. Con el suelo alto, cada rechazo tiene que
+// durar como minimo eso, y responder lo mismo: RN-18, la jornada anterior al
+// alta (RN-27, la misma rama que el cese de RN-14) y una credencial que no es
+// de nadie. El resolutor es el doble, que no rellena nada: la espera que se
+// mide es la del guardian y solo la suya.
+
+/** `security.rejection_floor_ms` en estas pruebas: el guardian espera el doble. */
+const SUELO_FUERA_DE_ORDEN_MS = 60;
+
+/** La tarjeta de quien entra en plantilla el 1 de abril (RN-27). */
+const TARJETA_ANTES_DEL_ALTA_FUERA_DE_ORDEN = 'FH1.a3.antesDelAlta00000000000.firmaAntesDelAl';
+
+/** Una tarjeta que el resolutor no conoce. */
+const TARJETA_DESCONOCIDA_FUERA_DE_ORDEN = 'FH1.a3.desconocida0000000000000.firmaDesconocid';
+
+/**
+ * El escenario de siempre, con el suelo alto y una segunda persona que todavia
+ * no ha entrado en plantilla, con tarjeta y con PIN.
+ *
+ * @return array{site: int, employee: string, device: int, deviceUuid: string, token: string, code: string, publicKey: string, metrics: RecordingScanMetrics, futura: string, codigoFutura: string}
+ */
+function escenarioConSueloAlto(): array
+{
+    config(['security.rejection_floor_ms' => SUELO_FUERA_DE_ORDEN_MS]);
+
+    $escenario = escenarioConTurnoAbierto();
+    $futura = WorkforceFixtures::employee($escenario['site'], null, hiredAt: '2026-04-01', terminatedAt: '2026-12-31');
+
+    EmployeePins::issue($futura, PIN_FUERA_DE_ORDEN);
+
+    app()->instance(
+        CredentialResolver::class,
+        FakeCredentialResolver::new()
+            ->resolving(TARJETA_FUERA_DE_ORDEN, $escenario['employee'])
+            ->resolving(TARJETA_ANTES_DEL_ALTA_FUERA_DE_ORDEN, $futura)
+            ->rejecting(TARJETA_REVOCADA_FUERA_DE_ORDEN, CredentialRejectionReason::REVOKED),
+    );
+
+    return [...$escenario, 'futura' => $futura, 'codigoFutura' => EmployeePins::codeOf($futura)];
+}
+
+/** Lo que espera el guardian como minimo en cada rechazo, en milisegundos. */
+function sueloDelGuardianFueraDeOrden(): float
+{
+    return 2.0 * SUELO_FUERA_DE_ORDEN_MS;
+}
+
+/**
+ * Una peticion medida de punta a punta, en milisegundos.
+ *
+ * @param  Closure(): TestResponse<Response>  $peticion
+ * @return array{0: TestResponse<Response>, 1: float}
+ */
+function cronometrarFueraDeOrden(Closure $peticion): array
+{
+    $inicio = hrtime(true);
+    $respuesta = $peticion();
+
+    return [$respuesta, (hrtime(true) - $inicio) / 1_000_000];
+}
+
+/**
+ * El cuerpo sin el eco del `scan_id`, que es lo unico que puede variar.
+ *
+ * @param  array<array-key, mixed>  $cuerpo
+ * @return array<array-key, mixed>
+ */
+function cuerpoSinEcoFueraDeOrden(array $cuerpo): array
+{
+    unset($cuerpo['scan_id']);
+
+    return $cuerpo;
+}
+
+/**
+ * @param  array{token: string, ...}  $escenario
+ * @return TestResponse<Response>
+ */
+function ficharConTarjetaFueraDeOrden(array $escenario, string $tarjeta, string $occurredAt): TestResponse
+{
+    $scanId = Str::uuid7()->toString();
+
+    return Api::as($escenario['token'])
+        ->withHeaders(['Idempotency-Key' => $scanId])
+        ->post('/api/v1/scan', [
+            'scan_id' => $scanId,
+            'occurred_at' => $occurredAt,
+            'qr_payload' => $tarjeta,
+        ]);
+}
+
+/**
+ * @param  array{token: string, publicKey: string, ...}  $escenario
+ * @return TestResponse<Response>
+ */
+function ficharConPinFueraDeOrden(array $escenario, string $codigo, string $pin, string $occurredAt): TestResponse
+{
+    $scanId = Str::uuid7()->toString();
+
+    return Api::as($escenario['token'])
+        ->withHeaders(['Idempotency-Key' => $scanId])
+        ->post('/api/v1/scan/pin', [
+            'scan_id' => $scanId,
+            'occurred_at' => $occurredAt,
+            'employee_code' => $codigo,
+            'pin_sealed' => EmployeePins::seal($pin, $escenario['publicKey']),
+        ]);
+}
+
+/**
+ * Ejecuta cada rechazo, comprueba que espero el suelo y devuelve sus cuerpos.
+ *
+ * @param  array<string, Closure(): TestResponse<Response>>  $rechazos
+ * @return array<string, array<array-key, mixed>>
+ */
+function rechazosConSueloFueraDeOrden(array $rechazos): array
+{
+    $cuerpos = [];
+
+    foreach ($rechazos as $caso => $peticion) {
+        [$respuesta, $duracion] = cronometrarFueraDeOrden($peticion);
+
+        $respuesta->assertStatus(422)->assertValidResponse(422);
+        expect($duracion)->toBeGreaterThanOrEqual(sueloDelGuardianFueraDeOrden(), $caso.' no espero el suelo del guardian');
+
+        /** @var array<array-key, mixed> $cuerpo */
+        $cuerpo = $respuesta->json();
+        $cuerpos[$caso] = cuerpoSinEcoFueraDeOrden($cuerpo);
+    }
+
+    return $cuerpos;
+}
+
+it('hace esperar el mismo suelo a RN-18, a la jornada antes del alta y a la tarjeta desconocida en /scan', function (): void {
+    $escenario = escenarioConSueloAlto();
+
+    $cuerpos = rechazosConSueloFueraDeOrden([
+        'RN-18' => static fn (): TestResponse => fichar($escenario, Str::uuid7()->toString(), '2026-03-14T13:50:00Z'),
+        'RN-27' => static fn (): TestResponse => ficharConTarjetaFueraDeOrden($escenario, TARJETA_ANTES_DEL_ALTA_FUERA_DE_ORDEN, '2026-03-14T16:00:00Z'),
+        'desconocida' => static fn (): TestResponse => ficharConTarjetaFueraDeOrden($escenario, TARJETA_DESCONOCIDA_FUERA_DE_ORDEN, '2026-03-14T16:00:00Z'),
+    ]);
+
+    expect($cuerpos['RN-27'])->toBe($cuerpos['RN-18'])
+        ->and($cuerpos['desconocida'])->toBe($cuerpos['RN-18'])
+        ->and(DB::table('scan_events')->where('result', 'rejected_out_of_order')->count())->toBe(1)
+        ->and(DB::table('scan_events')->where('result', 'rejected_unknown')->count())->toBe(2)
+        ->and(DB::table('shift_entries')->count())->toBe(1);
+})->group('RS-03', 'RN-18', 'RN-14', 'RN-27');
+
+it('hace esperar el mismo suelo al reenvio del rechazo de RN-18 y devuelve el mismo cuerpo', function (): void {
+    $escenario = escenarioConSueloAlto();
+    $scanId = Str::uuid7()->toString();
+
+    [$primera] = cronometrarFueraDeOrden(static fn (): TestResponse => fichar($escenario, $scanId, '2026-03-14T13:50:00Z'));
+    [$reenvio, $duracion] = cronometrarFueraDeOrden(static fn (): TestResponse => fichar($escenario, $scanId, '2026-03-14T13:50:00Z'));
+
+    $reenvio->assertStatus(422)->assertValidResponse(422);
+
+    expect($duracion)->toBeGreaterThanOrEqual(sueloDelGuardianFueraDeOrden())
+        ->and($reenvio->json())->toBe($primera->json())
+        ->and(DB::table('scan_events')->where('scan_id', $scanId)->count())->toBe(1);
+})->group('RS-03', 'RN-18', 'RF-AT-07');
+
+it('hace esperar el mismo suelo a RN-18, al PIN antes del alta y al PIN incorrecto en /scan/pin', function (): void {
+    $escenario = escenarioConSueloAlto();
+
+    $cuerpos = rechazosConSueloFueraDeOrden([
+        'RN-18' => static fn (): TestResponse => ficharConPinFueraDeOrden($escenario, $escenario['code'], PIN_FUERA_DE_ORDEN, '2026-03-14T13:50:00Z'),
+        'RN-27' => static fn (): TestResponse => ficharConPinFueraDeOrden($escenario, $escenario['codigoFutura'], PIN_FUERA_DE_ORDEN, '2026-03-14T16:00:00Z'),
+        'PIN incorrecto' => static fn (): TestResponse => ficharConPinFueraDeOrden($escenario, $escenario['code'], '000000', '2026-03-14T16:00:00Z'),
+    ]);
+
+    expect($cuerpos['RN-27'])->toBe($cuerpos['RN-18'])
+        ->and($cuerpos['PIN incorrecto'])->toBe($cuerpos['RN-18'])
+        ->and(DB::table('shift_entries')->count())->toBe(1);
+})->group('RS-03', 'RN-18', 'RN-14', 'RN-27', 'RF-AT-11');
+
+it('rellena cada rechazo del lote por separado y con el mismo desenlace', function (): void {
+    // Por elemento: tres rechazos en un lote esperan tres veces el suelo. La
+    // salida valida que va detras se registra; que no espera lo fija la
+    // unitaria del guardian.
+    $escenario = escenarioConSueloAlto();
+
+    $imposible = encolado('2026-03-14T13:50:00Z');
+    $antesDelAlta = encolado('2026-03-14T15:00:00Z', TARJETA_ANTES_DEL_ALTA_FUERA_DE_ORDEN);
+    $desconocida = encolado('2026-03-14T15:30:00Z', TARJETA_DESCONOCIDA_FUERA_DE_ORDEN);
+    $salida = encolado('2026-03-14T17:00:00Z');
+
+    [$respuesta, $duracion] = cronometrarFueraDeOrden(
+        static fn (): TestResponse => sincronizarFueraDeOrden($escenario, [$imposible, $antesDelAlta, $desconocida, $salida]),
+    );
+
+    $respuesta->assertStatus(207)->assertValidRequest()->assertValidResponse(207);
+
+    expect($duracion)->toBeGreaterThanOrEqual(3 * sueloDelGuardianFueraDeOrden());
+
+    /** @var list<array{scan_id: string, status: int, outcome: array<array-key, mixed>}> $resultados */
+    $resultados = $respuesta->json('results');
+
+    expect(array_column($resultados, 'status'))->toBe([422, 422, 422, 200])
+        ->and(cuerpoSinEcoFueraDeOrden($resultados[1]['outcome']))->toBe(cuerpoSinEcoFueraDeOrden($resultados[0]['outcome']))
+        ->and(cuerpoSinEcoFueraDeOrden($resultados[2]['outcome']))->toBe(cuerpoSinEcoFueraDeOrden($resultados[0]['outcome']))
+        ->and($resultados[3]['outcome']['action'] ?? null)->toBe('clock_out');
+})->group('RS-03', 'RN-18', 'RN-14', 'RN-27', 'RF-KI-04');

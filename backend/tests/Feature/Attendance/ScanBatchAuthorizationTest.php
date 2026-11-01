@@ -124,7 +124,7 @@ it('deniega la sincronizacion del lote a cada rol de gestion', function (UserRol
     'responsable de departamento' => [UserRole::RESPONSABLE_DEPARTAMENTO],
     'auditor' => [UserRole::AUDITOR],
     'cuenta con rol empleado' => [UserRole::EMPLEADO],
-])->group('RS-04', 'RQ-07', 'RF-KI-04');
+])->group('RS-04', 'RQ-07', 'RF-KI-04', 'RS-03', 'RN-18');
 
 it('deniega la sincronizacion a una cuenta con rol kiosk que no es un dispositivo', function (): void {
     // El caso que la policy existe para cubrir y que el ambito NO cubre: esta

@@ -280,7 +280,15 @@ it('con dos tablets pidiendo pausa y vuelta a la vez, no quedan dos tramos abier
         ->and(AttendanceFixtures::projectionDivergences())->toBe([]);
 })->group('RF-AT-07', 'RF-AT-12', 'RN-01', 'RQ-03');
 
-it('deduplica el fichaje irreconciliable reenviado diez veces a la vez', function (): void {
+it('deduplica el fichaje irreconciliable reenviado diez veces a la vez', function (?int $suelo): void {
+    // Con el suelo de serie y con uno alto (RS-03, enmienda de ADR-005): desde la
+    // 2.3.0 el guardian rellena tambien este rechazo, FUERA de la transaccion y
+    // de cualquier candado, asi que las diez esperas no pueden cambiar el
+    // desenlace ni dejar pasar una segunda fila.
+    if ($suelo !== null) {
+        config(['security.rejection_floor_ms' => $suelo]);
+    }
+
     // RN-18 bajo la misma carrera: el rechazo tambien pasa por `recordOrReplay()`,
     // asi que diez reintentos simultaneos de un elemento imposible tienen que
     // dejar **una** fila y diez respuestas identicas. Si la deduplicacion no
@@ -333,4 +341,4 @@ it('deduplica el fichaje irreconciliable reenviado diez veces a la vez', functio
         ->and(DB::table('shift_entries')->count())->toBe(1)
         ->and(DB::table('shift_entries')->first()?->status)->toBe('open')
         ->and(AttendanceFixtures::projectionDivergences())->toBe([]);
-})->group('RN-18', 'RF-AT-07', 'RQ-03');
+})->with(['suelo de serie' => [null], 'suelo alto' => [60]])->group('RN-18', 'RF-AT-07', 'RQ-03', 'RS-03');

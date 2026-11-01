@@ -90,7 +90,7 @@ it('deniega el fichaje a cada rol de gestion', function (UserRole $rol): void {
     'responsable de departamento' => [UserRole::RESPONSABLE_DEPARTAMENTO],
     'auditor' => [UserRole::AUDITOR],
     'cuenta con rol empleado' => [UserRole::EMPLEADO],
-])->group('RS-04', 'RQ-07', 'RF-ID-02');
+])->group('RS-04', 'RQ-07', 'RF-ID-02', 'RS-03', 'RN-18');
 
 it('deniega el fichaje a una cuenta con rol kiosk que no es un dispositivo', function (): void {
     // El caso que la policy existe para cubrir y que el ambito NO cubre: esta

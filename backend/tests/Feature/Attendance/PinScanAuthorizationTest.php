@@ -96,7 +96,7 @@ it('deniega el fichaje por PIN a cada rol de gestion', function (UserRole $rol):
     'responsable de departamento' => [UserRole::RESPONSABLE_DEPARTAMENTO],
     'auditor' => [UserRole::AUDITOR],
     'cuenta con rol empleado' => [UserRole::EMPLEADO],
-])->group('RS-04', 'RQ-07', 'RF-AT-11');
+])->group('RS-04', 'RQ-07', 'RF-AT-11', 'RS-03', 'RN-18');
 
 it('deniega el fichaje por PIN a una cuenta con rol kiosk que no es un dispositivo', function (): void {
     // El caso que la policy existe para cubrir y que el ambito NO cubre: esta
