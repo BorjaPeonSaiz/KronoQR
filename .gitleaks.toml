@@ -226,4 +226,11 @@ useDefault = true
     #    no por su forma: es un identificador escrito a mano, sin uso fuera de la prueba,
     #    y la credencial real va en el QR firmado con HMAC, nunca como este UUID.
     '''^0199f0d1-2a5b-7d4f-8c32-5e6f7a8b9c11$''',
+    # 36) frontend-admin/tests/unit/support/fixtures.ts (tareas 25.6 y 25.7 de la
+    #    2.3.0): UUID v7 fijo de la tarjeta nueva que devuelve la readmision en las
+    #    pruebas unitarias del panel, contra una API simulada. La regla
+    #    `generic-api-key` lo captura por el nombre de la constante
+    #    (REHIRED_CREDENTIAL_UUID), no por su forma: es un identificador escrito a
+    #    mano, sin uso fuera de la prueba.
+    '''^019a3b5e-7c00-7d1e-8f2a-3b4c5d6e7f81$''',
   ]
