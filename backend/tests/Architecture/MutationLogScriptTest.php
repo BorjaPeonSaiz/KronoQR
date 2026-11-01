@@ -328,12 +328,24 @@ it('mide de noche la parte del dominio que la mutacion ve y deja el log entero c
 })->group('RQ-10');
 
 /**
+ * El log de una parte de la mutacion nocturna: el canario correcto que imprime
+ * `make mutate-part` y, detras, la salida de Pest.
+ */
+function mutationLogScriptPart(string $reparto, string $nota, string $vivos = ''): string
+{
+    return "[mutate-canary] Canario correcto: 4 untested, 3 tested. La pasada distingue un mutante muerto de uno vivo.
+"
+        .mutationLogScriptPestOutput($reparto, $nota, $vivos);
+}
+
+/**
  * Ejecuta `mutation-log.sh total` sobre varios logs de parte fabricados.
  *
  * @param  array<string, string>  $partes  Nombre de la parte => salida de Pest.
+ * @param  list<string>  $ausentes  Partes cuyo log no existe (el artefacto no se descargo).
  * @return array{0: int|null, 1: string}
  */
-function mutationLogScriptTotal(int $minimo, array $partes): array
+function mutationLogScriptTotal(int $minimo, array $partes, array $ausentes = []): array
 {
     $directorio = sys_get_temp_dir().'/mutation-total-'.bin2hex(random_bytes(4));
     mkdir($directorio);
@@ -341,6 +353,10 @@ function mutationLogScriptTotal(int $minimo, array $partes): array
     foreach ($partes as $nombre => $salida) {
         $ficheros[] = $directorio.'/'.$nombre.'.log';
         file_put_contents(end($ficheros), $salida);
+    }
+
+    foreach ($ausentes as $nombre) {
+        $ficheros[] = $directorio.'/'.$nombre.'.log';
     }
 
     $script = new Process(['sh', Repo::file('.github/scripts/mutation-log.sh'), 'total', (string) $minimo, ...$ficheros]);
@@ -355,8 +371,8 @@ it('suma los mutantes de todas las partes y exige el minimo sobre el conjunto, n
     // Una parte al 78 % y otra al 98 %: ninguna regla «80 % por parte» lo
     // aceptaria, y el conjunto (1025 de 1250 = 82 %) cumple RQ-10.
     $partes = [
-        'product' => mutationLogScriptPestOutput('220 untested, 780 tested', '78.00%'),
-        'workforce' => mutationLogScriptPestOutput('5 untested, 245 tested', '98.00%'),
+        'product' => mutationLogScriptPart('220 untested, 780 tested', '78.00%'),
+        'workforce' => mutationLogScriptPart('5 untested, 245 tested', '98.00%'),
     ];
     [$codigo, $texto] = mutationLogScriptTotal(80, $partes);
 
@@ -369,10 +385,10 @@ it('suma los mutantes de todas las partes y exige el minimo sobre el conjunto, n
 it('cuenta los tiempos agotados como muertos, como hace Pest, y los pendientes y sin cubrir como vivos', function (): void {
     // (60 tested + 20 timeout) / (60 + 20 + 10 untested + 5 uncovered + 5 pending) = 80 %
     [$codigo] = mutationLogScriptTotal(80, [
-        'a' => mutationLogScriptPestOutput('10 untested, 5 uncovered, 5 pending, 20 timeout, 60 tested', '80.00%'),
+        'a' => mutationLogScriptPart('10 untested, 5 uncovered, 5 pending, 20 timeout, 60 tested', '80.00%'),
     ]);
     [$suspenso] = mutationLogScriptTotal(81, [
-        'a' => mutationLogScriptPestOutput('10 untested, 5 uncovered, 5 pending, 20 timeout, 60 tested', '80.00%'),
+        'a' => mutationLogScriptPart('10 untested, 5 uncovered, 5 pending, 20 timeout, 60 tested', '80.00%'),
     ]);
 
     expect($codigo)->toBe(0)
@@ -381,8 +397,8 @@ it('cuenta los tiempos agotados como muertos, como hace Pest, y los pendientes y
 
 it('suspende la mutacion global por debajo del minimo y dice cuanto', function (): void {
     [$codigo, $texto] = mutationLogScriptTotal(80, [
-        'a' => mutationLogScriptPestOutput('40 untested, 60 tested', '60.00%'),
-        'b' => mutationLogScriptPestOutput('10 untested, 90 tested', '90.00%'),
+        'a' => mutationLogScriptPart('40 untested, 60 tested', '60.00%'),
+        'b' => mutationLogScriptPart('10 untested, 90 tested', '90.00%'),
     ]);
 
     expect($codigo)->toBe(1)
@@ -391,8 +407,8 @@ it('suspende la mutacion global por debajo del minimo y dice cuanto', function (
 
 it('no da nota global si una parte no llego al final, aunque las demas sean perfectas', function (): void {
     [$codigo, $texto] = mutationLogScriptTotal(80, [
-        'a' => mutationLogScriptPestOutput('1 untested, 99 tested', '99.00%'),
-        'b' => "  7 Mutations for 1 Files created\n  x.xx.x.\n",
+        'a' => mutationLogScriptPart('1 untested, 99 tested', '99.00%'),
+        'b' => "[mutate-canary] Canario correcto: 4 untested, 3 tested. x\n  7 Mutations for 1 Files created\n  x.xx.x.\n",
     ]);
 
     expect($codigo)->toBe(1)
@@ -402,10 +418,10 @@ it('no da nota global si una parte no llego al final, aunque las demas sean perf
 
 it('no aprueba una mutacion global sin ningun mutante ni un estado de mutante que no conoce', function (): void {
     [$vacio, $textoVacio] = mutationLogScriptTotal(80, [
-        'a' => mutationLogScriptPestOutput('0 tested', '0.00%'),
+        'a' => mutationLogScriptPart('0 tested', '0.00%'),
     ]);
     [$raro, $textoRaro] = mutationLogScriptTotal(80, [
-        'a' => mutationLogScriptPestOutput('3 flaky, 97 tested', '97.00%'),
+        'a' => mutationLogScriptPart('3 flaky, 97 tested', '97.00%'),
     ]);
 
     expect($vacio)->toBe(1)
@@ -416,11 +432,52 @@ it('no aprueba una mutacion global sin ningun mutante ni un estado de mutante qu
 
 it('lista los vivos de todas las partes en el resumen global', function (): void {
     [$codigo, $texto] = mutationLogScriptTotal(80, [
-        'a' => mutationLogScriptPestOutput('2 untested, 98 tested', '98.00%', "   UNTESTED  app/Modules/Shared/Domain/Money.php  > Line 3: Plus - ID: 1\n   UNTESTED  app/Modules/Shared/Domain/Money.php  > Line 4: Minus - ID: 2\n"),
-        'b' => mutationLogScriptPestOutput('1 untested, 99 tested', '99.00%', "   UNTESTED  app/Modules/Product/Domain/Support/Licence.php  > Line 9: Equal - ID: 3\n"),
+        'a' => mutationLogScriptPart('2 untested, 98 tested', '98.00%', "   UNTESTED  app/Modules/Shared/Domain/Money.php  > Line 3: Plus - ID: 1\n   UNTESTED  app/Modules/Shared/Domain/Money.php  > Line 4: Minus - ID: 2\n"),
+        'b' => mutationLogScriptPart('1 untested, 99 tested', '99.00%', "   UNTESTED  app/Modules/Product/Domain/Support/Licence.php  > Line 9: Equal - ID: 3\n"),
     ]);
 
     expect($codigo)->toBe(0)
         ->and($texto)->toContain('| 2 | `app/Modules/Shared/Domain/Money.php` |')
         ->and($texto)->toContain('| 1 | `app/Modules/Product/Domain/Support/Licence.php` |');
 })->group('RQ-10');
+
+it('para la mutacion global si falta el log de una parte, aunque las demas den el minimo', function (): void {
+    // El artefacto de `workforce` no se descargo: sumar solo cuatro partes daria
+    // una nota que no es la de todo el dominio.
+    [$codigo, $texto] = mutationLogScriptTotal(80, [
+        'product' => mutationLogScriptPart('1 untested, 99 tested', '99.00%'),
+    ], ['workforce']);
+
+    expect($codigo)->toBe(1)
+        ->and($texto)->toContain('falta el log de la parte workforce')
+        ->and($texto)->toContain('Sin puntuacion global');
+})->group('RQ-10');
+
+it('no suma el log de una parte cuyo canario ha fallado, aunque lleve un reparto de Pest', function (string $log, string $motivo): void {
+    [$codigo, $texto] = mutationLogScriptTotal(80, [
+        'product' => mutationLogScriptPart('1 untested, 99 tested', '99.00%'),
+        'attendance' => $log,
+    ]);
+
+    expect($codigo)->toBe(1)
+        ->and($texto)->toContain('la parte attendance')
+        ->and($texto)->toContain($motivo)
+        ->and($texto)->toContain('Sin puntuacion global');
+})->with([
+    'error del canario con su propia salida de Pest' => [
+        "[mutate-canary] ERROR: el canario ha dado «7 tested» y tiene que dar «4 untested, 3 tested».\n".mutationLogScriptPestOutput('7 tested', '100.00%'),
+        'error del canario o de make',
+    ],
+    'error de make' => [
+        "[make] ERROR: backend/app/Modules/Nada/Domain no existe.\n".mutationLogScriptPestOutput('1 untested, 99 tested', '99.00%'),
+        'error del canario o de make',
+    ],
+    'sin la linea del canario' => [
+        mutationLogScriptPestOutput('1 untested, 99 tested', '99.00%'),
+        'no tiene la linea «Canario correcto»',
+    ],
+    'sin mutantes creados' => [
+        "[mutate-canary] Canario correcto: 4 untested, 3 tested. x\n  0 Mutations for 0 Files created\n  Mutations: 100 tested\n",
+        'no ha creado ningun mutante',
+    ],
+])->group('RQ-10');

@@ -32,7 +32,11 @@
 #       FICHERO es el log de una parte; suma sus mutantes (muertos = tested +
 #       timeout, la formula de Pest), escribe el resumen en Markdown y sale con
 #       1 si el conjunto queda por debajo de MINIMO, si ninguna parte genero
-#       mutantes o si falta el log de alguna parte o no llego al final. Es el
+#       mutantes, si falta el log de alguna parte o no llego al final, o si
+#       el log trae un error del canario o de make, no tiene la linea
+#       «Canario correcto» o no tiene «N Mutations for M Files created» con
+#       N > 0 (un canario roto deja SU reparto de Pest en el log, y sumarlo
+#       seria medir otra cosa). Es el
 #       mismo umbral de RQ-10 sobre los mismos mutantes, no uno por parte.
 #
 # FICHERO es la salida de Pest ya capturada, con o sin colores. Con
@@ -192,6 +196,26 @@ total)
     nombre=$(basename "$fichero" .log)
     if [ ! -r "$fichero" ]; then
       printf '[mutation-log] ERROR: falta el log de la parte %s (%s): la parte no termino o no subio su artefacto.\n' "$nombre" "$fichero" >&2
+      fallo=1
+      continue
+    fi
+    # El log de una parte tiene que ser el de una mutacion que SI se ejecuto: si
+    # el canario falla, el log lleva SU salida de Pest (otro reparto de
+    # mutantes) y sumarla daria una nota que no es la del dominio.
+    limpio_parte=$(limpia "$fichero")
+    if printf '%s\n' "$limpio_parte" | grep -Eq '^\[(mutate-canary|make)\] ERROR'; then
+      printf '[mutation-log] ERROR: la parte %s trae un error del canario o de make en su log: no se muto el dominio. Mira su log en el artefacto.\n' "$nombre" >&2
+      fallo=1
+      continue
+    fi
+    if ! printf '%s\n' "$limpio_parte" | grep -q '^\[mutate-canary\] Canario correcto'; then
+      printf '[mutation-log] ERROR: la parte %s no tiene la linea «Canario correcto»: la mutacion no paso por el canario (R2-QB-06) y su nota no vale.\n' "$nombre" >&2
+      fallo=1
+      continue
+    fi
+    creados=$(printf '%s\n' "$limpio_parte" | sed -n 's/^ *\([0-9][0-9]*\) Mutations for [0-9][0-9]* Files created.*/\1/p' | tail -n 1)
+    if [ "${creados:-0}" -le 0 ]; then
+      printf '[mutation-log] ERROR: la parte %s no ha creado ningun mutante (falta «N Mutations for M Files created» con N > 0): su dominio no se ha medido.\n' "$nombre" >&2
       fallo=1
       continue
     fi
