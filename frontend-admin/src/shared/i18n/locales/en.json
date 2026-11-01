@@ -601,7 +601,8 @@
         "printLater": "Print later",
         "printNow": "Print the card now",
         "printBatchNow": "Print the pending cards now",
-        "announcePrinted": "Card downloaded."
+        "announcePrinted": "Card downloaded.",
+        "announcePrintedMany": "Sheet generated: {count} card. | Sheet generated: {count} cards."
       },
       "pins": {
         "heading": "New PINs",

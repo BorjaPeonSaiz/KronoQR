@@ -1,3 +1,4 @@
+import { QueryClient } from '@tanstack/vue-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { announcement, clearAnnouncement } from '@kronoqr/web-kit/announcer'
 import { useSessionStore } from '@/features/auth/session.store'
@@ -43,12 +44,13 @@ function second(overrides: Partial<RehiredEmployee> = {}): RehiredEmployee {
   })
 }
 
-function pdf(): Response {
+function pdf(printedCount?: number): Response {
   return new Response('%PDF-1.7', {
     status: 200,
     headers: {
       'Content-Type': 'application/pdf',
       'Content-Disposition': 'attachment; filename="t.pdf"',
+      ...(printedCount === undefined ? {} : { 'X-Kronoqr-Printed-Count': String(printedCount) }),
     },
   })
 }
@@ -271,6 +273,38 @@ describe('RehireOutcome: varias personas', () => {
 
     expect(urls).toEqual(['POST /api/v1/credentials/print-batch'])
     expect(wrapper.find('[data-test="rehire-card-printed"]').exists()).toBe(true)
+  })
+
+  it('al imprimir el lote anuncia cuantas tarjetas lleva la hoja (plural), recuerda que el PDF es al portador y relee las credenciales', async () => {
+    const invalidate = vi.spyOn(QueryClient.prototype, 'invalidateQueries')
+
+    stubFetch(() => pdf(2))
+
+    const wrapper = await mountOutcome([rehired(), second()], ['credentials:*'])
+
+    expect(wrapper.find('[data-test="rehire-card-bearer"]').text()).toBe(
+      es.credentials.batch.bearerNotice,
+    )
+
+    await wrapper.find('[data-test="rehire-card-print"]').trigger('click')
+    await settle()
+
+    expect(announcement.value).toBe('Hoja generada: 2 tarjetas.')
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['credential-board'] })
+  })
+
+  it('con una sola tarjeta usa el singular del anuncio y tambien relee las credenciales', async () => {
+    const invalidate = vi.spyOn(QueryClient.prototype, 'invalidateQueries')
+
+    stubFetch(() => pdf())
+
+    const wrapper = await mountOutcome([rehired()], ['credentials:*'])
+
+    await wrapper.find('[data-test="rehire-card-print"]').trigger('click')
+    await settle()
+
+    expect(announcement.value).toBe(es.employees.rehire.card.announcePrinted)
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['credential-board'] })
   })
 
   it('un 204 del lote no es un error: ya no habia nada pendiente', async () => {

@@ -601,7 +601,8 @@
         "printLater": "Imprimir más tarde",
         "printNow": "Imprimir la tarjeta ahora",
         "printBatchNow": "Imprimir las pendientes ahora",
-        "announcePrinted": "Tarjeta descargada."
+        "announcePrinted": "Tarjeta descargada.",
+        "announcePrintedMany": "Hoja generada: {count} tarjeta. | Hoja generada: {count} tarjetas."
       },
       "pins": {
         "heading": "PIN nuevos",

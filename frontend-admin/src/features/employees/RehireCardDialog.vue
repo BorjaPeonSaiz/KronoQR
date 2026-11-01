@@ -15,6 +15,7 @@
 import { announce } from '@kronoqr/web-kit/announcer'
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import { downloadDocument } from '@kronoqr/web-kit/downloadDocument'
+import { useQueryClient } from '@tanstack/vue-query'
 import { computed, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
@@ -29,6 +30,7 @@ const props = defineProps<{ items: readonly RehireCardItem[] }>()
 const emit = defineEmits<{ done: [] }>()
 
 const { t } = useI18n()
+const queryClient = useQueryClient()
 const session = useSessionStore()
 
 const mayPrint = computed(() => session.can(CREDENTIALS_MANAGE))
@@ -58,8 +60,20 @@ async function print(): Promise<void> {
     } else {
       downloadDocument(document_)
       outcome.value = 'printed'
-      announce(t('employees.rehire.card.announcePrinted'))
+      // El lote dice cuantas lleva (la cabecera del servidor); una sola, que se ha descargado.
+      announce(
+        single.value
+          ? t('employees.rehire.card.announcePrinted')
+          : t(
+              'employees.rehire.card.announcePrintedMany',
+              document_.printedCount ?? props.items.length,
+            ),
+      )
     }
+
+    // Imprimir cambia el estado de las tarjetas (pendiente de imprimir -> pendiente de entrega): el
+    // tablero y la fila de la ficha de cada persona se releen, o seguirian diciendo lo de antes.
+    await queryClient.invalidateQueries({ queryKey: ['credential-board'] })
 
     // El boton de imprimir desaparece al imprimir y con el se iria el foco: pasa a «Cerrar»,
     // que es lo unico que queda por hacer.
@@ -96,6 +110,13 @@ async function print(): Promise<void> {
       <span v-if="!single" class="mt-1 block" data-test="rehire-card-batch-scope">
         {{ t('employees.rehire.card.batchScope') }}
       </span>
+    </p>
+    <p
+      v-if="mayPrint && outcome === null"
+      class="mt-2 text-sm text-kq-text-muted"
+      data-test="rehire-card-bearer"
+    >
+      {{ t('credentials.batch.bearerNotice') }}
     </p>
 
     <p
