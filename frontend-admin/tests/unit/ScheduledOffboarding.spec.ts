@@ -314,6 +314,112 @@ describe('baja programada en la ficha (RN-14, RF-GP-03)', () => {
   })
 })
 
+describe('baja programada vencida: la fecha de cese ya paso y la tarea aun no la ha aplicado (RN-14, ADR-062 §3)', () => {
+  /** Programada para el 30 de octubre; hoy es el 31. */
+  const overdue = () =>
+    scheduled({
+      terminated_at: '2026-10-30',
+      offboarding: { state: 'scheduled', terminated_at: '2026-10-30', offboarded_at: null },
+    })
+
+  it('en la ficha no ofrece anular (daria 409) y el boton pasa a ser aplicarla ya', async () => {
+    const { wrapper } = await mountDetail(overdue())
+
+    expect(wrapper.find('[data-test="offboard-cancel"]').exists()).toBe(false)
+    expect(wrapper.find('[data-test="offboard-reschedule"]').text()).toBe(
+      es.employees.offboard.overdueAction,
+    )
+    expect(wrapper.find('[data-test="offboard-scheduled"]').text()).toContain('30 oct 2026')
+    expect(wrapper.find('[data-test="offboard-scheduled"]').text()).toContain('ya ha pasado')
+  })
+
+  it('con la fecha de cese de hoy todavia se puede anular', async () => {
+    const { wrapper } = await mountDetail(
+      scheduled({
+        terminated_at: '2026-10-31',
+        offboarding: { state: 'scheduled', terminated_at: '2026-10-31', offboarded_at: null },
+      }),
+    )
+
+    expect(wrapper.find('[data-test="offboard-cancel"]').exists()).toBe(true)
+  })
+
+  it('el dialogo fija la fecha, no ofrece «Aplicar ya» y deja reenviar la misma fecha sin apply_now', async () => {
+    const { wrapper, calls } = await mountDetail(overdue(), (url, init) =>
+      url.endsWith('/offboard') && init?.method === 'POST'
+        ? jsonResponse(
+            terminated({
+              terminated_at: '2026-10-30',
+              offboarding: {
+                state: 'effective',
+                terminated_at: '2026-10-30',
+                offboarded_at: '2026-10-31T10:00:00Z',
+              },
+            }),
+          )
+        : null,
+    )
+
+    await wrapper.find('[data-test="offboard-reschedule"]').trigger('click')
+    await settle(1)
+
+    const date = dialog(wrapper).find<HTMLInputElement>('input[type="date"]')
+
+    expect(dialog(wrapper).find('h2').text()).toBe(es.employees.offboard.overdueHeading)
+    expect(dialog(wrapper).find('[data-test="offboard-overdue"]').text()).toContain('30 oct 2026')
+    expect(date.element.value).toBe('2026-10-30')
+    expect(date.attributes('readonly')).toBeDefined()
+    expect(dialog(wrapper).find('[data-test="apply-now"]').exists()).toBe(false)
+
+    // Sin motivo no hay nada que enviar; con motivo, la misma fecha SI se puede reenviar.
+    expect(confirm(wrapper).attributes('aria-disabled')).toBeDefined()
+
+    await dialog(wrapper).find('select').setValue('endOfContract')
+    await settle(1)
+
+    expect(confirm(wrapper).attributes('aria-disabled')).toBeUndefined()
+    expect(confirm(wrapper).text()).toBe(es.employees.offboard.confirmAction)
+
+    await confirm(wrapper).trigger('click')
+    await settle()
+
+    expect(calls.methods).toEqual([`POST /api/v1/employees/${EMPLOYEE_UUID}/offboard`])
+    expect(calls.bodies[0]).toEqual({ terminated_at: '2026-10-30', reason: 'Fin de contrato' })
+    expect(announcement.value).toBe(es.employees.announce.offboarded)
+  })
+
+  it('un 422 de otro campo (el motivo) sale en el aviso aunque la fecha tambien vuelva', async () => {
+    const { wrapper } = await mountDetail(employee(), (url, init) =>
+      url.endsWith('/offboard') && init?.method === 'POST'
+        ? problemResponse(422, 'urn:kronoqr:problem:validation-failed', {
+            errors: {
+              terminated_at: ['La fecha de cese es anterior a la de alta.'],
+              reason: ['El motivo no es valido.'],
+            },
+          })
+        : null,
+    )
+
+    await wrapper.find('[data-test="offboard-open"]').trigger('click')
+    await settle(1)
+    await dialog(wrapper).find('select').setValue('endOfContract')
+    await confirm(wrapper).trigger('click')
+    await settle()
+
+    expect(dialog(wrapper).text()).toContain('La fecha de cese es anterior a la de alta.')
+    expect(dialog(wrapper).find('[role="alert"]').text()).toContain(
+      'Motivo del cese: El motivo no es valido.',
+    )
+    expect(dialog(wrapper).find('[role="alert"]').text()).not.toContain('anterior a la de alta')
+
+    // Corregir la fecha vuelve a habilitar el boton.
+    await dialog(wrapper).find<HTMLInputElement>('input[type="date"]').setValue('2026-10-30')
+    await settle(1)
+
+    expect(confirm(wrapper).attributes('aria-disabled')).toBeUndefined()
+  })
+})
+
 describe('dar de alta de nuevo desde la ficha (RN-27)', () => {
   it('una persona de baja ofrece «Dar de alta de nuevo»; una en alta, no', async () => {
     const gone = await mountDetail(terminated())

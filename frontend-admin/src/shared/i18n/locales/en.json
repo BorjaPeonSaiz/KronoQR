@@ -426,7 +426,7 @@
       "alreadyTerminated": "This person has been offboarded since {date}. Their history is still available.",
       "dateHint": "It cannot be earlier than the hiring date. Below you see what happens depending on the date. The record retention period starts counting from it.",
       "reasonLabel": "Reason for leaving",
-      "reasonHint": "It goes into the audit log. No health data and no value judgements.",
+      "reasonHint": "It is recorded that there was a reason; the text is not stored. No health data and no value judgements.",
       "reasonPlaceholder": "Choose a reason",
       "reasonOtherLabel": "Describe the reason",
       "reasons": {
@@ -460,7 +460,11 @@
       "cancelAction": "Cancel the scheduled offboarding",
       "cancelHeading": "Cancel the scheduled offboarding",
       "cancelExplanation": "The offboarding scheduled for {date} is cancelled and the person stays employed, with no termination date.",
-      "cancelNothingChanged": "There is nothing to reactivate: their card, their PIN and their portal never stopped working. It is recorded in the audit log with the cancelled date."
+      "cancelNothingChanged": "There is nothing to reactivate: their card, their PIN and their portal never stopped working. It is recorded in the audit log with the cancelled date.",
+      "overdueHeading": "Apply the scheduled offboarding",
+      "overdueIntro": "The termination date ({date}) has already passed: the offboarding is in force even if the system has not applied it yet. The date can no longer be changed nor the offboarding cancelled. Give the reason and apply it now.",
+      "overdueSummary": "Offboarding scheduled: the termination date ({date}) has already passed. It is in force and the system will apply it shortly; it can no longer be changed or cancelled.",
+      "overdueAction": "Apply the offboarding now"
     },
     "conflict": {
       "terminated": "This person has already been offboarded. The record has been reloaded with its current status: what you were trying to do was not applied."
@@ -523,7 +527,8 @@
       "correctionsHeading": "Corrections of the termination date",
       "correctionDates": "From {from} to {to}",
       "correctionBy": "{author} · {moment}",
-      "correctionReason": "Reason: {reason}"
+      "correctionReason": "Reason: {reason}",
+      "correctionAuthorMinimised": "minimised account"
     },
     "correction": {
       "action": "Correct the termination date",

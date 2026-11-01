@@ -15,7 +15,6 @@
 // ya. Anular es otro acto, con su propio dialogo (`CancelScheduledOffboardingDialog`).
 import FormField from '@kronoqr/web-kit/components/FormField.vue'
 import { formatCivilDate, todayInZone } from '@kronoqr/web-kit/datetime'
-import { isApiError } from '@kronoqr/web-kit/http'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { Employee } from '@/shared/api/types'
@@ -23,7 +22,12 @@ import type { Change } from '@/shared/ui/change'
 import ChangePreview from '@/shared/ui/ChangePreview.vue'
 import ConfirmDialog from '@/shared/ui/ConfirmDialog.vue'
 import EmploymentProblemNotice from './EmploymentProblemNotice.vue'
-import { type EmploymentProblemKey, staleProblemKey } from './employmentProblems'
+import {
+  type EmploymentProblemKey,
+  fieldErrorsOf,
+  noticeError,
+  staleProblemKey,
+} from './employmentProblems'
 import { offboardEmployee } from './employees.api'
 import { applyNowApplies, planOffboard } from './offboardPlan'
 
@@ -55,6 +59,14 @@ const OFFBOARD_REASONS = [
 const today = props.timezone === undefined ? '' : todayInZone(props.timezone)
 
 const rescheduling = props.employee.offboarding?.state === 'scheduled'
+// Baja programada cuya fecha de cese ya paso y que la tarea del sistema aun no ha aplicado: rige
+// desde esa fecha, ya no se puede cambiar ni anular, y el contrato dice que repetirla con esa misma
+// fecha la hace efectiva en el acto. Aqui solo se puede aplicar.
+const overdue =
+  rescheduling &&
+  today !== '' &&
+  props.employee.terminated_at !== null &&
+  props.employee.terminated_at < today
 const hireIsFuture = today !== '' && props.employee.hired_at > today
 
 const terminatedAt = ref(
@@ -109,10 +121,16 @@ const reason = computed(() =>
       : t(`employees.offboard.reasons.${reasonKey.value}`),
 )
 
-/** Cambiar una baja programada a la misma fecha, sin «Aplicar ya», no hace nada: no se ofrece. */
+/**
+ * Cambiar una baja programada a la misma fecha, sin «Aplicar ya», no hace nada: no se ofrece.
+ * Si la fecha ya paso, la misma fecha SI hace algo (la aplica en el acto) y se ofrece.
+ */
 const unchanged = computed(
   () =>
-    rescheduling && terminatedAt.value === props.employee.terminated_at && !effectiveApplyNow.value,
+    rescheduling &&
+    !overdue &&
+    terminatedAt.value === props.employee.terminated_at &&
+    !effectiveApplyNow.value,
 )
 
 const confirmDisabled = computed(
@@ -138,7 +156,13 @@ const confirmLabel = computed(() =>
 const tone = computed(() => (rescheduling && outcome.value === 'scheduled' ? 'normal' : 'danger'))
 
 const title = computed(() =>
-  t(rescheduling ? 'employees.offboard.rescheduleHeading' : 'employees.offboard.heading'),
+  t(
+    overdue
+      ? 'employees.offboard.overdueHeading'
+      : rescheduling
+        ? 'employees.offboard.rescheduleHeading'
+        : 'employees.offboard.heading',
+  ),
 )
 
 const statusAfter = computed(() =>
@@ -170,6 +194,7 @@ const changes = computed<Change[]>(() => [
 async function confirm(): Promise<void> {
   busy.value = true
   error.value = null
+  serverDateErrors.value = []
 
   try {
     const updated = await offboardEmployee(props.employee.uuid, {
@@ -182,25 +207,29 @@ async function confirm(): Promise<void> {
 
     emit('done', updated)
   } catch (caught) {
-    const fieldErrors = isApiError(caught) ? (caught.fieldErrors['terminated_at'] ?? []) : []
+    error.value = caught
+    // El mensaje de la fecha ya viene traducido por el servidor y se pinta en su campo; los demas
+    // campos del 422 (el motivo, `apply_now`) salen en el aviso del dialogo.
+    serverDateErrors.value = fieldErrorsOf(caught)['terminated_at'] ?? []
 
-    if (isApiError(caught) && caught.status === 422 && fieldErrors.length > 0) {
-      // El mensaje ya viene traducido por el servidor y se pinta en su campo.
-      serverDateErrors.value = fieldErrors
+    if (serverDateErrors.value.length > 0) {
       dateInput.value?.focus()
-    } else {
-      error.value = caught
+    }
 
-      const stale = staleProblemKey(caught)
+    const stale = staleProblemKey(caught)
 
-      if (stale !== null) {
-        emit('stale', stale)
-      }
+    if (stale !== null) {
+      emit('stale', stale)
     }
   } finally {
     busy.value = false
   }
 }
+
+/** Campos del 422 que se pintan junto a su campo; los demas (el motivo, `apply_now`) van al aviso. */
+const PLACED_FIELDS = ['terminated_at'] as const
+
+const visibleError = computed<unknown>(() => noticeError(error.value, PLACED_FIELDS))
 
 const inputClass =
   'rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text'
@@ -213,16 +242,19 @@ const inputClass =
     :tone="tone"
     size="wide"
     :busy="busy"
-    :error="error"
+    :error="visibleError"
     :confirm-disabled="confirmDisabled"
     @cancel="emit('close')"
     @confirm="confirm"
   >
     <template #error="{ error: failure }">
-      <EmploymentProblemNotice :error="failure" />
+      <EmploymentProblemNotice :error="failure" :placed="PLACED_FIELDS" />
     </template>
 
-    <p v-if="rescheduling" class="mb-4" data-test="offboard-rescheduling">
+    <p v-if="overdue" class="mb-4" data-test="offboard-overdue">
+      {{ t('employees.offboard.overdueIntro', { date: date(employee.terminated_at ?? '') }) }}
+    </p>
+    <p v-else-if="rescheduling" class="mb-4" data-test="offboard-rescheduling">
       {{ t('employees.offboard.reschedulingIntro', { date: date(employee.terminated_at ?? '') }) }}
     </p>
     <p v-else-if="hireIsFuture" class="mb-4" data-test="offboard-future-hire">
@@ -244,6 +276,7 @@ const inputClass =
           type="date"
           required
           :min="employee.hired_at"
+          :readonly="overdue"
           :class="inputClass"
           :aria-invalid="field.invalid ? 'true' : undefined"
           :aria-describedby="field.describedBy"

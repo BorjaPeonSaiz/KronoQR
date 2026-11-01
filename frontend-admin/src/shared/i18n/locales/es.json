@@ -426,7 +426,7 @@
       "alreadyTerminated": "Esta persona está de baja desde el {date}. Su historial sigue disponible.",
       "dateHint": "No puede ser anterior a la fecha de alta. Abajo ves qué pasa según la fecha. Desde ella cuenta la retención del registro.",
       "reasonLabel": "Motivo del cese",
-      "reasonHint": "Queda en el registro de auditoría. Sin datos de salud ni juicios de valor.",
+      "reasonHint": "Se anota que hubo motivo; el texto no se guarda. Sin datos de salud ni juicios de valor.",
       "reasonPlaceholder": "Elige un motivo",
       "reasonOtherLabel": "Describe el motivo",
       "reasons": {
@@ -460,7 +460,11 @@
       "cancelAction": "Anular la baja programada",
       "cancelHeading": "Anular la baja programada",
       "cancelExplanation": "La baja programada para el {date} se anula y la persona sigue de alta, sin fecha de cese.",
-      "cancelNothingChanged": "No hay nada que reactivar: su tarjeta, su PIN y su portal no han dejado de funcionar. Queda anotado en la auditoría con la fecha anulada."
+      "cancelNothingChanged": "No hay nada que reactivar: su tarjeta, su PIN y su portal no han dejado de funcionar. Queda anotado en la auditoría con la fecha anulada.",
+      "overdueHeading": "Aplicar la baja programada",
+      "overdueIntro": "La fecha de cese ({date}) ya ha pasado: la baja rige aunque el sistema aún no la haya aplicado. La fecha ya no se puede cambiar ni la baja anular. Indica el motivo y aplícala ahora.",
+      "overdueSummary": "Baja programada: la fecha de cese ({date}) ya ha pasado. La baja rige y el sistema la aplicará en breve; ya no se puede cambiar ni anular.",
+      "overdueAction": "Aplicar la baja ya"
     },
     "conflict": {
       "terminated": "Esta persona ya está dada de baja. Se ha recargado la ficha con su estado actual: lo que intentabas hacer no se ha aplicado."
@@ -523,7 +527,8 @@
       "correctionsHeading": "Correcciones de la fecha de cese",
       "correctionDates": "De {from} a {to}",
       "correctionBy": "{author} · {moment}",
-      "correctionReason": "Motivo: {reason}"
+      "correctionReason": "Motivo: {reason}",
+      "correctionAuthorMinimised": "cuenta minimizada"
     },
     "correction": {
       "action": "Corregir la fecha de cese",

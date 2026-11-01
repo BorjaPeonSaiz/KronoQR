@@ -11,7 +11,7 @@ import EmptyState from '@kronoqr/web-kit/components/EmptyState.vue'
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import FormField from '@kronoqr/web-kit/components/FormField.vue'
 import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
-import { formatCivilDate, formatInstantWithZone } from '@kronoqr/web-kit/datetime'
+import { formatCivilDate, formatInstantWithZone, todayInZone } from '@kronoqr/web-kit/datetime'
 import { isApiError } from '@kronoqr/web-kit/http'
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -460,6 +460,19 @@ const rehireResult = ref<RehiredEmployee | null>(null)
 const isTerminated = computed(() => employee.value?.status === 'terminated')
 const isScheduled = computed(() => employee.value?.offboarding?.state === 'scheduled')
 
+/**
+ * Baja programada cuya fecha de cese ya paso (hoy en la zona del centro) y que la tarea del
+ * sistema aun no ha aplicado: rige igualmente, la fecha ya no cambia y anularla responde 409
+ * (`offboarding-due`). Solo queda aplicarla, y el boton de anular no se ofrece.
+ */
+const scheduledOverdue = computed(
+  () =>
+    isScheduled.value &&
+    site.value !== undefined &&
+    employee.value?.terminated_at != null &&
+    employee.value.terminated_at < todayInZone(site.value.timezone),
+)
+
 /** Periodos de alta de la persona, del mas antiguo al mas reciente (solo en la ficha). */
 const periods = computed(() => employee.value?.employment_periods ?? [])
 
@@ -859,9 +872,12 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
             class="rounded-kq-sm border border-kq-warning bg-kq-warning-soft p-3 text-kq-warning"
           >
             {{
-              t('employees.offboard.scheduledSummary', {
-                date: formatCivilDate(employee.terminated_at ?? '', locale),
-              })
+              t(
+                scheduledOverdue
+                  ? 'employees.offboard.overdueSummary'
+                  : 'employees.offboard.scheduledSummary',
+                { date: formatCivilDate(employee.terminated_at ?? '', locale) },
+              )
             }}
           </p>
           <div class="mt-3 flex flex-wrap gap-3">
@@ -871,9 +887,16 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
               class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-4 py-2 text-kq-text hover:bg-kq-surface-alt"
               @click="offboarding = true"
             >
-              {{ t('employees.offboard.rescheduleAction') }}
+              {{
+                t(
+                  scheduledOverdue
+                    ? 'employees.offboard.overdueAction'
+                    : 'employees.offboard.rescheduleAction',
+                )
+              }}
             </button>
             <button
+              v-if="!scheduledOverdue"
               type="button"
               data-test="offboard-cancel"
               class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-4 py-2 text-kq-text hover:bg-kq-surface-alt"
