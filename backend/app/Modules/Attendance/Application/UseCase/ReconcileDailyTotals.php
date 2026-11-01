@@ -361,19 +361,32 @@ final readonly class ReconcileDailyTotals
      * convertiria un pico de fichajes en la alerta critica que significa
      * «alguien escribio la tabla por un camino que no es el recalculo».
      *
-     * ## El residuo que se acepta
+     * ## La fila que todavia no existe tambien queda serializada (A-12)
      *
-     * **Una fila que todavia no existe no se puede bloquear.** Si la jornada es
-     * de verdad una divergencia «fila ausente» y a la vez un fichaje de esa misma
-     * persona y ese mismo dia esta confirmando en ese instante, el `INSERT …
-     * ON CONFLICT` de esta correccion espera al suyo y termina pisandolo con lo
-     * releido una fraccion de segundo antes. Es una ventana de milisegundos, pide
-     * que coincidan dos sucesos que ya son raros por separado —la fila ausente no
-     * deberia existir nunca— y **no toca el registro legal**: `shift_entries`
-     * manda (regla dura 7) y la pasada siguiente lo vuelve a dejar bien. Cerrarla
-     * exigiria un candado que el camino de fichaje tambien tomara, es decir,
-     * encarecer los treinta fichajes por minuto de un cambio de turno para
-     * proteger un caso que no deberia darse: no compensa.
+     * Una fila ausente no se puede tomar con `FOR UPDATE`, y `lockedFor()`
+     * devuelve nulo sin bloquear nada. **No hace falta**: lo que serializa esta
+     * correccion con el fichaje no es la fila, sino el candado global de la
+     * cadena, que aqui se toma **antes** de leer y se retiene hasta el commit. El
+     * fichaje lo pide al sellar el asiento de `EmployeeClockedIn`/`Out` o de
+     * `ShiftEntryCorrected`, y `WorkDay` registra siempre ese hecho **antes** de
+     * `DailyTotalsRecalculated` (lo fija `DailyTotalsRecalculationTest`), asi que
+     * su `UPSERT` de `daily_totals` va detras del candado en la misma
+     * transaccion. Los dos ordenes posibles terminan bien:
+     *
+     *   · **La correccion llega primero.** Relee sin fila, repone lo que dicen
+     *     los tramos confirmados y confirma; el fichaje, que esperaba el candado,
+     *     hace despues su `UPSERT` con su tramo ya escrito y deja la ultima
+     *     palabra.
+     *   · **El fichaje llega primero.** Tiene el candado desde su asiento; la
+     *     correccion espera en `withChainLock()` y, cuando entra, relee la fila
+     *     que el fichaje ya confirmo: `projection_caught_up`, nada que corregir.
+     *
+     * Por eso no hay `INSERT … ON CONFLICT DO NOTHING` aqui: no cerraria ninguna
+     * ventana y sí romperia `row_is_gone`, que necesita distinguir «ni jornada ni
+     * fila» de «fila que falta». Y no cuesta nada en el camino del fichaje, que
+     * ya tomaba el candado para su asiento. Lo prueba
+     * `ReconciliationConcurrencyTest` con la fila borrada y un fichaje en vuelo,
+     * en los dos ordenes.
      *
      * ## Que se publica
      *
