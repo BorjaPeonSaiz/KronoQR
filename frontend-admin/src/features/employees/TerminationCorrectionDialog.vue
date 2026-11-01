@@ -14,7 +14,6 @@
 // de que lo posterior queda fuera del periodo y hay que revisarlo.
 import FormField from '@kronoqr/web-kit/components/FormField.vue'
 import { formatCivilDate, todayInZone } from '@kronoqr/web-kit/datetime'
-import { isApiError } from '@kronoqr/web-kit/http'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { EmploymentPeriod, EmploymentPeriodCorrection } from '@/shared/api/types'
@@ -24,8 +23,16 @@ import ConfirmDialog from '@/shared/ui/ConfirmDialog.vue'
 import { addCivilDays } from './employmentDates'
 import { REASON_MAX_LENGTH, REASON_MIN_LENGTH } from './employmentLimits'
 import EmploymentProblemNotice from './EmploymentProblemNotice.vue'
-import { type EmploymentProblemKey, staleProblemKey } from './employmentProblems'
+import {
+  type EmploymentProblemKey,
+  fieldErrorsOf,
+  noticeError,
+  staleProblemKey,
+} from './employmentProblems'
 import { correctTerminationDate } from './employees.api'
+
+/** Campos cuyo error del 422 se pinta junto a su campo; los demas van al aviso. */
+const PLACED_FIELDS = ['terminated_at', 'reason'] as const
 
 const props = defineProps<{
   employeeUuid: string
@@ -62,6 +69,10 @@ const terminatedAt = ref(previous)
 const reason = ref('')
 const busy = ref(false)
 const error = ref<unknown>(null)
+// Lo que el servidor dijo de cada campo en el ultimo 422. Es propio y se borra al editar ese campo:
+// si dependiera del ultimo fallo, «Confirmar» seguiria parado con el campo ya corregido.
+const serverDateErrors = ref<readonly string[]>([])
+const serverReasonErrors = ref<readonly string[]>([])
 const dateInput = ref<HTMLInputElement | null>(null)
 const reasonInput = ref<HTMLTextAreaElement | null>(null)
 
@@ -70,9 +81,7 @@ function date(value: string): string {
 }
 
 const dateErrors = computed<readonly string[]>(() => {
-  const serverErrors = isApiError(error.value)
-    ? (error.value.fieldErrors['terminated_at'] ?? [])
-    : []
+  const serverErrors = serverDateErrors.value
 
   if (terminatedAt.value === '') {
     return serverErrors
@@ -99,7 +108,7 @@ const reasonLength = computed(() => reason.value.trim().length)
 // escribir. Sale al salir del campo o al intentar confirmar (ver `onBlocked`).
 const reasonTouched = ref(false)
 const reasonErrors = computed<readonly string[]>(() => {
-  const serverErrors = isApiError(error.value) ? (error.value.fieldErrors['reason'] ?? []) : []
+  const serverErrors = serverReasonErrors.value
 
   if (reasonTouched.value && reasonLength.value < REASON_MIN_LENGTH) {
     return [t('employees.correction.reasonTooShort', { min: REASON_MIN_LENGTH })]
@@ -116,21 +125,15 @@ const direction = computed<'earlier' | 'later' | 'same'>(() =>
   terminatedAt.value === previous ? 'same' : terminatedAt.value < previous ? 'earlier' : 'later',
 )
 
-/** Un 422 con mensajes por campo se pinta junto a su campo; el resto, en el aviso del dialogo. */
-const visibleError = computed<unknown>(() =>
-  isApiError(error.value) &&
-  error.value.status === 422 &&
-  (error.value.fieldErrors['terminated_at'] !== undefined ||
-    error.value.fieldErrors['reason'] !== undefined)
-    ? null
-    : error.value,
-)
+/** Un 422 cuyos campos estan todos junto a su campo no se repite en el aviso del dialogo. */
+const visibleError = computed<unknown>(() => noticeError(error.value, PLACED_FIELDS))
 
 const confirmDisabled = computed(
   () =>
     terminatedAt.value === '' ||
     direction.value === 'same' ||
     dateErrors.value.length > 0 ||
+    serverReasonErrors.value.length > 0 ||
     reasonLength.value < REASON_MIN_LENGTH ||
     reasonLength.value > REASON_MAX_LENGTH,
 )
@@ -162,6 +165,8 @@ function onBlocked(): void {
 async function confirm(): Promise<void> {
   busy.value = true
   error.value = null
+  serverDateErrors.value = []
+  serverReasonErrors.value = []
 
   try {
     emit(
@@ -174,16 +179,16 @@ async function confirm(): Promise<void> {
   } catch (caught) {
     error.value = caught
 
-    if (isApiError(caught) && caught.status === 422) {
-      // El foco va al campo que el servidor rechazo, no siempre al primero.
-      if (
-        caught.fieldErrors['terminated_at'] === undefined &&
-        caught.fieldErrors['reason'] !== undefined
-      ) {
-        reasonInput.value?.focus()
-      } else {
-        dateInput.value?.focus()
-      }
+    const fields = fieldErrorsOf(caught)
+
+    serverDateErrors.value = fields['terminated_at'] ?? []
+    serverReasonErrors.value = fields['reason'] ?? []
+
+    // El foco va al campo que el servidor rechazo, no siempre al primero.
+    if (serverDateErrors.value.length > 0) {
+      dateInput.value?.focus()
+    } else if (serverReasonErrors.value.length > 0) {
+      reasonInput.value?.focus()
     }
 
     const stale = staleProblemKey(caught)
@@ -213,7 +218,7 @@ const inputClass =
     @blocked="onBlocked"
   >
     <template #error="{ error: failure }">
-      <EmploymentProblemNotice :error="failure" />
+      <EmploymentProblemNotice :error="failure" :placed="PLACED_FIELDS" />
     </template>
 
     <p class="mb-4 max-w-prose">{{ t('employees.correction.explanation') }}</p>
@@ -242,6 +247,7 @@ const inputClass =
           :class="inputClass"
           :aria-invalid="field.invalid ? 'true' : undefined"
           :aria-describedby="field.describedBy"
+          @input="serverDateErrors = []"
         />
       </FormField>
 
@@ -262,6 +268,7 @@ const inputClass =
           :class="inputClass"
           :aria-invalid="field.invalid ? 'true' : undefined"
           :aria-describedby="field.describedBy"
+          @input="serverReasonErrors = []"
           @blur="reasonTouched = true"
         />
         <p class="text-sm text-kq-text-muted" data-test="reason-counter">

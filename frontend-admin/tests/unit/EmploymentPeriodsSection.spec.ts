@@ -466,6 +466,90 @@ describe('TerminationCorrectionDialog: corregir la fecha de cese (RN-27, RL-04)'
     wrapper.unmount()
   })
 
+  it('tras un 422 de la fecha o del motivo, corregir el campo vuelve a habilitar «Registrar» y se puede reenviar', async () => {
+    let attempts = 0
+
+    stubCorrection(() => {
+      attempts += 1
+
+      return attempts === 1
+        ? problemResponse(422, 'urn:kronoqr:problem:validation-failed', {
+            errors: {
+              terminated_at: ['La fecha esta fuera de los limites.'],
+              reason: ['El motivo no es valido.'],
+            },
+          })
+        : jsonResponse(
+            {
+              id: 12,
+              employment_period_uuid: PERIOD_UUID,
+              previous_terminated_at: '2026-08-31',
+              terminated_at: '2026-09-03',
+              corrected_at: '2026-11-02T09:12:44.120Z',
+            },
+            201,
+          )
+    })
+
+    const wrapper = await mountSection([PAST])
+
+    await openCorrection(wrapper)
+    await dialog(wrapper).find<HTMLInputElement>('input[type="date"]').setValue('2026-09-02')
+    await dialog(wrapper).find('textarea').setValue('Motivo suficientemente largo')
+    await settle(1)
+    await dialog(wrapper).find('[data-test="confirm-dialog-confirm"]').trigger('click')
+    await settle()
+
+    const confirm = () => dialog(wrapper).find('[data-test="confirm-dialog-confirm"]')
+
+    expect(confirm().attributes('aria-disabled')).toBeDefined()
+    expect(dialog(wrapper).text()).toContain('La fecha esta fuera de los limites.')
+    expect(dialog(wrapper).text()).toContain('El motivo no es valido.')
+
+    // Editar un campo borra solo SU error del servidor; hasta corregir los dos sigue parado.
+    await dialog(wrapper).find<HTMLInputElement>('input[type="date"]').setValue('2026-09-03')
+    await settle(1)
+
+    expect(dialog(wrapper).text()).not.toContain('La fecha esta fuera de los limites.')
+    expect(dialog(wrapper).text()).toContain('El motivo no es valido.')
+    expect(confirm().attributes('aria-disabled')).toBeDefined()
+
+    await dialog(wrapper).find('textarea').setValue('Motivo suficientemente largo, corregido')
+    await settle(1)
+
+    expect(confirm().attributes('aria-disabled')).toBeUndefined()
+
+    await confirm().trigger('click')
+    await settle()
+
+    expect(attempts).toBe(2)
+    expect(wrapper.emitted('corrected')).toHaveLength(1)
+  })
+
+  it('un 422 de un campo que no tiene input se enseña en el aviso en lugar de perderse', async () => {
+    stubCorrection(() =>
+      problemResponse(422, 'urn:kronoqr:problem:validation-failed', {
+        errors: {
+          terminated_at: ['Fuera de limites.'],
+          periodo: ['El periodo no admite correccion.'],
+        },
+      }),
+    )
+
+    const wrapper = await mountSection([PAST])
+
+    await openCorrection(wrapper)
+    await dialog(wrapper).find<HTMLInputElement>('input[type="date"]').setValue('2026-09-02')
+    await dialog(wrapper).find('textarea').setValue('Motivo suficientemente largo')
+    await settle(1)
+    await dialog(wrapper).find('[data-test="confirm-dialog-confirm"]').trigger('click')
+    await settle()
+
+    expect(dialog(wrapper).find('[role="alert"]').text()).toContain(
+      'periodo: El periodo no admite correccion.',
+    )
+  })
+
   it('si el periodo ya no tiene la baja efectiva lo explica, dice que hacer y avisa para releer', async () => {
     stubCorrection(() => problemResponse(409, 'urn:kronoqr:problem:offboarding-not-effective'))
 
