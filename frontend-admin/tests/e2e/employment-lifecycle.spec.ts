@@ -527,3 +527,51 @@ test(
     expect(api.person(rechazada.employee.uuid).employee.status).toBe('terminated')
   },
 )
+
+test(
+  'una baja programada cuya fecha ya paso se aplica con la misma fecha: no se anula ni se cambia',
+  { tag: ['@RF-GP-03', '@RN-14'] },
+  async ({ page }) => {
+    const yesterday = addDays(todayInCenter(), -1)
+    const person = activePerson(EMPLOYEE_UUID, 'Youssef', '2026-08-14')
+
+    // Programada para ayer y sin aplicar todavia (la tarea corre cada hora).
+    person.employee = {
+      ...person.employee,
+      terminated_at: yesterday,
+      offboarding: { state: 'scheduled', terminated_at: yesterday, offboarded_at: null },
+    }
+    person.periods = person.periods.map((period) => ({
+      ...period,
+      terminated_at: yesterday,
+      state: 'scheduled' as const,
+    }))
+
+    await stubManagementApi(page)
+    const api = await stubEmploymentApi(page, [person])
+    await logIn(page)
+    await openEmployee(page, EMPLOYEE_UUID)
+
+    // Anular daria 409: no se ofrece, y el boton pasa a ser aplicarla ya.
+    await expect(page.getByTestId('offboard-cancel')).toHaveCount(0)
+    await expect(page.getByTestId('offboard-scheduled')).toContainText('ya ha pasado')
+    await page.getByTestId('offboard-reschedule').click()
+
+    const dialog = page.getByRole('dialog', { name: 'Aplicar la baja programada' })
+
+    await expect(dialog.getByLabel(/Fecha de cese/)).toHaveValue(yesterday)
+    await expect(dialog.getByLabel(/Fecha de cese/)).toHaveAttribute('readonly', '')
+    await expect(dialog.getByTestId('apply-now')).toHaveCount(0)
+    await expectNoBlockingViolations(page, { include: '[role="dialog"]' })
+
+    await dialog.getByLabel(/Motivo del cese/).selectOption('endOfContract')
+    await dialog.getByTestId('confirm-dialog-confirm').click()
+    await expect(dialog).toBeHidden()
+
+    await expect(page.getByText(/Esta persona está de baja desde/)).toBeVisible()
+    const [request] = offboardRequests(api, '/offboard')
+
+    expect(request?.body).toMatchObject({ terminated_at: yesterday })
+    expect(request?.body).not.toHaveProperty('apply_now')
+  },
+)
