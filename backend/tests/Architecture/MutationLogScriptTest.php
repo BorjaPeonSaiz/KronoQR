@@ -333,8 +333,7 @@ it('mide de noche la parte del dominio que la mutacion ve y deja el log entero c
  */
 function mutationLogScriptPart(string $reparto, string $nota, string $vivos = ''): string
 {
-    return "[mutate-canary] Canario correcto: 4 untested, 3 tested. La pasada distingue un mutante muerto de uno vivo.
-"
+    return "[mutate-canary] Canario correcto: 4 untested, 3 tested. La pasada distingue un mutante muerto de uno vivo.\n"
         .mutationLogScriptPestOutput($reparto, $nota, $vivos);
 }
 

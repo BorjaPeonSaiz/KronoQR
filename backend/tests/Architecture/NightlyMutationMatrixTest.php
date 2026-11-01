@@ -147,7 +147,7 @@ it('pasa al total una ruta por cada parte de la matriz, y un log que falta es un
             $script = nightlyMutationMatrixText($paso, 'run');
         }
     }
-    $enLaLista = is_string($esperadas) ? preg_split('/\s+/', trim($esperadas)) : [];
+    $enLaLista = is_string($esperadas) ? (preg_split('/\s+/', trim($esperadas)) ?: []) : [];
     $enLaMatriz = array_keys(nightlyMutationMatrixParts());
     sort($enLaMatriz);
     sort($enLaLista);
@@ -194,7 +194,7 @@ it('avisa cuando una parte de la mutacion o la cobertura pasan de 60 min, que es
     foreach (['mutation' => 'ci.yml', 'coverage' => 'gates.yml'] as $job => $workflow) {
         $presupuestos = array_values(array_filter(
             nightlyMutationMatrixWorkflowSteps($workflow, $job),
-            static fn (array $paso): bool => str_starts_with((string) ($paso['name'] ?? ''), 'Presupuesto de la '),
+            static fn (array $paso): bool => str_starts_with(is_string($paso['name'] ?? null) ? $paso['name'] : '', 'Presupuesto de la '),
         ));
         expect($presupuestos)->toHaveCount(1, "El job {$job} de {$workflow} necesita su paso «Presupuesto».");
 
