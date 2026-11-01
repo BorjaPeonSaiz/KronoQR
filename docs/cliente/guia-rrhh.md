@@ -1805,8 +1805,9 @@ entregar el fichero, el runbook dice qué comprobar y qué hacer con él despué
 
 Desde su ficha, apartado **«Baja»** (no se hace cambiando el campo de situación:
 tiene su propio apartado porque lleva fecha de cese y consecuencias). Se elige
-la fecha de cese y el motivo, que queda en el registro de auditoría —sin datos
-de salud y sin juicios de valor.
+la fecha de cese y el motivo. La auditoría anota que hubo motivo, pero **el
+texto del motivo no se guarda** —por eso no hay que escribir datos de salud ni
+juicios de valor.
 
 **Lo que pasa depende de la fecha de cese**, y el diálogo te lo dice antes de
 confirmar. «Hoy» es la fecha **del hotel** (la zona horaria de su centro), no la
@@ -1846,8 +1847,9 @@ como **«Baja programada»**, con su fecha de cese.
     dejaron de funcionar. Queda anotado en la auditoría, con la fecha anulada.
 - **Pasada la fecha de cese ya no se puede anular ni cambiar de fecha**: la baja
   rige aunque el sistema aún no la haya aplicado. El panel lo explica («La fecha
-  de cese ya ha pasado»). Si solo quieres aplicarla ya, repite la baja con esa
-  misma fecha. **Si la persona sigue trabajando**, la salida es darla de alta de
+  de cese ya ha pasado»), deja de ofrecer «Anular la baja programada» y el botón
+  pasa a ser **«Aplicar la baja ya»**: la fecha queda fija y solo hay que indicar
+  el motivo. Equivale a repetir la baja con esa misma fecha. **Si la persona sigue trabajando**, la salida es darla de alta de
   nuevo cuando la baja sea efectiva (más abajo), o corregir la fecha de cese si se
   puso mal.
 

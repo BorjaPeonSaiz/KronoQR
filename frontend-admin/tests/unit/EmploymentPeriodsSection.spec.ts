@@ -719,3 +719,27 @@ describe('EmploymentPeriodsSection: el historico de una ficha minimizada (RN-13,
     expect(wrapper.find('[data-test="termination-corrections"] td').attributes('colspan')).toBe('3')
   })
 })
+
+describe('EmploymentPeriodsSection: autor con la cuenta minimizada (ADR-060)', () => {
+  it('sin nombre dice «cuenta minimizada», conserva el momento y no pinta un hueco', async () => {
+    const wrapper = await mountSection([
+      employmentPeriodRecord({
+        terminated_at: '2026-09-02',
+        corrections: [
+          terminationCorrection({
+            corrected_by: {
+              uuid: '0199f0aa-3333-7000-8000-0123456789ab',
+              name: null,
+              minimised: true,
+            },
+          }),
+        ],
+      }),
+    ])
+    const item = wrapper.find('[data-test="termination-correction"]')
+
+    expect(item.text()).toContain(es.employees.periods.correctionAuthorMinimised)
+    expect(item.text()).toContain('10:12')
+    expect(item.text()).not.toContain('null')
+  })
+})

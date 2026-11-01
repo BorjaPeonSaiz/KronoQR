@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { ApiError } from '@kronoqr/web-kit/http'
 import en from '@/shared/i18n/locales/en.json'
 import es from '@/shared/i18n/locales/es.json'
-import { addCivilDays, isCivilDate } from '@/features/employees/employmentDates'
+import { addCivilDays } from '@/features/employees/employmentDates'
 import {
   EMPLOYMENT_PROBLEM_TYPES,
   employmentProblemKey,
@@ -138,9 +138,7 @@ describe('fechas civiles sin zona', () => {
 
   it('rechaza lo que no es una fecha civil', () => {
     expect(() => addCivilDays('02/10/2026', 1)).toThrow(RangeError)
-    expect(isCivilDate('2026-02-30')).toBe(false)
-    expect(isCivilDate('2026-10-02')).toBe(true)
-    expect(isCivilDate('')).toBe(false)
+    expect(() => addCivilDays('', 1)).toThrow(RangeError)
   })
 
   it('las horas del contrato admiten coma decimal y dentro de rango', () => {

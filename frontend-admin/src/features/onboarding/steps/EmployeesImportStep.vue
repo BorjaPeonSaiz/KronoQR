@@ -29,7 +29,7 @@ import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import { isApiError } from '@kronoqr/web-kit/http'
 import { computed, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { EmployeeImportReport } from '@/shared/api/types'
+import type { EmployeeImportMessage, EmployeeImportReport } from '@/shared/api/types'
 import { importEmployees } from '../employeeImport.api'
 import { useSetupStore } from '../setup.store'
 
@@ -47,7 +47,7 @@ const stale = ref(false)
 const validateButton = ref<HTMLButtonElement | null>(null)
 
 /** Codigos de la readmision con «que hacer» propio (`onboarding.steps.employees.messageAdvice`). */
-const REHIRE_ADVICE_CODES: readonly string[] = [
+const REHIRE_ADVICE_CODES: readonly EmployeeImportMessage['code'][] = [
   'rehire_proposed',
   'rehire_requires_hired_at',
   'rehire_not_after_termination',

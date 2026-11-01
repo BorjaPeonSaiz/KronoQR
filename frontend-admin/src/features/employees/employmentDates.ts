@@ -7,24 +7,6 @@
 
 const CIVIL_DATE = /^(\d{4})-(\d{2})-(\d{2})$/
 
-/** Si el texto es una fecha civil `AAAA-MM-DD` que existe en el calendario. */
-export function isCivilDate(value: string): boolean {
-  const match = CIVIL_DATE.exec(value)
-
-  if (match === null) {
-    return false
-  }
-
-  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])]
-  const probe = new Date(Date.UTC(year, month - 1, day))
-
-  return (
-    probe.getUTCFullYear() === year &&
-    probe.getUTCMonth() === month - 1 &&
-    probe.getUTCDate() === day
-  )
-}
-
 /** La fecha civil `days` dias despues (o antes, con negativo). Calendario puro, sin DST. */
 export function addCivilDays(date: string, days: number): string {
   const match = CIVIL_DATE.exec(date)

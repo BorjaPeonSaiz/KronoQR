@@ -1848,7 +1848,8 @@ to do with it afterwards.
 From their record, the **"Offboarding"** section (it is not done by changing
 the employment status field: it has its own section because it carries a
 termination date and consequences). You choose the termination date and the
-reason, which goes into the audit log —no health data and no value judgements.
+reason. The audit log records that there was a reason, but **the text of the
+reason is not stored** —so do not write health data or value judgements.
 
 **What happens depends on the termination date**, and the dialog tells you before
 you confirm. "Today" is the **hotel's** date (the time zone of its site), not your
@@ -1890,8 +1891,10 @@ shows as **"Offboarding scheduled"**, with their termination date.
     log, with the cancelled date.
 - **Once the termination date has passed it can no longer be cancelled or moved**:
   the offboarding is in force even if the system has not applied it yet. The panel
-  explains it ("The termination date has already passed"). If you only want to
-  apply it now, repeat the offboarding with that same date. **If the person is
+  explains it ("The termination date has already passed"), stops offering "Cancel
+  the scheduled offboarding" and the button becomes **"Apply the offboarding
+  now"**: the date is fixed and you only give the reason. It is the same as
+  repeating the offboarding with that same date. **If the person is
   still working**, the way out is to rehire them once the offboarding has taken
   effect (below), or to correct the termination date if it was wrong.
 

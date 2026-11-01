@@ -187,7 +187,9 @@ const STATE_CLASS: Record<EmploymentPeriodRecord['state'], string> = {
                       ·
                       {{
                         t('employees.periods.correctionBy', {
-                          author: correction.corrected_by.name,
+                          author:
+                            correction.corrected_by.name ??
+                            t('employees.periods.correctionAuthorMinimised'),
                           moment: moment(correction),
                         })
                       }}
