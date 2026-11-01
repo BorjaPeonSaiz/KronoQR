@@ -108,6 +108,11 @@ test.describe('auditor: solo la exportacion para la Inspeccion', () => {
       const option = page.getByRole('radio', { name: /Amrani, Lucía · Cocina · De baja desde/ })
 
       await expect(option).toBeVisible()
+      // Todos sus periodos de alta, no solo el ultimo (RN-27): el rango de la exportacion
+      // puede caer en cualquiera.
+      await expect(page.getByTestId('match-period')).toHaveCount(3)
+      await expect(page.getByText('Del 1 mar 2020 al 31 oct 2020')).toBeVisible()
+      await expect(page.getByText('Del 1 mar 2022 al 15 feb 2026')).toBeVisible()
       await expect(page.getByText('Esta búsqueda queda registrada.')).toBeVisible()
       expect(searches).toBe(1)
 

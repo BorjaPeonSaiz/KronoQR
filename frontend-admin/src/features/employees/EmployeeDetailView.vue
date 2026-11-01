@@ -13,7 +13,7 @@ import FormField from '@kronoqr/web-kit/components/FormField.vue'
 import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
 import { formatCivilDate, formatInstantWithZone, todayInZone } from '@kronoqr/web-kit/datetime'
 import { isApiError } from '@kronoqr/web-kit/http'
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { usePersonName } from '@/shared/people/personName'
 import { useOfferedLocales } from '@/shared/i18n/useOfferedLocales'
@@ -25,21 +25,27 @@ import CredentialRowActions from '@/features/credentials/CredentialRowActions.vu
 import { STATUS_PILL_CLASS as CREDENTIAL_STATUS_PILL_CLASS } from '@/features/credentials/credentialStatusPill'
 import { fetchCredentialStatusFor } from '@/features/credentials/credentials.api'
 import { getSite, listDepartments } from '@/shared/api/organisation.api'
-import type { Employee, IssuedPin, UpdateEmployeeRequest } from '@/shared/api/types'
+import type {
+  Employee,
+  IssuedPin,
+  RehiredEmployee,
+  UpdateEmployeeRequest,
+} from '@/shared/api/types'
 import type { Change } from '@/shared/ui/change'
 import ChangePreview from '@/shared/ui/ChangePreview.vue'
 import ConfirmDialog from '@/shared/ui/ConfirmDialog.vue'
+import { revealElement } from '@/shared/ui/revealElement'
+import CancelScheduledOffboardingDialog from './CancelScheduledOffboardingDialog.vue'
 import EmployeeContractsSection from './EmployeeContractsSection.vue'
+import EmploymentPeriodsSection from './EmploymentPeriodsSection.vue'
+import OffboardDialog from './OffboardDialog.vue'
+import { type EmploymentProblemKey } from './employmentProblems'
 import PinRevealDialog from './PinRevealDialog.vue'
+import RehireDialog from './RehireDialog.vue'
+import RehireOutcome from './RehireOutcome.vue'
 import TeleworkingBadge from './TeleworkingBadge.vue'
 import TeleworkingCheckbox from './TeleworkingCheckbox.vue'
-import {
-  deliverEmployeePin,
-  getEmployee,
-  offboardEmployee,
-  resetEmployeePin,
-  updateEmployee,
-} from './employees.api'
+import { deliverEmployeePin, getEmployee, resetEmployeePin, updateEmployee } from './employees.api'
 
 const props = defineProps<{ uuid: string }>()
 
@@ -414,164 +420,99 @@ function isTerminatedConflict(caught: unknown): boolean {
   )
 }
 
-/** Hay un aviso de «ya esta de baja» en pantalla; la ficha se recarga. */
-const conflictShown = ref(false)
+/**
+ * La causa del aviso de conflicto en pantalla, o `null` si no hay. Casi siempre es «ya esta
+ * de baja» (ADR-046); la baja programada y la readmision añaden las suyas (ADR-062).
+ */
+const conflictKey = ref<EmploymentProblemKey | null>(null)
+const conflictBox = ref<HTMLElement | null>(null)
 
 /** El aviso es un `role="alert"`: el lector de pantalla lo lee solo, sin `announce`. */
-async function reportConflict(): Promise<void> {
-  conflictShown.value = true
+async function reportConflict(key: EmploymentProblemKey = 'employeeTerminated'): Promise<void> {
+  conflictKey.value = key
+  // El aviso esta arriba y quien actuo, abajo (la baja es el ultimo apartado): se trae a la vista.
+  await nextTick()
+  revealElement(conflictBox.value)
   await invalidate()
 }
 
-// --- Baja --------------------------------------------------------------------
+// --- Baja, baja programada y readmision --------------------------------------
+//
+// Los dialogos viven en sus componentes (`OffboardDialog`, `RehireDialog`...); aqui
+// solo se decide cual esta abierto y que se hace al terminar. Todos acaban igual:
+// se relee la ficha (la verdad es la del servidor) y se anuncia el resultado.
 
 const offboarding = ref(false)
-const offboardBusy = ref(false)
-const offboardError = ref<unknown>(null)
-const terminatedAt = ref('')
-/**
- * Hoy en la zona del CENTRO (ADR-040), fijado al abrir el dialogo: ni la fecha
- * del navegador ni la UTC. Es el `max` del campo y solo una ayuda: la barrera es
- * el servidor (RN-14). Vacio mientras el centro no ha cargado: sin zona no se
- * inventa una fecha, y el servidor sigue rechazando una posterior a hoy.
- */
-const offboardToday = ref('')
-/** Errores del servidor para `terminated_at` (422), ya traducidos por el servidor. */
-const terminatedAtServerErrors = ref<readonly string[]>([])
-const terminatedAtInput = ref<HTMLInputElement | null>(null)
+const cancellingOffboarding = ref(false)
+const rehiring = ref(false)
+
+// Abrir una accion nueva descarta el aviso de un conflicto anterior: ya no habla de lo que se hace.
+watch([offboarding, cancellingOffboarding, rehiring], ([a, b, c]) => {
+  if (a || b || c) {
+    conflictKey.value = null
+  }
+})
+
+/** El resultado de la readmision, con el PIN en claro si se pidio. Solo vive mientras se ensena. */
+const rehireResult = ref<RehiredEmployee | null>(null)
+
+/** Baja efectiva (`terminated`) o baja solo programada (`active` con fecha de cese). */
+const isTerminated = computed(() => employee.value?.status === 'terminated')
+const isScheduled = computed(() => employee.value?.offboarding?.state === 'scheduled')
 
 /**
- * Una persona cuya alta aun no ha llegado (RN-14) solo admite como cese la
- * fecha de su alta: una baja sin efectos, porque nunca llego a empezar.
+ * Baja programada cuya fecha de cese ya paso (hoy en la zona del centro) y que la tarea del
+ * sistema aun no ha aplicado: rige igualmente, la fecha ya no cambia y anularla responde 409
+ * (`offboarding-due`). Solo queda aplicarla, y el boton de anular no se ofrece.
  */
-const hireIsFuture = computed(
+const scheduledOverdue = computed(
   () =>
-    offboardToday.value !== '' &&
-    employee.value !== undefined &&
-    employee.value.hired_at > offboardToday.value,
+    isScheduled.value &&
+    site.value !== undefined &&
+    employee.value?.terminated_at != null &&
+    employee.value.terminated_at < todayInZone(site.value.timezone),
 )
 
-/**
- * La baja que este dialogo registra es en el acto: con cese de hoy, o con el
- * cese en el alta que aun no ha llegado (la baja sin efectos). Un cese anterior
- * ya es en el acto sin pedirlo.
- */
-const appliesNow = computed(
-  () =>
-    terminatedAt.value !== '' &&
-    (terminatedAt.value === offboardToday.value ||
-      (hireIsFuture.value && terminatedAt.value === employee.value?.hired_at)),
-)
+/** Periodos de alta de la persona, del mas antiguo al mas reciente (solo en la ficha). */
+const periods = computed(() => employee.value?.employment_periods ?? [])
 
-/** La fecha mas tardia admitida: hoy, o la del alta si esta aun no ha llegado. */
-const offboardMax = computed(() =>
-  hireIsFuture.value ? (employee.value?.hired_at ?? '') : offboardToday.value,
-)
-
-const terminatedAtOutOfRange = computed(
-  () =>
-    offboardToday.value !== '' &&
-    terminatedAt.value !== '' &&
-    (hireIsFuture.value
-      ? terminatedAt.value !== employee.value?.hired_at
-      : terminatedAt.value > offboardToday.value),
-)
-
-const terminatedAtErrors = computed<readonly string[]>(() => [
-  ...(terminatedAtOutOfRange.value
-    ? [
-        hireIsFuture.value
-          ? t('employees.offboard.futureHire')
-          : t('employees.offboard.dateInFuture', {
-              today: formatCivilDate(offboardToday.value, locale.value),
-            }),
-      ]
-    : []),
-  ...terminatedAtServerErrors.value,
-])
-const offboardReasonKey = ref('')
-const offboardReasonText = ref('')
-
-const OFFBOARD_REASONS = [
-  'endOfContract',
-  'resignation',
-  'dismissal',
-  'retirement',
-  'other',
-] as const
-
-const offboardReason = computed(() =>
-  offboardReasonKey.value === 'other'
-    ? offboardReasonText.value.trim()
-    : offboardReasonKey.value === ''
-      ? ''
-      : t(`employees.offboard.reasons.${offboardReasonKey.value}`),
-)
-
-const offboardChanges = computed<Change[]>(() => [
-  {
-    label: t('employees.fields.status'),
-    from: t(`employees.status.${employee.value?.status ?? 'active'}`),
-    to: t('employees.status.terminated'),
-  },
-  {
-    label: t('employees.fields.terminatedAt'),
-    from: t('common.empty'),
-    to:
-      terminatedAt.value === ''
-        ? t('common.empty')
-        : formatCivilDate(terminatedAt.value, locale.value),
-  },
-  {
-    label: t('employees.offboard.reasonLabel'),
-    from: t('common.empty'),
-    to: offboardReason.value === '' ? t('common.empty') : offboardReason.value,
-  },
-])
-
-function startOffboarding(): void {
-  offboardToday.value = site.value === undefined ? '' : todayInZone(site.value.timezone)
-  terminatedAt.value = hireIsFuture.value ? (employee.value?.hired_at ?? '') : offboardToday.value
-  terminatedAtServerErrors.value = []
-  offboardReasonKey.value = ''
-  offboardReasonText.value = ''
-  offboardError.value = null
-  conflictShown.value = false
-  offboarding.value = true
+async function onOffboardDone(updated: Employee): Promise<void> {
+  offboarding.value = false
+  await invalidate()
+  announce(
+    t(
+      updated.offboarding?.state === 'scheduled'
+        ? 'employees.announce.offboardScheduled'
+        : 'employees.announce.offboarded',
+      { date: formatCivilDate(updated.terminated_at ?? '', locale.value) },
+    ),
+  )
 }
 
-async function confirmOffboard(): Promise<void> {
-  offboardBusy.value = true
-  offboardError.value = null
+async function onCancelOffboardingDone(): Promise<void> {
+  cancellingOffboarding.value = false
+  await invalidate()
+  announce(t('employees.announce.offboardCancelled'))
+}
 
-  try {
-    await offboardEmployee(props.uuid, {
-      terminated_at: terminatedAt.value,
-      reason: offboardReason.value,
-      // RN-14: el servidor programa una baja con cese de hoy salvo «Aplicar
-      // ya». Este dialogo promete una baja efectiva al confirmarla —y, con el
-      // alta por llegar, una baja sin efectos—, asi que la pide en el acto.
-      ...(appliesNow.value ? { apply_now: true } : {}),
-    })
-    await invalidate()
-    announce(t('employees.announce.offboarded'))
-    offboarding.value = false
-  } catch (caught) {
-    const dateErrors = isApiError(caught) ? (caught.fieldErrors['terminated_at'] ?? []) : []
+async function onRehired(result: RehiredEmployee): Promise<void> {
+  rehiring.value = false
+  rehireResult.value = result
+  await invalidate()
+  announce(t('employees.announce.rehired'))
+}
 
-    if (isTerminatedConflict(caught)) {
-      offboarding.value = false
-      await reportConflict()
-    } else if (isApiError(caught) && caught.status === 422 && dateErrors.length > 0) {
-      // El mensaje ya viene traducido por el servidor y se pinta en su campo.
-      terminatedAtServerErrors.value = dateErrors
-      terminatedAtInput.value?.focus()
-    } else {
-      offboardError.value = caught
-    }
-  } finally {
-    offboardBusy.value = false
-  }
+function closeRehireResult(): void {
+  // Al soltar la referencia, el PIN en claro deja de existir en el navegador.
+  rehireResult.value = null
+}
+
+/** La ficha ya no esta como se veia (otra persona actuo antes): se cierra el dialogo y se relee. */
+async function onStale(key: EmploymentProblemKey): Promise<void> {
+  offboarding.value = false
+  cancellingOffboarding.value = false
+  rehiring.value = false
+  await reportConflict(key)
 }
 
 async function invalidate(): Promise<void> {
@@ -581,6 +522,9 @@ async function invalidate(): Promise<void> {
 
 const inputClass =
   'rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text'
+
+/** Una baja programada es una persona en alta con fecha de cese: se pinta como aviso, no como baja. */
+const SCHEDULED_PILL_CLASS = 'bg-kq-warning-soft text-kq-warning'
 
 const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
   active: 'bg-kq-success-soft text-kq-success',
@@ -596,12 +540,19 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
     </RouterLink>
 
     <p
-      v-if="conflictShown"
+      v-if="conflictKey !== null"
+      ref="conflictBox"
       role="alert"
       data-test="employee-conflict"
       class="mt-4 rounded-kq border border-kq-warning bg-kq-warning-soft p-4 text-kq-warning"
     >
-      {{ t('employees.conflict.terminated') }}
+      <template v-if="conflictKey === 'employeeTerminated'">
+        {{ t('employees.conflict.terminated') }}
+      </template>
+      <template v-else>
+        <span class="font-semibold">{{ t(`employees.problems.${conflictKey}.title`) }}</span>
+        {{ t(`employees.problems.${conflictKey}.advice`) }}
+      </template>
     </p>
 
     <!-- El h1 es SIEMPRE el mismo y esta siempre: el cambio de pantalla lleva el foco aqui
@@ -618,8 +569,14 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
           <p class="text-xl font-semibold" data-test="employee-name">{{ fullName }}</p>
           <p class="mt-1 font-mono text-kq-text-muted">{{ employee.employee_code }}</p>
         </div>
-        <p class="rounded-full px-3 py-1 text-sm" :class="STATUS_PILL_CLASS[employee.status]">
-          {{ t(`employees.status.${employee.status}`) }}
+        <p
+          class="rounded-full px-3 py-1 text-sm"
+          :class="isScheduled ? SCHEDULED_PILL_CLASS : STATUS_PILL_CLASS[employee.status]"
+          data-test="employee-status"
+        >
+          {{
+            isScheduled ? t('employees.status.scheduled') : t(`employees.status.${employee.status}`)
+          }}
         </p>
       </header>
 
@@ -675,7 +632,13 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
             <dd><TeleworkingBadge :teleworking="employee.teleworking" /></dd>
           </div>
           <div v-if="employee.terminated_at !== null">
-            <dt class="font-medium text-kq-text-muted">{{ t('employees.fields.terminatedAt') }}</dt>
+            <dt class="font-medium text-kq-text-muted">
+              {{
+                isScheduled
+                  ? t('employees.fields.terminatedAtScheduled')
+                  : t('employees.fields.terminatedAt')
+              }}
+            </dt>
             <dd>{{ formatCivilDate(employee.terminated_at, locale) }}</dd>
           </div>
         </dl>
@@ -901,22 +864,93 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
       >
         <h2 class="text-xl font-semibold">{{ t('employees.offboard.heading') }}</h2>
         <p class="mt-1 max-w-prose text-kq-text-muted">{{ t('employees.offboard.explanation') }}</p>
-        <p v-if="employee.status === 'terminated'" class="mt-3">
-          {{
-            t('employees.offboard.alreadyTerminated', {
-              date: formatCivilDate(employee.terminated_at ?? '', locale),
-            })
-          }}
-        </p>
+
+        <!-- Baja programada: ficha hasta su ultimo dia; se cambia o se anula mientras no pase. -->
+        <div v-if="isScheduled" class="mt-3" data-test="offboard-scheduled">
+          <p
+            role="status"
+            class="rounded-kq-sm border border-kq-warning bg-kq-warning-soft p-3 text-kq-warning"
+          >
+            {{
+              t(
+                scheduledOverdue
+                  ? 'employees.offboard.overdueSummary'
+                  : 'employees.offboard.scheduledSummary',
+                { date: formatCivilDate(employee.terminated_at ?? '', locale) },
+              )
+            }}
+          </p>
+          <div class="mt-3 flex flex-wrap gap-3">
+            <button
+              type="button"
+              data-test="offboard-reschedule"
+              class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-4 py-2 text-kq-text hover:bg-kq-surface-alt"
+              @click="offboarding = true"
+            >
+              {{
+                t(
+                  scheduledOverdue
+                    ? 'employees.offboard.overdueAction'
+                    : 'employees.offboard.rescheduleAction',
+                )
+              }}
+            </button>
+            <button
+              v-if="!scheduledOverdue"
+              type="button"
+              data-test="offboard-cancel"
+              class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-4 py-2 text-kq-text hover:bg-kq-surface-alt"
+              @click="cancellingOffboarding = true"
+            >
+              {{ t('employees.offboard.cancelAction') }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Baja efectiva: la historia se conserva y se puede volver a dar de alta (RN-27). -->
+        <template v-else-if="isTerminated">
+          <p class="mt-3">
+            {{
+              t('employees.offboard.alreadyTerminated', {
+                date: formatCivilDate(employee.terminated_at ?? '', locale),
+              })
+            }}
+          </p>
+          <div v-if="!minimised" class="mt-3">
+            <button
+              type="button"
+              data-test="rehire-open"
+              class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary"
+              @click="rehiring = true"
+            >
+              {{ t('employees.rehire.action') }}
+            </button>
+            <p class="mt-2 max-w-prose text-sm text-kq-text-muted">
+              {{ t('employees.rehire.actionHint') }}
+            </p>
+          </div>
+        </template>
+
         <button
           v-else
           type="button"
+          data-test="offboard-open"
           class="mt-3 rounded-kq-sm bg-kq-danger px-4 py-2 font-semibold text-kq-on-danger"
-          @click="startOffboarding"
+          @click="offboarding = true"
         >
           {{ t('employees.offboard.action') }}
         </button>
       </section>
+
+      <!-- Historia de alta y baja (RN-27) -->
+      <EmploymentPeriodsSection
+        :employee-uuid="employee.uuid"
+        :periods="periods"
+        :timezone="site?.timezone"
+        :minimised="minimised"
+        @corrected="invalidate"
+        @stale="onStale"
+      />
     </template>
 
     <!-- Confirmaciones -->
@@ -968,94 +1002,38 @@ const STATUS_PILL_CLASS: Record<Employee['status'], string> = {
       <p class="mt-4 text-sm text-kq-text-muted">{{ t('pin.delivery.auditNotice') }}</p>
     </ConfirmDialog>
 
-    <ConfirmDialog
-      v-if="offboarding"
-      :title="t('employees.offboard.heading')"
-      :confirm-label="t('employees.offboard.confirmAction')"
-      tone="danger"
-      size="wide"
-      :busy="offboardBusy"
-      :error="offboardError"
-      :confirm-disabled="terminatedAt === '' || terminatedAtOutOfRange || offboardReason === ''"
-      @cancel="offboarding = false"
-      @confirm="confirmOffboard"
-    >
-      <p v-if="hireIsFuture" class="mb-4" data-test="offboard-future-hire">
-        {{ t('employees.offboard.futureHire') }}
-      </p>
+    <OffboardDialog
+      v-if="offboarding && employee !== undefined"
+      :employee="employee"
+      :timezone="site?.timezone"
+      @close="offboarding = false"
+      @done="onOffboardDone"
+      @stale="onStale"
+    />
 
-      <div class="grid gap-4 sm:grid-cols-2">
-        <FormField
-          v-slot="field"
-          :label="t('employees.fields.terminatedAt')"
-          :hint="t('employees.offboard.dateHint')"
-          :errors="terminatedAtErrors"
-          required
-        >
-          <input
-            :id="field.id"
-            ref="terminatedAtInput"
-            v-model="terminatedAt"
-            type="date"
-            required
-            :max="offboardMax === '' ? undefined : offboardMax"
-            :min="employee?.hired_at"
-            :class="inputClass"
-            :aria-invalid="field.invalid ? 'true' : undefined"
-            :aria-describedby="field.describedBy"
-            @input="terminatedAtServerErrors = []"
-          />
-        </FormField>
+    <CancelScheduledOffboardingDialog
+      v-if="cancellingOffboarding && employee !== undefined"
+      :employee="employee"
+      @close="cancellingOffboarding = false"
+      @done="onCancelOffboardingDone"
+      @stale="onStale"
+    />
 
-        <FormField
-          v-slot="field"
-          :label="t('employees.offboard.reasonLabel')"
-          :hint="t('employees.offboard.reasonHint')"
-          required
-        >
-          <select
-            :id="field.id"
-            v-model="offboardReasonKey"
-            :class="inputClass"
-            :aria-describedby="field.describedBy"
-          >
-            <option value="">{{ t('employees.offboard.reasonPlaceholder') }}</option>
-            <option v-for="key of OFFBOARD_REASONS" :key="key" :value="key">
-              {{ t(`employees.offboard.reasons.${key}`) }}
-            </option>
-          </select>
-        </FormField>
+    <RehireDialog
+      v-if="rehiring && employee !== undefined"
+      :employee="employee"
+      :timezone="site?.timezone"
+      @close="rehiring = false"
+      @rehired="onRehired"
+      @stale="onStale"
+    />
 
-        <FormField
-          v-if="offboardReasonKey === 'other'"
-          v-slot="field"
-          class="sm:col-span-2"
-          :label="t('employees.offboard.reasonOtherLabel')"
-          required
-        >
-          <input
-            :id="field.id"
-            v-model="offboardReasonText"
-            type="text"
-            maxlength="200"
-            :class="inputClass"
-          />
-        </FormField>
-      </div>
-
-      <ChangePreview
-        class="mt-4"
-        :changes="offboardChanges"
-        :caption="t('employees.offboard.heading')"
-      />
-
-      <ul class="mt-4 list-disc pl-5 text-kq-text-muted">
-        <li>{{ t('employees.offboard.consequenceCredential') }}</li>
-        <li>{{ t('employees.offboard.consequenceScan') }}</li>
-        <li>{{ t('employees.offboard.consequenceOpenShift') }}</li>
-        <li>{{ t('employees.offboard.consequenceHistory') }}</li>
-      </ul>
-    </ConfirmDialog>
+    <RehireOutcome
+      v-if="rehireResult !== null"
+      :results="[rehireResult]"
+      @done="closeRehireResult"
+      @pin-delivered="invalidate"
+    />
 
     <PinRevealDialog
       v-if="revealedPin !== null && employee !== undefined"

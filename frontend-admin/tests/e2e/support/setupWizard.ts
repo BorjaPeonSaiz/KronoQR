@@ -8,6 +8,7 @@
 // mantiene su propio estado (Pinia, en memoria) que se construye a partir de
 // lo que este doble va devolviendo paso a paso, asi que el doble tiene que
 // avanzar EXACTAMENTE como lo haria el servidor real.
+import { expect } from '@playwright/test'
 import type { Page, Route } from '@playwright/test'
 import type {
   Department,
@@ -148,6 +149,13 @@ export interface OnboardingApiOptions {
    * generador de capturas del asistente).
    */
   locale?: 'es' | 'en'
+  /**
+   * Lo que responde `POST /employees/import` (RF-GP-05, RN-27). `create` (por omision):
+   * una alta. `rehire`: una fila que readmite a una persona de baja (con `rehire_digest`)
+   * y otra rechazada por identidad. `rehireStale`: igual, pero el PRIMER `apply` responde
+   * `409` (alguien cambio la plantilla entre validar y aplicar) y el segundo funciona.
+   */
+  importOutcome?: 'create' | 'rehire' | 'rehireStale'
 }
 
 export interface OnboardingApiStub {
@@ -156,6 +164,9 @@ export interface OnboardingApiStub {
 
 /** Clave de `sessionStorage` del panel (`session.store.ts`). */
 const SESSION_STORAGE_KEY = 'kronoqr.admin.session'
+
+/** El `rehire_digest` que devuelve la validacion de `importOutcome: 'rehire'`. */
+export const IMPORT_REHIRE_DIGEST = 'c'.repeat(64)
 
 export async function stubOnboardingApi(
   page: Page,
@@ -184,6 +195,7 @@ export async function stubOnboardingApi(
   /** Cuantos quioscos se han vinculado durante el asistente (RF-PD-06). */
   let kiosksLinked = 0
   let licenseActivated = false
+  let staleOnce = options.importOutcome === 'rehireStale'
 
   // `administratorAlreadyDone` es exactamente el caso «el administrador ya se
   // creo y confirmo el segundo factor»: en la aplicacion de verdad eso deja un
@@ -455,6 +467,66 @@ export async function stubOnboardingApi(
           const mode = /name="mode"\r\n\r\n(validate|apply)/.exec(raw)?.[1] ?? 'validate'
           const checksum = '3f786850e387550fdab836ed7e6dc881de23001b4f4a1f9d5a2b0a1c2f3e4d5a'
 
+          if (options.importOutcome === 'rehire' || options.importOutcome === 'rehireStale') {
+            if (mode === 'apply' && staleOnce) {
+              // RN-27: entre la validacion y la aplicacion cambio a quien se readmitiria.
+              staleOnce = false
+              await route.fulfill({
+                status: 409,
+                contentType: 'application/problem+json',
+                body: JSON.stringify({
+                  type: 'urn:kronoqr:problem:conflict',
+                  title: 'Conflicto con el estado actual',
+                  status: 409,
+                }),
+              })
+
+              return
+            }
+
+            await json(route, 200, {
+              mode,
+              file: { sha256: checksum, rows: 2, warnings: [] },
+              summary: { create: 0, update: 0, unchanged: 0, reject: 1, rehire: 1 },
+              rehire_digest: IMPORT_REHIRE_DIGEST,
+              truncated: false,
+              rows: [
+                {
+                  line: 2,
+                  label: 'Lucia Ferrer',
+                  outcome: 'rehire',
+                  employee_uuid: '0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b92',
+                  changes: [],
+                  messages: [
+                    {
+                      code: 'rehire_proposed',
+                      severity: 'warning',
+                      column: null,
+                      detail: 'Esta persona está de baja: al aplicar se le da de alta de nuevo.',
+                    },
+                  ],
+                },
+                {
+                  line: 3,
+                  label: 'Marta Vidal',
+                  outcome: 'reject',
+                  employee_uuid: null,
+                  changes: [],
+                  messages: [
+                    {
+                      code: 'rehire_identity_mismatch',
+                      severity: 'error',
+                      column: null,
+                      detail: 'Coincide con una persona de baja solo por el correo.',
+                    },
+                  ],
+                },
+              ],
+            })
+
+            return
+          }
+
           if (mode === 'apply') {
             credentialsPending += 1
           }
@@ -462,7 +534,7 @@ export async function stubOnboardingApi(
           await json(route, 200, {
             mode,
             file: { sha256: checksum, rows: 1, warnings: [] },
-            summary: { create: 1, update: 0, unchanged: 0, reject: 0 },
+            summary: { create: 1, update: 0, unchanged: 0, reject: 0, rehire: 0 },
             truncated: false,
             rows: [
               {
@@ -579,4 +651,36 @@ export async function stubOnboardingApi(
   )
 
   return { requests }
+}
+
+/**
+ * Recorre el asistente hasta el paso «Plantilla» (importacion). Compartido por los E2E de
+ * `pin-pending-import.spec.ts` y `employment-lifecycle.spec.ts`.
+ */
+export async function reachImportStep(page: Page): Promise<void> {
+  await page.goto('/setup')
+
+  await page.getByLabel('Nombre').fill('Dirección del hotel')
+  await page.getByLabel('Correo electrónico').fill('direccion@hotel.example')
+  await page.getByLabel('Contraseña').fill('una-contrasena-larga-y-propia-1!')
+  await page.getByRole('button', { name: 'Crear la cuenta' }).click()
+  await expect(page.getByTestId('two-factor-secret')).toBeVisible()
+  await page.getByLabel(/Código del autenticador/).fill(TOTP_CODE)
+  await page.getByRole('button', { name: 'Activar y entrar' }).click()
+
+  await expect(page.getByRole('heading', { name: 'Organización' })).toBeVisible()
+  await page.getByLabel('Nombre del establecimiento').fill('Hotel Marina')
+  await page.getByRole('button', { name: 'Continuar' }).click()
+
+  await expect(page.getByRole('heading', { name: 'Centro de trabajo' })).toBeVisible()
+  await page.getByLabel('Nombre del centro').fill(SITE.name)
+  await page.getByRole('button', { name: 'Continuar' }).click()
+
+  await expect(page.getByRole('heading', { name: 'Departamentos' })).toBeVisible()
+  await page.getByTestId('skip').click()
+
+  await expect(page.getByRole('heading', { name: 'Perfil de convenio' })).toBeVisible()
+  await page.getByTestId('confirm-compliance-profile').click()
+
+  await expect(page.getByRole('heading', { name: 'Plantilla' })).toBeVisible()
 }

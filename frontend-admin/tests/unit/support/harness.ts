@@ -44,6 +44,8 @@ export interface HarnessOptions<Props> {
   locale?: AppLocale
   router?: Router
   pinia?: ReturnType<typeof createPinia>
+  /** Para comprobar el foco: sin estar en el documento, `document.activeElement` no se mueve. */
+  attachTo?: HTMLElement | undefined
 }
 
 /** Monta un componente con el mismo entorno que la aplicacion. */
@@ -65,6 +67,7 @@ export async function mountView<Props extends Record<string, unknown>>(
 
   const mountingOptions = {
     props: options.props,
+    attachTo: options.attachTo,
     global: {
       directives: { 'aria-disabled': vAriaDisabled },
       plugins: [

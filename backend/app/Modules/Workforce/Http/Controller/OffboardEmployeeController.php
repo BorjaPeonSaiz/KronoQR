@@ -40,6 +40,12 @@ final class OffboardEmployeeController extends Controller
         // estado y quien deja el hotel sigue pudiendo consultar su registro
         // horario (RL-05, RL-02). Cerrar esa puerta es una decision de la Fase 2
         // y no un efecto colateral de este endpoint.
-        return (new EmployeeResource($employee, $queries->pinStatus($uuid)))->response();
+        // Con la baja efectiva, el instante en que se aplico (ADR-062 §4), leido
+        // despues de confirmar; con la programada no hay lectura.
+        return (new EmployeeResource(
+            $employee,
+            $queries->pinStatus($uuid),
+            offboardedAt: $queries->offboardedAtFor([$employee])[$employee->uuid] ?? null,
+        ))->response();
     }
 }

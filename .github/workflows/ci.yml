@@ -166,7 +166,12 @@ jobs:
   lint-backend:
     name: "① Lint + Tipos · backend"
     runs-on: ubuntu-24.04
-    timeout-minutes: 6
+    # 10 y no 6 (01-11-2026): con el arbol del bloque 25, un runner lento dio
+    # 2,5 min de Pint + PHPStan y 3 min de Rector (informativo; 69-79 s medidos
+    # antes), y el job se corto a los 6 min con todos los pasos en verde,
+    # arrastrando como saltadas las etapas que dependen de ①. El presupuesto de la
+    # etapa (240 s, paso «Presupuesto de la etapa») sigue avisando mucho antes.
+    timeout-minutes: 10
     # El `schedule` nocturno solo existe para los jobs nocturnos: `coverage`,
     # `mutation` y `secrets-history` (ver cabecera).
     # Sin esto, la entrada de cron dispararia el pipeline entero cada noche.

@@ -8,9 +8,15 @@ import type {
   EmployeeProvisioned,
   EmploymentStatus,
   IssuedPin,
+  EmploymentPeriodCorrection,
   OffboardEmployeeRequest,
   PinDeliveryReceipt,
   PinStatus,
+  RehireEmployeeRequest,
+  RehireEmployeesRequest,
+  RehiredEmployee,
+  RehiredEmployees,
+  TerminationDateCorrectionRequest,
   UpdateEmployeeRequest,
 } from '@/shared/api/types'
 
@@ -65,9 +71,46 @@ export function updateEmployee(uuid: string, body: UpdateEmployeeRequest): Promi
   return requestJson<Employee>(`/api/v1/employees/${uuid}`, { method: 'PATCH', body })
 }
 
-/** Baja logica. Nunca borra: la ficha y su historico se conservan (regla dura 5, RL-02). */
+/**
+ * Baja logica. Nunca borra: la ficha y su historico se conservan (regla dura 5, RL-02).
+ * Con fecha de hoy o futura queda programada salvo `apply_now` (RN-14, ADR-062 §3).
+ */
 export function offboardEmployee(uuid: string, body: OffboardEmployeeRequest): Promise<Employee> {
   return requestJson<Employee>(`/api/v1/employees/${uuid}/offboard`, { method: 'POST', body })
+}
+
+/** Anula una baja programada (RN-14). Sin cuerpo; solo mientras el cese no haya pasado. */
+export function cancelScheduledOffboarding(uuid: string): Promise<Employee> {
+  return requestJson<Employee>(`/api/v1/employees/${uuid}/offboard/cancel`, { method: 'POST' })
+}
+
+/**
+ * Readmision de una persona de baja en su misma ficha (RN-27). La respuesta puede
+ * traer el PIN nuevo en claro, **una sola vez** (RF-ID-09): quien llame a esto
+ * tiene que enseñarlo en el acto y no guardarlo en ningun sitio.
+ */
+export function rehireEmployee(
+  uuid: string,
+  body: RehireEmployeeRequest,
+): Promise<RehiredEmployee> {
+  return requestJson<RehiredEmployee>(`/api/v1/employees/${uuid}/rehire`, { method: 'POST', body })
+}
+
+/** Readmision en lote con fecha comun: todo o nada, con un error por posicion (`422`). */
+export function rehireEmployees(body: RehireEmployeesRequest): Promise<RehiredEmployees> {
+  return requestJson<RehiredEmployees>('/api/v1/employees/rehire', { method: 'POST', body })
+}
+
+/** Correccion auditada de la fecha de cese de un periodo con baja efectiva (RN-27, RL-04). */
+export function correctTerminationDate(
+  uuid: string,
+  periodUuid: string,
+  body: TerminationDateCorrectionRequest,
+): Promise<EmploymentPeriodCorrection> {
+  return requestJson<EmploymentPeriodCorrection>(
+    `/api/v1/employees/${uuid}/employment-periods/${periodUuid}/termination-corrections`,
+    { method: 'POST', body },
+  )
 }
 
 /** Restablece el PIN. Devuelve el nuevo en claro, una sola vez. */

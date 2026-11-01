@@ -27,6 +27,13 @@ import BaseDialog from '@/shared/ui/BaseDialog.vue'
 import type { Change } from '@/shared/ui/change'
 import ChangePreview from '@/shared/ui/ChangePreview.vue'
 import { registerEmploymentContract } from './contracts.api'
+import {
+  ANNUAL_HOURS_MAX,
+  formatHours,
+  parsePositiveHours,
+  SCHEDULE_TYPES,
+  WEEKLY_HOURS_MAX,
+} from './employmentLimits'
 
 const props = defineProps<{
   employeeUuid: string
@@ -40,10 +47,6 @@ const emit = defineEmits<{ close: []; created: [EmploymentContract]; conflict: [
 
 const { t, locale } = useI18n()
 
-const SCHEDULE_TYPES: readonly ScheduleType[] = ['continua', 'partida', 'turnos']
-const WEEKLY_MAX = 168
-const ANNUAL_MAX = 99999
-
 const weeklyHours = ref('')
 const annualHours = ref('')
 const scheduleType = ref<ScheduleType | ''>('')
@@ -53,20 +56,8 @@ const submitting = ref(false)
 const error = ref<unknown>(null)
 const conflicted = ref(false)
 
-function parsePositive(raw: string, max: number): number | null {
-  const normalised = raw.trim().replace(',', '.')
-
-  if (normalised === '') {
-    return null
-  }
-
-  const value = Number(normalised)
-
-  return Number.isFinite(value) && value > 0 && value <= max ? value : null
-}
-
-const weeklyValue = computed(() => parsePositive(weeklyHours.value, WEEKLY_MAX))
-const annualValue = computed(() => parsePositive(annualHours.value, ANNUAL_MAX))
+const weeklyValue = computed(() => parsePositiveHours(weeklyHours.value, WEEKLY_HOURS_MAX))
+const annualValue = computed(() => parsePositiveHours(annualHours.value, ANNUAL_HOURS_MAX))
 const annualInvalid = computed(() => annualHours.value.trim() !== '' && annualValue.value === null)
 const weeklyInvalid = computed(() => weeklyHours.value.trim() !== '' && weeklyValue.value === null)
 
@@ -79,14 +70,6 @@ const canSubmit = computed(
     !submitting.value,
 )
 
-function formatHours(value: number | null): string {
-  return value === null
-    ? t('common.empty')
-    : t('contracts.hoursValue', {
-        hours: new Intl.NumberFormat(locale.value, { maximumFractionDigits: 2 }).format(value),
-      })
-}
-
 function scheduleLabel(value: ScheduleType | '' | null): string {
   return value === null || value === '' ? t('common.empty') : t(`contracts.schedule.${value}`)
 }
@@ -95,13 +78,13 @@ function scheduleLabel(value: ScheduleType | '' | null): string {
 const changes = computed<Change[]>(() => [
   {
     label: t('contracts.fields.weeklyHours'),
-    from: formatHours(props.current?.weekly_hours ?? null),
-    to: formatHours(weeklyValue.value),
+    from: formatHours(props.current?.weekly_hours ?? null, locale.value, t),
+    to: formatHours(weeklyValue.value, locale.value, t),
   },
   {
     label: t('contracts.fields.annualHours'),
-    from: formatHours(props.current?.annual_hours ?? null),
-    to: formatHours(annualValue.value),
+    from: formatHours(props.current?.annual_hours ?? null, locale.value, t),
+    to: formatHours(annualValue.value, locale.value, t),
   },
   {
     label: t('contracts.fields.scheduleType'),

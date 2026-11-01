@@ -607,6 +607,55 @@ it('declara la ficha reducida del responsable sin correo, idioma ni estado del P
         ]);
 })->group('RF-ID-03', 'RS-05', 'RQ-06');
 
+it('declara en la ficha de rrhh+ el historico de la fecha de cese y no en lo que ve el auditor', function (): void {
+    // RN-27, RN-13, regla dura 5: la ficha de `rrhh+` trae, por periodo, el
+    // instante de la baja efectiva y las correcciones del cese con la fecha
+    // anterior, la nueva, el momento, el autor y el motivo. `EmploymentPeriod`
+    // no cambia: es el que recibe el `auditor` en la busqueda de la
+    // exportacion legal, que solo distingue a dos personas (RGPD art. 5.1.c).
+    expect(Contract::value('components', 'schemas', 'Employee', 'properties', 'employment_periods', 'items', '$ref'))
+        ->toBe('#/components/schemas/EmploymentPeriodRecord')
+        ->and(Contract::value('components', 'schemas', 'EmploymentPeriodRecord', 'additionalProperties'))->toBeFalse()
+        ->and(Contract::value('components', 'schemas', 'EmploymentPeriodRecord', 'required'))
+        ->toBe(['uuid', 'hired_at', 'terminated_at', 'state', 'offboarded_at', 'corrections'])
+        ->and(Contract::value('components', 'schemas', 'EmploymentPeriodRecord', 'properties', 'offboarded_at', 'type'))->toBe(['string', 'null'])
+        ->and(Contract::value('components', 'schemas', 'EmploymentPeriodRecord', 'properties', 'corrections', 'items', '$ref'))
+        ->toBe('#/components/schemas/TerminationDateCorrectionRecord')
+        ->and(Contract::value('components', 'schemas', 'TerminationDateCorrectionRecord', 'additionalProperties'))->toBeFalse()
+        ->and(Contract::value('components', 'schemas', 'TerminationDateCorrectionRecord', 'required'))
+        ->toBe(['id', 'previous_terminated_at', 'terminated_at', 'corrected_at', 'corrected_by', 'reason'])
+        ->and(Contract::value('components', 'schemas', 'TerminationDateCorrectionRecord', 'properties', 'corrected_by', '$ref'))
+        ->toBe('#/components/schemas/TerminationCorrectionAuthor')
+        // La correccion no conserva la cuenta (ADR-062 §7, ADR-060 §2): su
+        // autor puede estar minimizado, sin romper `CorrectionAuthor`.
+        ->and(Contract::value('components', 'schemas', 'TerminationCorrectionAuthor', 'additionalProperties'))->toBeFalse()
+        ->and(Contract::value('components', 'schemas', 'TerminationCorrectionAuthor', 'required'))->toBe(['uuid', 'name', 'minimised'])
+        ->and(Contract::value('components', 'schemas', 'TerminationCorrectionAuthor', 'properties', 'name', 'type'))->toBe(['string', 'null'])
+        ->and(Contract::value('components', 'schemas', 'TerminationCorrectionAuthor', 'properties', 'minimised', 'type'))->toBe('boolean')
+        ->and(Contract::value('components', 'schemas', 'CorrectionAuthor', 'required'))->toBe(['uuid', 'name'])
+        ->and(Contract::value('components', 'schemas', 'CorrectionAuthor', 'properties', 'name', 'type'))->toBe('string')
+        // El periodo que ve el auditor y el de la readmision siguen sin historico.
+        ->and(Contract::keys('components', 'schemas', 'EmploymentPeriod', 'properties'))->toBe(['uuid', 'hired_at', 'terminated_at', 'state'])
+        ->and(Contract::value('components', 'schemas', 'LegalExportEmployeeMatch', 'properties', 'employment_periods', 'items', '$ref'))
+        ->toBe('#/components/schemas/EmploymentPeriod')
+        // Y el responsable no recibe periodos.
+        ->and(Contract::keys('components', 'schemas', 'ScopedEmployee', 'properties'))->not->toContain('employment_periods');
+})->group('RN-27', 'RN-13', 'RQ-06');
+
+it('declara el instante de la baja efectiva en la baja de rrhh+ y no en la del responsable', function (): void {
+    // ADR-062 §4: el panel sabe por el listado si la baja fue hoy, sin una
+    // peticion por persona. El responsable no lo necesita (DIV-1).
+    expect(Contract::value('components', 'schemas', 'Employee', 'properties', 'offboarding', 'oneOf', '0', '$ref'))
+        ->toBe('#/components/schemas/EmployeeOffboarding')
+        ->and(Contract::value('components', 'schemas', 'EmployeeOffboarding', 'required'))->toBe(['state', 'terminated_at', 'offboarded_at'])
+        ->and(Contract::value('components', 'schemas', 'EmployeeOffboarding', 'properties', 'offboarded_at', 'type'))->toBe(['string', 'null'])
+        ->and(Contract::value('components', 'schemas', 'EmployeeOffboarding', 'properties', 'offboarded_at', 'format'))->toBe('date-time')
+        ->and(Contract::value('components', 'schemas', 'ScopedEmployee', 'properties', 'offboarding', 'oneOf', '0', '$ref'))
+        ->toBe('#/components/schemas/ScopedEmployeeOffboarding')
+        ->and(Contract::value('components', 'schemas', 'ScopedEmployeeOffboarding', 'additionalProperties'))->toBeFalse()
+        ->and(Contract::keys('components', 'schemas', 'ScopedEmployeeOffboarding', 'properties'))->toBe(['state', 'terminated_at']);
+})->group('RN-14', 'RN-27', 'RS-05', 'RQ-06');
+
 it('declara en la ficha y en la ficha reducida cuando se minimizo por retencion', function (): void {
     // ADR-060, tarea 11.3 A: el panel reconoce una ficha minimizada por este
     // campo, no por los nombres vacios, y lo ve tambien el responsable.

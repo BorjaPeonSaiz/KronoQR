@@ -14,24 +14,35 @@
 // El alta emite el PIN en la misma transaccion, asi que al terminar hay un
 // secreto que enseñar una sola vez: por eso emite `created` con la respuesta
 // entera y no solo con la ficha.
+//
+// Dos cosas mas (RN-27, ADR-062 §6):
+//  - Con fecha de alta FUTURA se avisa de que los fichajes anteriores a esa fecha
+//    se rechazan (decision del propietario, 31-10-2026): es un aviso, no un bloqueo.
+//  - Si el documento es de una persona de BAJA, el `409` lleva su `uuid` y el
+//    dialogo lo cuenta con su salida: no se da de alta otra vez, se la da de alta
+//    DE NUEVO en su ficha.
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import FormField from '@kronoqr/web-kit/components/FormField.vue'
-import { todayInZone } from '@kronoqr/web-kit/datetime'
+import { formatCivilDate, todayInZone } from '@kronoqr/web-kit/datetime'
 import { isApiError } from '@kronoqr/web-kit/http'
-import { ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { RouterLink } from 'vue-router'
 import { useOfferedLocales } from '@/shared/i18n/useOfferedLocales'
 import { useQuery } from '@tanstack/vue-query'
 import { listDepartments } from '@/shared/api/organisation.api'
 import type { CreateEmployeeRequest, EmployeeProvisioned } from '@/shared/api/types'
 import BaseDialog from '@/shared/ui/BaseDialog.vue'
+import { revealElement } from '@/shared/ui/revealElement'
 import TeleworkingCheckbox from './TeleworkingCheckbox.vue'
+import { rehirableEmployeeUuid } from './employmentProblems'
 import { createEmployee } from './employees.api'
+import { isFutureHire } from './rehirePlan'
 
 const props = defineProps<{ timezone: string }>()
 const emit = defineEmits<{ close: []; created: [EmployeeProvisioned] }>()
 
-const { t } = useI18n()
+const { t, locale: uiLocale } = useI18n()
 const { locales: offered, multilingual, defaultLocale } = useOfferedLocales()
 
 const departmentId = ref<number | null>(null)
@@ -52,6 +63,14 @@ const { data: departments } = useQuery({
 
 const submitting = ref(false)
 const error = ref<unknown>(null)
+
+/** Hoy en la zona del centro (ADR-040), para avisar de un alta futura. */
+const today = todayInZone(props.timezone)
+const futureHire = computed(() => isFutureHire(hiredAt.value, today))
+
+/** La persona de baja con ese documento, si el `409` la ofrece (solo a `rrhh+`). */
+const rehirableUuid = computed(() => rehirableEmployeeUuid(error.value))
+const rehirableBox = ref<HTMLElement | null>(null)
 
 function fieldErrors(field: string): readonly string[] {
   return isApiError(error.value) ? (error.value.fieldErrors[field] ?? []) : []
@@ -76,6 +95,12 @@ async function submit(): Promise<void> {
     emit('created', await createEmployee(body))
   } catch (caught) {
     error.value = caught
+
+    if (rehirableUuid.value !== null) {
+      // El aviso esta arriba del formulario y el boton, abajo: se trae a la vista.
+      await nextTick()
+      revealElement(rehirableBox.value)
+    }
   } finally {
     submitting.value = false
   }
@@ -93,7 +118,24 @@ const inputClass =
       novalidate
       @submit.prevent="submit"
     >
-      <ErrorNotice v-if="error !== null" :error="error" class="sm:col-span-2" />
+      <div
+        v-if="rehirableUuid !== null"
+        ref="rehirableBox"
+        role="alert"
+        data-test="rehirable-notice"
+        class="rounded-kq border border-kq-warning bg-kq-warning-soft p-4 text-kq-warning sm:col-span-2"
+      >
+        <p class="font-semibold">{{ t('employees.create.rehirableTitle') }}</p>
+        <p class="mt-1">{{ t('employees.create.rehirableAdvice') }}</p>
+        <RouterLink
+          :to="{ name: 'employee', params: { uuid: rehirableUuid } }"
+          class="mt-2 inline-block font-semibold underline"
+          data-test="rehirable-link"
+        >
+          {{ t('employees.create.rehirableLink') }}
+        </RouterLink>
+      </div>
+      <ErrorNotice v-else-if="error !== null" :error="error" class="sm:col-span-2" />
 
       <FormField
         v-slot="field"
@@ -205,6 +247,15 @@ const inputClass =
           :aria-invalid="field.invalid"
         />
       </FormField>
+
+      <p
+        v-if="futureHire"
+        role="status"
+        data-test="create-future-hire"
+        class="rounded-kq-sm border border-kq-warning bg-kq-warning-soft p-3 text-kq-warning sm:col-span-2"
+      >
+        {{ t('employees.create.futureHire', { date: formatCivilDate(hiredAt, uiLocale) }) }}
+      </p>
 
       <FormField v-if="multilingual" v-slot="field" :label="t('employees.fields.locale')">
         <select :id="field.id" v-model="locale" :class="inputClass">

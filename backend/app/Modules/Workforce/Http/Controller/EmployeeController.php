@@ -67,12 +67,18 @@ final class EmployeeController extends Controller
         // DIV-1: el responsable recibe la ficha reducida (`ScopedEmployee`).
         $includesContactAndPin = Gate::allows('viewContactAndPin', Employee::class);
 
+        // ADR-062 §4: el instante de cada baja efectiva de la pagina, en una
+        // consulta, para que el panel sepa si fue hoy sin pedir cada ficha. El
+        // responsable no lo recibe (`ScopedEmployeeOffboarding`).
+        $offboardedAt = $includesContactAndPin ? $queries->offboardedAtFor($page['items']) : [];
+
         return response()->json([
             'data' => array_map(
                 static fn (Employee $employee): array => (new EmployeeResource(
                     $employee,
                     $pinStatuses[$employee->uuid] ?? PinStatus::Pending,
                     $includesContactAndPin,
+                    offboardedAt: $offboardedAt[$employee->uuid] ?? null,
                 ))->toArray($request),
                 $page['items'],
             ),
@@ -114,12 +120,17 @@ final class EmployeeController extends Controller
 
         $full = Gate::allows('viewContactAndPin', Employee::class);
 
+        // RN-27: los periodos de alta, en la ficha de `rrhh+`. El ultimo es el
+        // en curso, y su `offboarded_at` es el de `offboarding` (ADR-062 §1).
+        $periods = $full ? $queries->employmentPeriods($uuid) : null;
+        $current = $periods === null || $periods === [] ? null : $periods[array_key_last($periods)];
+
         return (new EmployeeResource(
             $employee,
             $queries->pinStatus($uuid),
             $full,
-            // RN-27: los periodos de alta, en la ficha de `rrhh+`.
-            $full ? $queries->employmentPeriods($uuid) : null,
+            $periods,
+            $current?->offboardedAt,
         ))->response();
     }
 

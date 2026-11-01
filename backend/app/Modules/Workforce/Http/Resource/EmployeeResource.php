@@ -6,10 +6,14 @@ namespace App\Modules\Workforce\Http\Resource;
 
 use App\Modules\Shared\Domain\Support\UtcInstant;
 use App\Modules\Shared\Domain\ValueObject\EmploymentPeriod;
+use App\Modules\Workforce\Application\Port\EmploymentPeriodRecord;
 use App\Modules\Workforce\Application\Port\PinStatus;
+use App\Modules\Workforce\Application\Port\TerminationCorrectionRecord;
 use App\Modules\Workforce\Domain\Model\Employee;
+use DateTimeImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use LogicException;
 
 /**
  * Serializacion de los esquemas `Employee` y `ScopedEmployee` del contrato.
@@ -38,14 +42,18 @@ final class EmployeeResource extends JsonResource
     public static $wrap = null;
 
     /**
-     * @param  list<EmploymentPeriod>|null  $employmentPeriods  solo la ficha (`GET /employees/{uuid}`)
-     *                                                          para `rrhh+`; `null` en las demas respuestas
+     * @param  list<EmploymentPeriodRecord>|null  $employmentPeriods  solo la ficha (`GET /employees/{uuid}`)
+     *                                                                para `rrhh+`; `null` en las demas respuestas
+     * @param  DateTimeImmutable|null  $offboardedAt  el instante de la baja efectiva
+     *                                                (`EmployeeQueries::offboardedAtFor()`); obligatorio con
+     *                                                la baja efectiva en el esquema de `rrhh+`
      */
     public function __construct(
         Employee $employee,
         private readonly PinStatus $pinStatus,
         private readonly bool $includesContactAndPin = true,
         private readonly ?array $employmentPeriods = null,
+        private readonly ?DateTimeImmutable $offboardedAt = null,
     ) {
         parent::__construct($employee);
     }
@@ -62,6 +70,38 @@ final class EmployeeResource extends JsonResource
             'hired_at' => $period->hiredOn,
             'terminated_at' => $period->terminatedOn,
             'state' => $period->state(),
+        ];
+    }
+
+    /**
+     * Un periodo de la ficha de `rrhh+`, en la forma del esquema
+     * `EmploymentPeriodRecord` (RN-27, RN-13): el periodo, el instante de su
+     * baja efectiva y sus correcciones del cese, en orden cronologico.
+     *
+     * @return array<string, mixed>
+     */
+    public static function periodRecord(EmploymentPeriodRecord $record): array
+    {
+        return [
+            ...self::period($record->period),
+            'offboarded_at' => UtcInstant::format($record->offboardedAt),
+            'corrections' => array_map(static fn (TerminationCorrectionRecord $correction): array => [
+                'id' => $correction->id,
+                'previous_terminated_at' => $correction->previousTerminatedOn,
+                'terminated_at' => $correction->terminatedOn,
+                'corrected_at' => UtcInstant::of($correction->correctedAt),
+                // Esquema `TerminationCorrectionAuthor`, nunca el correo: la
+                // cuenta puede estar minimizada (ADR-062 §7, ADR-060 §2) y
+                // entonces no hay nombre.
+                'corrected_by' => [
+                    'uuid' => $correction->authorUuid,
+                    'name' => $correction->authorName,
+                    'minimised' => $correction->authorMinimised,
+                ],
+                // El motivo, que el asiento no lleva (regla dura 21). Tras la
+                // minimizacion de la ficha es el texto fijo de ADR-060.
+                'reason' => $correction->reason,
+            ], $record->corrections),
         ];
     }
 
@@ -99,27 +139,45 @@ final class EmployeeResource extends JsonResource
             'anonymized_at' => UtcInstant::format($employee->anonymizedAt),
             // RN-14, ADR-062 §3: la baja, derivada del par estado–fecha. La
             // reciben los dos esquemas: no dice nada que `status` y
-            // `terminated_at` no digan ya.
-            'offboarding' => self::offboarding($employee),
+            // `terminated_at` no digan ya. `offboarded_at` solo en el de
+            // `rrhh+` (`EmployeeOffboarding`); el responsable recibe
+            // `ScopedEmployeeOffboarding`, sin el.
+            'offboarding' => $this->offboarding($employee, $full),
             // RN-27: los periodos de alta, solo en la ficha de `rrhh+`.
             ...($full && $this->employmentPeriods !== null
-                ? ['employment_periods' => array_map(self::period(...), $this->employmentPeriods)]
+                ? ['employment_periods' => array_map(self::periodRecord(...), $this->employmentPeriods)]
                 : []),
         ];
     }
 
     /**
-     * @return array{state: string, terminated_at: string}|null
+     * @return array<string, string|null>|null
      */
-    private static function offboarding(Employee $employee): ?array
+    private function offboarding(Employee $employee, bool $full): ?array
     {
         if ($employee->terminatedAt === null) {
             return null;
         }
 
-        return [
-            'state' => $employee->isOffboardingScheduled() ? 'scheduled' : 'effective',
+        $scheduled = $employee->isOffboardingScheduled();
+
+        $offboarding = [
+            'state' => $scheduled ? 'scheduled' : 'effective',
             'terminated_at' => $employee->terminatedAt->format('Y-m-d'),
         ];
+
+        if (! $full) {
+            return $offboarding;
+        }
+
+        // Con la baja efectiva el instante existe siempre: `status = terminated`
+        // si y solo si el periodo en curso tiene `offboarded_at`
+        // (`employees_current_period_matches`). Si no llega, quien construye el
+        // recurso se ha olvidado de leerlo, y un `null` aqui mentiria.
+        if (! $scheduled && ! $this->offboardedAt instanceof DateTimeImmutable) {
+            throw new LogicException('Falta el instante de la baja efectiva del empleado '.$employee->uuid.'.');
+        }
+
+        return [...$offboarding, 'offboarded_at' => $scheduled ? null : UtcInstant::format($this->offboardedAt)];
     }
 }

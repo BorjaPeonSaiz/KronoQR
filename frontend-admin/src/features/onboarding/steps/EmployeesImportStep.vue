@@ -15,10 +15,21 @@
 // de la interfaz (`Accept-Language`): no se vuelven a traducir aqui. No entran
 // en ningun registro tecnico ni en `error_events` (regla dura 21): esta
 // pantalla es la unica que los enseña.
+//
+// READMISIONES (RN-27, ADR-062 §6). Una fila cuyo documento es de una persona de
+// baja sale como `rehire` con el aviso `rehire_proposed`: se propone darla de alta
+// de nuevo en su ficha, no se rechaza. El resumen lo cuenta aparte
+// (`summary.rehire`) y el servidor devuelve `rehire_digest`, que `apply` manda de
+// vuelta (`confirm_rehire_digest`): solo se readmite a quien se vio en el resumen.
+// Si entre la validacion y la aplicacion cambia a quien se readmitiria (o el
+// fichero), `apply` responde `409` SIN escribir nada; aqui se dice por que, se
+// descarta el informe viejo y se pide validar otra vez. Cada codigo nuevo lleva su
+// «que hacer» (`messageAdvice`) debajo del texto del servidor.
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
-import { computed, ref } from 'vue'
+import { isApiError } from '@kronoqr/web-kit/http'
+import { computed, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { EmployeeImportReport } from '@/shared/api/types'
+import type { EmployeeImportMessage, EmployeeImportReport } from '@/shared/api/types'
 import { importEmployees } from '../employeeImport.api'
 import { useSetupStore } from '../setup.store'
 
@@ -31,11 +42,24 @@ const validating = ref(false)
 const applying = ref(false)
 const finishing = ref(false)
 const error = ref<unknown>(null)
+/** El `409` de `apply`: lo revisado ya no es lo que se aplicaria. No se ha escrito nada. */
+const stale = ref(false)
+const validateButton = ref<HTMLButtonElement | null>(null)
+
+/** Codigos de la readmision con «que hacer» propio (`onboarding.steps.employees.messageAdvice`). */
+const REHIRE_ADVICE_CODES: readonly EmployeeImportMessage['code'][] = [
+  'rehire_proposed',
+  'rehire_requires_hired_at',
+  'rehire_not_after_termination',
+  'rehire_identity_mismatch',
+  'rehire_ignores_identity_changes',
+]
 
 function onFileChange(event: Event): void {
   const files = (event.target as HTMLInputElement).files
 
   selectedFile.value = files !== null && files.length > 0 ? (files[0] ?? null) : null
+  stale.value = false
   // Un fichero nuevo invalida el informe anterior: su huella ya no es la de
   // este fichero, y aplicar con ella daria un 409.
   report.value = null
@@ -58,6 +82,7 @@ async function validate(): Promise<void> {
 
   validating.value = true
   error.value = null
+  stale.value = false
 
   try {
     report.value = await importEmployees({ file: selectedFile.value, mode: 'validate' })
@@ -75,6 +100,7 @@ async function apply(): Promise<void> {
 
   applying.value = true
   error.value = null
+  stale.value = false
 
   try {
     report.value = await importEmployees({
@@ -85,7 +111,19 @@ async function apply(): Promise<void> {
     })
     setup.importedWithoutPin += report.value.summary.create
   } catch (caught) {
-    error.value = caught
+    if (isApiError(caught) && caught.status === 409) {
+      // Lo revisado ya no es lo que se aplicaria (otro fichero, o alguien dio de baja
+      // o de alta a una persona del fichero): se descarta el informe para que «Aplicar»
+      // no pueda volver a enviar la huella vieja, y se pide validar de nuevo.
+      stale.value = true
+      report.value = null
+      // «Aplicar» desaparece con el informe y con el se iria el foco: pasa a «Validar», que es
+      // lo siguiente que hay que hacer.
+      await nextTick()
+      validateButton.value?.focus()
+    } else {
+      error.value = caught
+    }
   } finally {
     applying.value = false
   }
@@ -114,6 +152,16 @@ async function finish(state: 'completed' | 'skipped'): Promise<void> {
 
     <ErrorNotice v-if="error !== null" :error="error" />
 
+    <div
+      v-if="stale"
+      role="alert"
+      data-test="import-stale"
+      class="rounded-kq border border-kq-warning bg-kq-warning-soft p-4 text-kq-warning"
+    >
+      <p class="font-semibold">{{ t('onboarding.steps.employees.stale.title') }}</p>
+      <p class="mt-1">{{ t('onboarding.steps.employees.stale.advice') }}</p>
+    </div>
+
     <div class="flex flex-col gap-2">
       <label for="onboarding-import-file" class="font-medium text-kq-text">
         {{ t('onboarding.steps.employees.fields.file') }}
@@ -131,6 +179,7 @@ async function finish(state: 'completed' | 'skipped'): Promise<void> {
 
     <div class="flex gap-3">
       <button
+        ref="validateButton"
         v-aria-disabled.reason="!canValidate"
         type="button"
         :aria-busy="validating"
@@ -198,6 +247,38 @@ async function finish(state: 'completed' | 'skipped'): Promise<void> {
         }}
       </p>
 
+      <!-- Readmisiones: se cuentan aparte y se piden revisar ANTES de aplicar (RN-27). -->
+      <div
+        v-if="!applied && report.summary.rehire > 0"
+        role="status"
+        data-test="rehire-notice"
+        class="rounded-kq-sm border border-kq-warning bg-kq-warning-soft p-3 text-kq-warning"
+      >
+        <p>
+          {{
+            t(
+              'onboarding.steps.employees.rehireNotice',
+              { count: report.summary.rehire },
+              report.summary.rehire,
+            )
+          }}
+        </p>
+        <p class="mt-1">{{ t('onboarding.steps.employees.rehireFutureNotice') }}</p>
+      </div>
+      <p
+        v-if="applied && report.summary.rehire > 0"
+        data-test="rehired-notice"
+        class="rounded-kq-sm border border-kq-warning bg-kq-warning-soft p-3 text-kq-warning"
+      >
+        {{
+          t(
+            'onboarding.steps.employees.rehiredNotice',
+            { count: report.summary.rehire },
+            report.summary.rehire,
+          )
+        }}
+      </p>
+
       <p
         v-if="applied && report.summary.create > 0"
         class="rounded-kq-sm border border-kq-warning bg-kq-warning-soft p-3 text-kq-warning"
@@ -257,6 +338,7 @@ async function finish(state: 'completed' | 'skipped'): Promise<void> {
                     'bg-kq-primary-soft text-kq-on-primary-soft': row.outcome === 'update',
                     'bg-kq-surface-alt text-kq-text-muted': row.outcome === 'unchanged',
                     'bg-kq-danger-soft text-kq-danger': row.outcome === 'reject',
+                    'bg-kq-warning-soft text-kq-warning': row.outcome === 'rehire',
                   }"
                 >
                   {{ t(`onboarding.steps.employees.outcomes.${row.outcome}`) }}
@@ -270,6 +352,13 @@ async function finish(state: 'completed' | 'skipped'): Promise<void> {
                     :class="message.severity === 'error' ? 'text-kq-danger' : 'text-kq-warning'"
                   >
                     {{ message.detail }}
+                    <span
+                      v-if="REHIRE_ADVICE_CODES.includes(message.code)"
+                      class="block text-kq-text-muted"
+                      data-test="message-advice"
+                    >
+                      {{ t(`onboarding.steps.employees.messageAdvice.${message.code}`) }}
+                    </span>
                   </li>
                 </ul>
                 <span v-else class="text-kq-text-muted">—</span>

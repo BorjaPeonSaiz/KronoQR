@@ -18,17 +18,26 @@ import EmptyState from '@kronoqr/web-kit/components/EmptyState.vue'
 import ErrorNotice from '@kronoqr/web-kit/components/ErrorNotice.vue'
 import LoadingPanel from '@kronoqr/web-kit/components/LoadingPanel.vue'
 import { FALLBACK_TIMEZONE } from '@kronoqr/web-kit/datetime'
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AuditNotice from '@/shared/ui/AuditNotice.vue'
 import { usePersonName } from '@/shared/people/personName'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { keepPreviousData, useQuery } from '@tanstack/vue-query'
 import { getSite, listDepartments } from '@/shared/api/organisation.api'
-import type { EmployeeProvisioned, EmploymentStatus, PinStatus } from '@/shared/api/types'
+import type {
+  Employee,
+  EmployeeProvisioned,
+  EmploymentStatus,
+  PinStatus,
+  RehiredEmployee,
+} from '@/shared/api/types'
 import PaginationBar from '@/shared/ui/PaginationBar.vue'
 import EmployeeCreateDialog from './EmployeeCreateDialog.vue'
 import PinRevealDialog from './PinRevealDialog.vue'
+import RehireBatchDialog from './RehireBatchDialog.vue'
+import RehireDialog from './RehireDialog.vue'
+import RehireOutcome from './RehireOutcome.vue'
 import TeleworkingBadge from './TeleworkingBadge.vue'
 import { EMPLOYEE_LIST_PER_PAGE, listEmployees } from './employees.api'
 
@@ -273,6 +282,164 @@ function fullName(first: string, last: string, anonymizedAt: string | null): str
   return personName(first, last, anonymizedAt)
 }
 
+// --- Dar de alta de nuevo (RN-27, ADR-062 §6) ---------------------------------
+//
+// Con el filtro «De baja» cada fila ofrece «Dar de alta de nuevo», y se pueden
+// marcar varias para readmitirlas con una fecha comun (la vuelta de la temporada).
+// La seleccion vive aqui, se conserva al cambiar de pagina y guarda la FICHA de cada
+// persona (el dialogo necesita su cese y su departamento), no solo el uuid. Una
+// ficha minimizada no se puede readmitir (409) y no se ofrece.
+
+/** Tope de personas por peticion: el del contrato (`RehireEmployeesRequest.employee_uuids`). */
+const REHIRE_MAX_SELECTION = 500
+
+const terminatedView = computed(() => statusFilter.value === 'terminated')
+
+function canRehire(employee: Employee): boolean {
+  return employee.status === 'terminated' && employee.anonymized_at === null
+}
+
+/** uuid -> ficha, en el orden en que se fueron marcando (el orden de la peticion). */
+const selection = ref(new Map<string, Employee>())
+const selectionLimitReached = ref(false)
+const selectAllBox = ref<HTMLInputElement | null>(null)
+
+const selectedPeople = computed(() => [...selection.value.values()])
+const rehirableRows = computed(() => rows.value.filter(canRehire))
+const allRowsSelected = computed(
+  () =>
+    rehirableRows.value.length > 0 &&
+    rehirableRows.value.every((employee) => selection.value.has(employee.uuid)),
+)
+const someRowsSelected = computed(
+  () =>
+    !allRowsSelected.value &&
+    rehirableRows.value.some((employee) => selection.value.has(employee.uuid)),
+)
+
+/**
+ * El aviso del tope se queda mientras la seleccion este llena; en cuanto cabe alguien mas
+ * (porque se desmarco a una persona) deja de ser verdad y se quita.
+ */
+function refreshLimitNotice(size: number): void {
+  if (size < REHIRE_MAX_SELECTION) {
+    selectionLimitReached.value = false
+  }
+}
+
+function setSelected(employee: Employee, box: HTMLInputElement): void {
+  const next = new Map(selection.value)
+
+  if (!box.checked) {
+    next.delete(employee.uuid)
+    refreshLimitNotice(next.size)
+  } else if (next.size < REHIRE_MAX_SELECTION) {
+    next.set(employee.uuid, employee)
+  } else {
+    selectionLimitReached.value = true
+    // La casilla no se re-pinta sola (su `:checked` era falso antes y despues): se desmarca a mano,
+    // o quedaria marcada —y un lector de pantalla diria «marcada»— sin que esa persona entre.
+    box.checked = false
+  }
+
+  selection.value = next
+  announce(t('employees.announce.selected', next.size))
+}
+
+function toggleAllRows(box: HTMLInputElement): void {
+  const next = new Map(selection.value)
+
+  for (const employee of rehirableRows.value) {
+    if (!box.checked) {
+      next.delete(employee.uuid)
+    } else if (next.size < REHIRE_MAX_SELECTION) {
+      next.set(employee.uuid, employee)
+    } else {
+      selectionLimitReached.value = true
+    }
+  }
+
+  if (!box.checked) {
+    refreshLimitNotice(next.size)
+  }
+
+  selection.value = next
+  // Con el tope alcanzado a medias, la cabecera no esta del todo marcada: que lo diga la casilla.
+  box.checked = allRowsSelected.value
+  announce(t('employees.announce.selected', next.size))
+}
+
+function clearSelection(): void {
+  selection.value = new Map()
+  selectionLimitReached.value = false
+}
+
+/** «Quitar la selección» desaparece al pulsarlo: el foco pasa a la casilla de cabecera, no a `<body>`. */
+async function onClearSelection(): Promise<void> {
+  clearSelection()
+  announce(t('employees.announce.selected', 0))
+  await nextTick()
+  selectAllBox.value?.focus()
+}
+
+// Salir del filtro «De baja» descarta la seleccion: ya no se ve lo que se habia marcado.
+watch(terminatedView, (active) => {
+  if (!active) {
+    clearSelection()
+  }
+})
+
+/** La persona de la fila cuyo boton «Dar de alta de nuevo» se ha pulsado. */
+const rehiring = ref<Employee | null>(null)
+const rehiringBatch = ref(false)
+
+/** El resultado de la readmision, con el PIN en claro si se pidio. Solo vive mientras se ensena. */
+const rehireResults = ref<RehiredEmployee[] | null>(null)
+
+function onRehired(results: RehiredEmployee[]): void {
+  rehiring.value = null
+  rehiringBatch.value = false
+  rehireResults.value = results
+  // Se quita de la seleccion a quien se acaba de dar de alta, y solo a esa gente: una readmision
+  // individual no tira la seleccion que se estaba preparando para el lote.
+  const next = new Map(selection.value)
+
+  for (const result of results) {
+    next.delete(result.employee.uuid)
+  }
+
+  selection.value = next
+  refreshLimitNotice(next.size)
+  announce(
+    results.length === 1
+      ? t('employees.announce.rehired')
+      : t('employees.announce.rehiredMany', results.length),
+  )
+  void refetch()
+}
+
+function closeRehireResults(): void {
+  // Al soltar la referencia, los PIN en claro dejan de existir en el navegador.
+  rehireResults.value = null
+}
+
+/** Aviso de que la persona ya no estaba de baja: sin el, la fila desaparece sin explicacion. */
+const rehireStale = ref(false)
+
+// Abrir una readmision nueva descarta el aviso de la anterior: ya no habla de lo que se hace.
+watch([rehiring, rehiringBatch], ([single, batch]) => {
+  if (single !== null || batch) {
+    rehireStale.value = false
+  }
+})
+
+/** El servidor dice que la ficha ya no esta de baja (o esta minimizada): se relee la lista y se dice por que. */
+function onRehireStale(): void {
+  rehiring.value = null
+  rehireStale.value = true
+  void refetch()
+}
+
 const selectClass =
   'rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text'
 </script>
@@ -406,6 +573,17 @@ const selectClass =
       </button>
     </form>
 
+    <!-- Alguien se adelanto: la fila ya no esta de baja. Alerta, el lector de pantalla la lee solo. -->
+    <div
+      v-if="rehireStale"
+      role="alert"
+      data-test="rehire-stale"
+      class="mt-4 rounded-kq border border-kq-warning bg-kq-warning-soft p-4 text-kq-warning"
+    >
+      <p class="font-semibold">{{ t('employees.rehire.stale.title') }}</p>
+      <p class="mt-1">{{ t('employees.rehire.stale.advice') }}</p>
+    </div>
+
     <LoadingPanel v-if="isPending" :label="t('employees.loading')" class="mt-4" />
 
     <ErrorNotice v-else-if="error !== null" :error="error" class="mt-4" @retry="refetch()" />
@@ -418,8 +596,52 @@ const selectClass =
         :description="hasFilters ? t('employees.empty.filtered') : t('employees.empty.description')"
       />
 
+      <!-- Dar de alta de nuevo a varias personas: solo con el filtro «De baja» (RN-27). Con
+           alguien marcado la barra se queda arriba al bajar por la tabla: el boton no se pierde. -->
       <div
-        v-else
+        v-if="rows.length > 0 && terminatedView"
+        class="mt-4 flex flex-wrap items-center gap-3"
+        :class="
+          selection.size > 0 ? 'sticky top-0 z-10 border-b border-kq-border bg-kq-surface py-2' : ''
+        "
+        data-test="rehire-toolbar"
+      >
+        <p class="max-w-prose text-kq-text-muted">
+          {{ t('employees.selection.hint', { max: REHIRE_MAX_SELECTION }) }}
+        </p>
+        <p v-if="selection.size > 0" class="font-medium" data-test="selection-summary">
+          {{ t('employees.selection.summary', selection.size) }}
+        </p>
+        <!-- Sin nadie marcado no hay nada que hacer: el boton aparece con la primera casilla. -->
+        <button
+          v-if="selection.size > 0"
+          type="button"
+          data-test="rehire-selected"
+          class="rounded-kq-sm bg-kq-primary-strong px-4 py-2 font-semibold text-kq-on-primary"
+          @click="rehiringBatch = true"
+        >
+          {{ t('employees.actions.rehireSelected', { count: selection.size }) }}
+        </button>
+        <button
+          v-if="selection.size > 0"
+          type="button"
+          class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-2 text-kq-text hover:bg-kq-surface-alt"
+          data-test="selection-clear"
+          @click="onClearSelection"
+        >
+          {{ t('employees.selection.clear') }}
+        </button>
+        <p
+          v-if="selectionLimitReached"
+          role="status"
+          class="w-full rounded-kq-sm border border-kq-warning bg-kq-warning-soft p-3 text-kq-warning"
+        >
+          {{ t('employees.selection.tooMany', { max: REHIRE_MAX_SELECTION }) }}
+        </p>
+      </div>
+
+      <div
+        v-if="rows.length > 0"
         tabindex="0"
         role="region"
         :aria-label="t('employees.table.caption')"
@@ -433,6 +655,18 @@ const selectClass =
           </caption>
           <thead class="border-b border-kq-border bg-kq-surface-alt">
             <tr>
+              <th v-if="terminatedView" scope="col" class="px-3 py-2">
+                <input
+                  ref="selectAllBox"
+                  type="checkbox"
+                  data-test="select-all"
+                  :checked="allRowsSelected"
+                  :indeterminate="someRowsSelected"
+                  :disabled="rehirableRows.length === 0"
+                  :aria-label="t('employees.table.selectAll')"
+                  @change="toggleAllRows($event.target as HTMLInputElement)"
+                />
+              </th>
               <th scope="col" class="px-3 py-2">{{ t('employees.table.name') }}</th>
               <th scope="col" class="px-3 py-2">{{ t('employees.table.code') }}</th>
               <th scope="col" class="px-3 py-2">{{ t('employees.table.department') }}</th>
@@ -442,10 +676,36 @@ const selectClass =
               <th scope="col" class="px-3 py-2">{{ t('employees.table.pinStatus') }}</th>
               <!-- Informativo: no altera el fichaje ni el calculo de horas. -->
               <th scope="col" class="px-3 py-2">{{ t('employees.table.teleworking') }}</th>
+              <th v-if="terminatedView" scope="col" class="px-3 py-2">
+                <span class="sr-only">{{ t('employees.table.actions') }}</span>
+              </th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="employee of rows" :key="employee.uuid" class="border-b border-kq-border">
+            <tr
+              v-for="employee of rows"
+              :key="employee.uuid"
+              class="border-b border-kq-border"
+              data-test="employee-row"
+            >
+              <td v-if="terminatedView" class="px-3 py-2">
+                <input
+                  v-if="canRehire(employee)"
+                  type="checkbox"
+                  data-test="select-row"
+                  :checked="selection.has(employee.uuid)"
+                  :aria-label="
+                    t('employees.table.selectRow', {
+                      name: fullName(
+                        employee.first_name,
+                        employee.last_name,
+                        employee.anonymized_at,
+                      ),
+                    })
+                  "
+                  @change="setSelected(employee, $event.target as HTMLInputElement)"
+                />
+              </td>
               <th scope="row" class="px-3 py-2 font-medium">
                 <RouterLink
                   :to="{ name: 'employee', params: { uuid: employee.uuid } }"
@@ -462,9 +722,37 @@ const selectClass =
                     : (departmentNames.get(employee.department_id) ?? '—')
                 }}
               </td>
-              <td class="px-3 py-2">{{ t(`employees.status.${employee.status}`) }}</td>
+              <td class="px-3 py-2">
+                {{
+                  employee.offboarding?.state === 'scheduled'
+                    ? t('employees.status.scheduled')
+                    : t(`employees.status.${employee.status}`)
+                }}
+              </td>
               <td class="px-3 py-2">{{ t(`pin.status.${employee.pin_status}`) }}</td>
               <td class="px-3 py-2"><TeleworkingBadge :teleworking="employee.teleworking" /></td>
+              <td v-if="terminatedView" class="px-3 py-2">
+                <button
+                  v-if="canRehire(employee)"
+                  type="button"
+                  data-test="rehire-row"
+                  class="rounded-kq-sm border border-kq-border-strong bg-kq-surface-raised px-3 py-1 text-kq-text hover:bg-kq-surface-alt"
+                  @click="rehiring = employee"
+                >
+                  {{ t('employees.actions.rehire') }}
+                  <span class="sr-only">
+                    {{
+                      t('employees.actions.rehireFor', {
+                        name: fullName(
+                          employee.first_name,
+                          employee.last_name,
+                          employee.anonymized_at,
+                        ),
+                      })
+                    }}
+                  </span>
+                </button>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -490,6 +778,30 @@ const selectClass =
       :timezone="site?.timezone ?? FALLBACK_TIMEZONE"
       @close="creating = false"
       @created="onCreated"
+    />
+
+    <RehireDialog
+      v-if="rehiring !== null"
+      :employee="rehiring"
+      :timezone="site?.timezone"
+      @close="rehiring = null"
+      @rehired="(result) => onRehired([result])"
+      @stale="onRehireStale"
+    />
+
+    <RehireBatchDialog
+      v-if="rehiringBatch"
+      :people="selectedPeople"
+      :timezone="site?.timezone"
+      @close="rehiringBatch = false"
+      @rehired="onRehired"
+    />
+
+    <RehireOutcome
+      v-if="rehireResults !== null"
+      :results="rehireResults"
+      @done="closeRehireResults"
+      @pin-delivered="refetch()"
     />
 
     <PinRevealDialog
