@@ -5,16 +5,23 @@ declare(strict_types=1);
 namespace KronoQR\DiagnosticsOpener;
 
 use App\Modules\Product\Domain\Support\CanonicalJson;
+use App\Modules\Product\Domain\Support\DiagnosticsEnvelope;
 use Throwable;
 
 /*
- * La forma canonica es la del producto, no una copia: si las dos dejaran de
- * coincidir, ningun sobre volveria a abrir. Dentro de la suite del backend la
- * clase ya esta cargada por su autoloader; aqui, que no hay ninguno, se carga
- * del arbol del repositorio. `CanonicalJson` es dominio puro (regla dura 1).
+ * La forma canonica y la del sobre son las del producto, no una copia: si
+ * dejaran de coincidir, ningun sobre volveria a abrir. Dentro de la suite del
+ * backend las clases ya estan cargadas por su autoloader; aqui, que no hay
+ * ninguno, se cargan del arbol del repositorio. `CanonicalJson` y
+ * `DiagnosticsEnvelope` son dominio puro (regla dura 1), y la segunda solo
+ * necesita la primera.
  */
 if (! class_exists(CanonicalJson::class)) {
     require_once __DIR__.'/../../../backend/app/Modules/Product/Domain/Support/CanonicalJson.php';
+}
+
+if (! class_exists(DiagnosticsEnvelope::class)) {
+    require_once __DIR__.'/../../../backend/app/Modules/Product/Domain/Support/DiagnosticsEnvelope.php';
 }
 
 /**
@@ -46,14 +53,11 @@ if (! class_exists(CanonicalJson::class)) {
  */
 final class DiagnosticsOpener
 {
-    public const string FORMAT = 'kronoqr-diagnostics-sealed';
+    public const string FORMAT = DiagnosticsEnvelope::FORMAT;
 
-    public const int ENVELOPE_VERSION = 1;
+    public const int ENVELOPE_VERSION = DiagnosticsEnvelope::ENVELOPE_VERSION;
 
-    public const string ALGORITHM = 'x25519-sealedbox+xchacha20poly1305-ietf';
-
-    /** Los tres campos que no son cabecera. */
-    private const array ENVELOPE_FIELDS = ['sealed_key', 'nonce', 'ciphertext'];
+    public const string ALGORITHM = DiagnosticsEnvelope::ALGORITHM;
 
     /**
      * Un par X25519 nuevo, en hexadecimal.
@@ -81,7 +85,7 @@ final class DiagnosticsOpener
     /** Los 16 primeros hexadecimales del SHA-256 de la clave publica en bruto. */
     public static function keyId(string $publicKey): string
     {
-        return substr(hash('sha256', $publicKey), 0, 16);
+        return DiagnosticsEnvelope::keyId($publicKey);
     }
 
     /**
@@ -176,7 +180,7 @@ final class DiagnosticsOpener
 
         $binary = [];
 
-        foreach (self::ENVELOPE_FIELDS as $field) {
+        foreach (DiagnosticsEnvelope::ENVELOPE_FIELDS as $field) {
             $value = \is_string($document[$field] ?? null) ? base64_decode($document[$field], true) : false;
 
             if ($value === false || $value === '') {
@@ -226,7 +230,7 @@ final class DiagnosticsOpener
         try {
             $plaintext = sodium_crypto_aead_xchacha20poly1305_ietf_decrypt(
                 $envelope['ciphertext'],
-                CanonicalJson::encode($envelope['header']),
+                DiagnosticsEnvelope::associatedData($envelope['header']),
                 $envelope['nonce'],
                 $key,
             );
@@ -274,57 +278,11 @@ final class DiagnosticsOpener
         $contents = $header['contents'] ?? null;
         $periodDays = \is_array($contents) && \is_int($contents['period_days'] ?? null) ? $contents['period_days'] : 0;
 
+        // La misma descripcion que escribe el producto, recalculada sobre lo
+        // descifrado: `DiagnosticsEnvelope::contents()`, no una copia.
         if (! \is_array($contents)
-            || CanonicalJson::encode($contents) !== CanonicalJson::encode(self::describe($bundle, $periodDays, \strlen($plaintext)))) {
+            || CanonicalJson::encode($contents) !== CanonicalJson::encode(DiagnosticsEnvelope::contents($bundle, $periodDays, \strlen($plaintext)))) {
             throw new EnvelopeNotOpened('La cabecera no describe lo que lleva el paquete (contents).');
         }
-    }
-
-    /**
-     * La misma descripcion que escribe el producto
-     * (`SealedDiagnosticsBundle::contentsOf`), recalculada sobre lo descifrado.
-     *
-     * @param  array<array-key, mixed>  $bundle
-     * @return array<string, mixed>
-     */
-    private static function describe(array $bundle, int $periodDays, int $plaintextBytes): array
-    {
-        $contents = ['period_days' => $periodDays, 'plaintext_bytes' => $plaintextBytes, 'status' => 'unavailable'];
-        $section = $bundle['personal_data'] ?? null;
-
-        if (! \is_array($section)) {
-            return $contents;
-        }
-
-        if (($section['status'] ?? null) === 'omitted') {
-            return [...$contents, 'status' => 'omitted'];
-        }
-
-        $collections = [];
-
-        foreach ($section as $name => $collection) {
-            if (\is_array($collection) && \is_array($collection['items'] ?? null)) {
-                $collections[(string) $name] = self::columns($collection['items']);
-            }
-        }
-
-        return $collections === [] ? $contents : [...$contents, 'status' => 'included', 'collections' => $collections];
-    }
-
-    /**
-     * @param  array<array-key, mixed>  $items
-     * @return array{rows: int, columns: list<string>}
-     */
-    private static function columns(array $items): array
-    {
-        $columns = [];
-
-        foreach ($items as $item) {
-            foreach (\is_array($item) ? array_keys($item) : [] as $column) {
-                $columns[(string) $column] = true;
-            }
-        }
-
-        return ['rows' => \count($items), 'columns' => array_map(strval(...), array_keys($columns))];
     }
 }

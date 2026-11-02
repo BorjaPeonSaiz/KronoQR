@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Product\Domain\ValueObject;
 
-use App\Modules\Product\Domain\Support\CanonicalJson;
+use App\Modules\Product\Domain\Support\DiagnosticsEnvelope;
 
 /**
  * El paquete de diagnostico **con datos personales**, cifrado para el
@@ -41,11 +41,15 @@ use App\Modules\Product\Domain\Support\CanonicalJson;
  */
 final readonly class SealedDiagnosticsBundle
 {
-    public const string FORMAT = 'kronoqr-diagnostics-sealed';
+    /*
+     * La forma del sobre es de DiagnosticsEnvelope, que la comparte con el
+     * abridor del fabricante. Aqui se repite el nombre para quien ya la usa.
+     */
+    public const string FORMAT = DiagnosticsEnvelope::FORMAT;
 
-    public const int ENVELOPE_VERSION = 1;
+    public const int ENVELOPE_VERSION = DiagnosticsEnvelope::ENVELOPE_VERSION;
 
-    public const string ALGORITHM = 'x25519-sealedbox+xchacha20poly1305-ietf';
+    public const string ALGORITHM = DiagnosticsEnvelope::ALGORITHM;
 
     /** El tipo de la respuesta HTTP (contrato, `200`). */
     public const string MEDIA_TYPE = 'application/vnd.kronoqr.diagnostics-sealed+json';
@@ -55,9 +59,6 @@ final readonly class SealedDiagnosticsBundle
      * recuentos y los nombres de columna ocupan unos pocos KiB.
      */
     private const int HEADER_MARGIN_BYTES = 16 * 1024;
-
-    /** Los tres campos que no son cabecera: no entran en los datos asociados. */
-    private const array ENVELOPE_FIELDS = ['sealed_key', 'nonce', 'ciphertext'];
 
     /**
      * @param  array{period_days: int, plaintext_bytes: int, status: string, collections?: array<string, array{rows: int, columns: list<string>}>}  $contents
@@ -94,65 +95,27 @@ final readonly class SealedDiagnosticsBundle
     }
 
     /**
-     * Los datos asociados del cifrado: la cabecera en forma canonica.
-     *
-     * Canonica y no `json_encode` a secas por lo mismo que la huella: quien abre
-     * el sobre la recalcula sobre el fichero **releido**, y un `json_decode` de
-     * ida y vuelta no conserva ni el orden de las claves ni los espacios.
+     * Los datos asociados del cifrado: la cabecera en forma canonica
+     * ({@see DiagnosticsEnvelope::associatedData()}).
      *
      * @param  array<array-key, mixed>  $header
      */
     public static function associatedData(array $header): string
     {
-        foreach (self::ENVELOPE_FIELDS as $field) {
-            unset($header[$field]);
-        }
-
-        return CanonicalJson::encode($header);
+        return DiagnosticsEnvelope::associatedData($header);
     }
 
     /**
      * Lo que lleva `personal_data`, **sin ningun valor**: cuantas filas y que
-     * columnas de cada coleccion, y si la seccion entro.
-     *
-     * Ninguna coleccion vacia se describe como mapa vacio: un `{}` releido por
-     * `json_decode` vuelve como lista y cambiaria los datos asociados. Por eso
-     * `collections` solo aparece con la seccion dentro, y la seccion siempre
-     * lleva sus cuatro colecciones.
+     * columnas de cada coleccion, y si la seccion entro
+     * ({@see DiagnosticsEnvelope::contents()}, la misma que recalcula el
+     * abridor del fabricante sobre lo descifrado).
      *
      * @return array{period_days: int, plaintext_bytes: int, status: string, collections?: array<string, array{rows: int, columns: list<string>}>}
      */
     public static function contentsOf(DiagnosticsBundle $bundle, int $periodDays, int $plaintextBytes): array
     {
-        $contents = [
-            'period_days' => $periodDays,
-            'plaintext_bytes' => $plaintextBytes,
-            'status' => 'unavailable',
-        ];
-
-        $section = $bundle->sections['personal_data'] ?? null;
-
-        if (! is_array($section)) {
-            return $contents;
-        }
-
-        if (($section['status'] ?? null) === 'omitted') {
-            return [...$contents, 'status' => 'omitted'];
-        }
-
-        $collections = [];
-
-        foreach ($section as $name => $collection) {
-            if (is_array($collection) && is_array($collection['items'] ?? null)) {
-                $collections[(string) $name] = self::describe($collection['items']);
-            }
-        }
-
-        if ($collections === []) {
-            return $contents;
-        }
-
-        return [...$contents, 'status' => 'included', 'collections' => $collections];
+        return DiagnosticsEnvelope::contents($bundle->sections, $periodDays, $plaintextBytes);
     }
 
     /**
@@ -229,7 +192,7 @@ final readonly class SealedDiagnosticsBundle
             return null;
         }
 
-        foreach (['recipient_key_id', ...self::ENVELOPE_FIELDS] as $field) {
+        foreach (['recipient_key_id', ...DiagnosticsEnvelope::ENVELOPE_FIELDS] as $field) {
             if (! \is_string($document[$field] ?? null)) {
                 return null;
             }
@@ -239,26 +202,5 @@ final readonly class SealedDiagnosticsBundle
         $keyId = $document['recipient_key_id'];
 
         return $keyId;
-    }
-
-    /**
-     * @param  array<array-key, mixed>  $items
-     * @return array{rows: int, columns: list<string>}
-     */
-    private static function describe(array $items): array
-    {
-        $columns = [];
-
-        foreach ($items as $item) {
-            if (! is_array($item)) {
-                continue;
-            }
-
-            foreach (array_keys($item) as $column) {
-                $columns[(string) $column] = true;
-            }
-        }
-
-        return ['rows' => \count($items), 'columns' => array_map(strval(...), array_keys($columns))];
     }
 }

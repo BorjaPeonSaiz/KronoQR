@@ -7,8 +7,8 @@
 # eso sirve igual en la CI (`../tools/...`) que en el contenedor
 # (`/var/www/repo/...`).
 #
-# `CanonicalJson` es la del producto (dominio puro): se escanea para conocer su
-# firma, no se analiza aqui.
+# `CanonicalJson` y `DiagnosticsEnvelope` son las del producto (dominio puro):
+# se escanean para conocer su firma, no se analizan aqui.
 #
 # Sin `tmpDir`: en el contenedor el repositorio esta montado de solo lectura,
 # y la cache va a la temporal del sistema.
@@ -23,6 +23,7 @@ parameters:
 
     scanFiles:
         - ../../backend/app/Modules/Product/Domain/Support/CanonicalJson.php
+        - ../../backend/app/Modules/Product/Domain/Support/DiagnosticsEnvelope.php
 
     ignoreErrors: []
     reportUnmatchedIgnoredErrors: true

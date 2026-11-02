@@ -13,7 +13,7 @@ use Tests\Architecture\Support\Repo;
  * EL PAQUETE CON DATOS PERSONALES SALE CIFRADO Y EL ANONIMIZADO SIN RUTAS
  * (ADR-020, enmienda del 01-11-2026; RL-19, RF-PD-09, RS-08).
  *
- * Cuatro propiedades que no puede romper un cambio despistado:
+ * Cinco propiedades que no puede romper un cambio despistado:
  *
  * 1. Toda clave de `params` y `details` que emite una sonda de `doctor` esta
  *    clasificada en `BundleDoctorFindingFilter`. Una sin clasificar no filtra
@@ -23,6 +23,8 @@ use Tests\Architecture\Support\Repo;
  * 3. Solo el sellador pide el texto en claro de un paquete con datos personales.
  * 4. El escritor y el controlador no entregan un paquete con datos personales
  *    sin sellar.
+ * 5. El abridor del fabricante usa la forma del sobre del dominio
+ *    (`DiagnosticsEnvelope`), no una copia.
  */
 
 /** El codigo de un fichero PHP sin comentarios. */
@@ -199,3 +201,15 @@ it('la puerta de release falla sin la clave publica de soporte compilada (RS-08)
 
     expect($licenseKey === '' || ! str_contains(Repo::contents('backend/config/product.php'), $licenseKey))->toBeTrue();
 })->group('RS-08', 'RL-19');
+
+it('el abridor del fabricante carga DiagnosticsEnvelope del arbol y no lleva copia del formato', function (): void {
+    $abridor = Repo::contents('tools/diagnostics-opener/src/DiagnosticsOpener.php');
+
+    expect($abridor)->toContain('backend/app/Modules/Product/Domain/Support/DiagnosticsEnvelope.php')
+        ->and($abridor)->toContain('DiagnosticsEnvelope::contents(')
+        ->and($abridor)->toContain('DiagnosticsEnvelope::associatedData(')
+        ->and($abridor)->toContain('DiagnosticsEnvelope::keyId(')
+        ->and($abridor)->not->toContain("'kronoqr-diagnostics-sealed'")
+        ->and($abridor)->not->toContain("'x25519-sealedbox+xchacha20poly1305-ietf'")
+        ->and($abridor)->not->toContain("['sealed_key', 'nonce', 'ciphertext']");
+})->group('RL-19', 'RF-PD-09');

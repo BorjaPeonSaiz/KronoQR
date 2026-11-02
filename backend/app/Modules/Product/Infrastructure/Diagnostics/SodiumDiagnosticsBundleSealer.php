@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Product\Infrastructure\Diagnostics;
 
 use App\Modules\Product\Application\Port\DiagnosticsBundleSealer;
+use App\Modules\Product\Domain\Support\DiagnosticsEnvelope;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsBundle;
 use App\Modules\Product\Domain\ValueObject\SealedDiagnosticsBundle;
 use LogicException;
@@ -43,7 +44,7 @@ use LogicException;
 final readonly class SodiumDiagnosticsBundleSealer implements DiagnosticsBundleSealer
 {
     /** Longitud del identificador de clave, en hexadecimales. */
-    public const int KEY_ID_LENGTH = 16;
+    public const int KEY_ID_LENGTH = DiagnosticsEnvelope::KEY_ID_LENGTH;
 
     private ?string $publicKey;
 
@@ -99,10 +100,13 @@ final readonly class SodiumDiagnosticsBundleSealer implements DiagnosticsBundleS
         );
     }
 
-    /** Los 16 primeros hexadecimales del SHA-256 de la clave publica en bruto. */
+    /**
+     * Los 16 primeros hexadecimales del SHA-256 de la clave publica en bruto
+     * ({@see DiagnosticsEnvelope::keyId()}, el mismo que calcula el abridor).
+     */
     public static function keyIdOf(string $publicKey): string
     {
-        return substr(hash('sha256', $publicKey), 0, self::KEY_ID_LENGTH);
+        return DiagnosticsEnvelope::keyId($publicKey);
     }
 
     private static function decode(string $hex): ?string
