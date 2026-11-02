@@ -235,3 +235,47 @@ it('devuelve el contexto como objeto aunque este vacio', function (): void {
 
     expect($crudo)->toContain('"context":{}');
 })->group('RF-PD-15');
+
+it('tras reabrirse enseña quien lo resolvio la vez anterior, y al resolverlo otra vez tambien', function (): void {
+    // Tarea 33.4: reabrir vacia el estado del grupo, no su historial. El panel
+    // lo enseña como `previous_resolution`, y sigue sin asiento de auditoria.
+    $id = grupoDeErrores();
+    $primera = ManagementUsers::withRole(UserRole::ADMIN, 'primera@hotel.test');
+    $segunda = ManagementUsers::withRole(UserRole::ADMIN, 'segunda@hotel.test');
+    $auditoria = DB::table('audit_log')->count();
+
+    $resuelto = Api::as(ManagementUsers::tokenFor($primera))
+        ->post('/api/v1/diagnostics/errors/'.$id.'/resolve')
+        ->assertOk()
+        ->assertJsonPath('previous_resolution', null);
+
+    // Lo que hace el sumidero al recurrir el error (`ErrorEventGroupingTest`).
+    DB::table('error_events')->where('id', $id)->update(['resolved_at' => null, 'resolved_by_user_id' => null]);
+
+    $abierto = Api::as(ManagementUsers::tokenFor($primera))
+        ->get('/api/v1/diagnostics/errors?status=open')
+        ->assertOk();
+
+    expect($abierto->json('data.0.id'))->toBe($id)
+        ->and($abierto->json('data.0.resolved_by'))->toBeNull()
+        ->and($abierto->json('data.0.previous_resolution.resolved_by.name'))->toBe($primera->name)
+        ->and($abierto->json('data.0.previous_resolution.resolved_at'))->toBe($resuelto->json('resolved_at'));
+
+    $otraVez = Api::as(ManagementUsers::tokenFor($segunda))
+        ->post('/api/v1/diagnostics/errors/'.$id.'/resolve')
+        ->assertOk();
+
+    expect($otraVez->json('resolved_by.name'))->toBe($segunda->name)
+        ->and($otraVez->json('previous_resolution.resolved_by.name'))->toBe($primera->name)
+        ->and(DB::table('error_event_resolutions')->where('error_event_id', $id)->count())->toBe(2)
+        ->and(DB::table('audit_log')->count())->toBe($auditoria);
+})->group('RF-PD-15');
+
+it('resolver dos veces deja una sola resolucion en el historial', function (): void {
+    $id = grupoDeErrores();
+
+    Api::as(tokenDeAdmin())->post('/api/v1/diagnostics/errors/'.$id.'/resolve')->assertOk();
+    Api::as(tokenDeAdmin())->post('/api/v1/diagnostics/errors/'.$id.'/resolve')->assertOk();
+
+    expect(DB::table('error_event_resolutions')->where('error_event_id', $id)->count())->toBe(1);
+})->group('RF-PD-15');

@@ -271,11 +271,18 @@ con alcance `diagnostics` la ve pero no puede resolver, §7).
   el recuento de `occurrences` que ya llevaba—: un error que diste por
   arreglado y que reaparece es justo lo que tienes que ver, no algo que el
   sistema deba ocultar por haber estado marcado antes.
-- **Quién lo resolvió** se muestra con nombre a una cuenta de gestión normal,
-  pero **no a un acceso de soporte**: un acceso de soporte con alcance
-  `diagnostics` o `read_only` ve la fila y que está resuelta, nunca el nombre
-  de quién la resolvió — el mismo criterio que ya aplicaba el paquete de
-  diagnóstico (§8).
+- **La resolución anterior no se pierde** (desde la 2.3.0): cada vez que se
+  marca como resuelto queda también en `error_event_resolutions`, que la
+  reapertura no toca. Una fila reabierta enseña **quién la resolvió la vez
+  anterior y cuándo** (`previous_resolution` en la API), y una que vuelves a
+  resolver, la resolución de antes de la tuya. El historial se borra con su
+  fila a los 90 días y sale en la exportación íntegra
+  (`error_event_resolutions.csv`), no en el paquete de diagnóstico.
+- **Quién lo resolvió** —ahora y la vez anterior— se muestra con nombre a una
+  cuenta de gestión normal, pero **no a un acceso de soporte**: un acceso de
+  soporte con alcance `diagnostics` o `read_only` ve la fila, que está resuelta
+  y cuándo se resolvió, nunca el nombre de quién lo hizo — el mismo criterio que
+  ya aplicaba el paquete de diagnóstico (§8).
 
 ---
 
@@ -368,7 +375,9 @@ Márcalo cuando la causa esté corregida y no antes: no hay ninguna urgencia
 por «vaciar» la bandeja, y una fila resuelta a la ligera **vuelve a abrirse
 sola** en cuanto se repite (§3), con el mismo recuento de `occurrences` que
 ya llevaba. Verlo reabrirse es la señal de que el arreglo no fue tal — no un
-error del panel.
+error del panel. **Antes de volver a tocar nada, mira la resolución anterior**
+que enseña la fila: quién la cerró y cuándo. Esa persona sabe qué se cambió, y
+si el fallo volvió justo después de un arreglo concreto, el arreglo es la pista.
 
 Un acceso de soporte con alcance `diagnostics` o `read_only` puede **leer**
 esta pantalla pero no puede resolver nada (§8 de `operacion.md`, alcances):

@@ -1915,12 +1915,13 @@ quien use la API.** Nada de esto cambia el registro ni impide fichar:
   omisión (`page`, `per_page` hasta 100, y `meta.total`); el recuento de
   `summary` sigue siendo el de toda la plantilla. Y
   `GET /api/v1/employees/{uuid}/workdays` devuelve 31 jornadas por página.
-- **La exportación íntegra pasa a la versión 7 del formato**:
+- **La exportación íntegra pasa a la versión 8 del formato**:
   `report_exports.csv` gana la columna `cancelled_at`; `discarded_scan_reports.csv`
-  gana `source`, `failed_attempts` y `first_failed_at`, y aparece
+  gana `source`, `failed_attempts` y `first_failed_at`, y aparecen
   `scan_processing_failures.csv`, los intentos fallidos de procesar un fichaje de
   los últimos 30 días (datos técnicos seudonimizados, sin la huella de la
-  tarjeta). Si comparas exportaciones de antes y de después, esas son las
+  tarjeta), y `error_event_resolutions.csv`, cada vez que alguien marcó como
+  resuelto un fallo del histórico de errores, también antes de que se reabriera. Si comparas exportaciones de antes y de después, esas son las
   diferencias (`manifest.json` lo dice).
 
 **Al actualizar a la 2.3.0: las exportaciones grandes se generan en segundo

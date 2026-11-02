@@ -1939,11 +1939,13 @@ API users.** None of this changes the record or prevents clocking:
   default (`page`, `per_page` up to 100, and `meta.total`); the `summary` count is
   still the whole workforce. And `GET /api/v1/employees/{uuid}/workdays` returns
   31 work days per page.
-- **The full data export moves to format version 7**: `report_exports.csv`
+- **The full data export moves to format version 8**: `report_exports.csv`
   gains the `cancelled_at` column; `discarded_scan_reports.csv` gains `source`,
-  `failed_attempts` and `first_failed_at`; and `scan_processing_failures.csv`
-  appears, the failed attempts to process a clock-in over the last 30 days
-  (pseudonymised technical data, without the card fingerprint). If you compare
+  `failed_attempts` and `first_failed_at`; and two files appear:
+  `scan_processing_failures.csv`, the failed attempts to process a clock-in over
+  the last 30 days (pseudonymised technical data, without the card fingerprint),
+  and `error_event_resolutions.csv`, every time somebody marked a failure in the
+  error history as resolved, including before it reopened. If you compare
   exports from before and after, those are the differences (`manifest.json` says
   so).
 

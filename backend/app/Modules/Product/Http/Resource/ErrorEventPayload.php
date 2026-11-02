@@ -6,6 +6,7 @@ namespace App\Modules\Product\Http\Resource;
 
 use App\Modules\Product\Domain\Support\ErrorMessageSanitizer;
 use App\Modules\Product\Domain\ValueObject\ErrorEvent;
+use App\Modules\Product\Domain\ValueObject\ErrorResolution;
 use App\Modules\Shared\Domain\Support\UtcInstant;
 use DateTimeImmutable;
 
@@ -82,10 +83,36 @@ final readonly class ErrorEventPayload
              * la cuenta que lo resolvio se borro despues (`nullOnDelete`), que es
              * la unica forma de que quede `resolved_at` sin autor.
              */
-            'resolved_by' => ! $withResolver || $event->resolvedByUuid === null || $event->resolvedByName === null
-                ? null
-                : ['uuid' => $event->resolvedByUuid, 'name' => $event->resolvedByName],
+            'resolved_by' => self::resolver($event->resolvedByUuid, $event->resolvedByName, $withResolver),
+            /*
+             * La resolucion anterior al ciclo actual (2.3.0), del historial que
+             * reabrir no vacia. **Con el mismo enmascarado** que `resolved_by`:
+             * un acceso de soporte ve que y cuando, nunca quien.
+             */
+            'previous_resolution' => $event->previousResolution instanceof ErrorResolution
+                ? [
+                    'resolved_at' => self::utc($event->previousResolution->resolvedAt),
+                    'resolved_by' => self::resolver(
+                        $event->previousResolution->resolvedByUuid,
+                        $event->previousResolution->resolvedByName,
+                        $withResolver,
+                    ),
+                ]
+                : null,
         ];
+    }
+
+    /**
+     * El autor de una resolucion con la forma `IncidentUser`, o `null` si no lo
+     * hay o si quien pregunta es un acceso de soporte.
+     *
+     * @return array{uuid: string, name: string}|null
+     */
+    private static function resolver(?string $uuid, ?string $name, bool $withResolver): ?array
+    {
+        return ! $withResolver || $uuid === null || $name === null
+            ? null
+            : ['uuid' => $uuid, 'name' => $name];
     }
 
     /**

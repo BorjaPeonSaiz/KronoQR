@@ -96,6 +96,7 @@ describe('resolveErrorEvent', () => {
         last_seen_at: '2026-09-08T00:00:00.000000Z',
         resolved_at: '2026-09-09T08:00:00.000000Z',
         resolved_by: { uuid: 'u-1', name: 'Dirección del hotel' },
+        previous_resolution: null,
       }),
     )
 

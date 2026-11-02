@@ -5107,13 +5107,16 @@ export interface paths {
          * @description Da un grupo por atendido (RF-PD-15). Quedan `resolved_at` y quien lo
          *     hizo; **si el error vuelve a ocurrir, el grupo se reabre** y conserva su
          *     recuento, para que «resuelto» signifique «ya no pasa» y no «ya no se ve».
+         *     La resolucion queda ademas en el historial del grupo, que reabrir no
+         *     vacia: tras la reapertura sale en `previous_resolution`.
          *
          *     **Idempotente.** Resolver un grupo ya resuelto responde `200` con la
-         *     misma fila: la accion no tiene segundo efecto y no merece un `409`.
+         *     misma fila: la accion no tiene segundo efecto —tampoco en el
+         *     historial— y no merece un `409`.
          *
          *     **No deja asiento en `audit_log`.** Son datos tecnicos sin relevancia
          *     legal (regla dura 6, en sentido inverso): la traza de quien y cuando
-         *     vive en la propia fila.
+         *     vive en la propia fila y en su historial de resoluciones.
          *
          *     **`admin` y solo `admin`, con ambito `diagnostics:*`.** Un acceso de
          *     soporte recibe `403` aunque pueda leer el historico: dar un fallo por
@@ -13515,6 +13518,31 @@ export interface components {
              *     soporte** (RF-PD-11, ADR-020): el nombre de una persona de la
              *     organizacion del cliente no sale hacia el fabricante, igual que el
              *     paquete de diagnostico lo omite.
+             */
+            resolved_by: components["schemas"]["IncidentUser"] | null;
+            /**
+             * @description La ultima resolucion **anterior al ciclo actual** (2.3.0): con el
+             *     grupo resuelto, la que hubo antes de esta; con el grupo abierto
+             *     —por ejemplo, porque se reabrio al volver a ocurrir—, la ultima que
+             *     tuvo. `null` si no la hay. Reabrir vacia `resolved_at` y
+             *     `resolved_by` del grupo, pero no este historial: cada resolucion
+             *     queda en una tabla solo-append que se purga con su grupo.
+             *     `resolved_by` lleva el mismo enmascarado que el del grupo.
+             */
+            previous_resolution: components["schemas"]["ErrorEventResolution"] | null;
+        };
+        /**
+         * ErrorEventResolution
+         * @description Una resolucion pasada de un grupo de errores (RF-PD-15): cuando se dio
+         *     por atendido y quien. Sin relevancia legal: no deja asiento en
+         *     `audit_log`.
+         */
+        ErrorEventResolution: {
+            resolved_at: components["schemas"]["UtcTimestamp"];
+            /**
+             * @description Quien lo dio por resuelto entonces. `null` si la cuenta se borro
+             *     despues **o si quien pregunta es un acceso de soporte** (RF-PD-11,
+             *     ADR-020), igual que `ErrorEvent.resolved_by`.
              */
             resolved_by: components["schemas"]["IncidentUser"] | null;
         };

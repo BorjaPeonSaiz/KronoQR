@@ -2,7 +2,9 @@
 
 declare(strict_types=1);
 
+use App\Modules\Product\Application\Port\ErrorEventQuery;
 use App\Modules\Product\Application\Port\ErrorEventRepository;
+use App\Modules\Product\Domain\ValueObject\ErrorEventStatusFilter;
 use App\Modules\Product\Domain\ValueObject\ErrorFingerprint;
 use App\Modules\Shared\Application\Port\ErrorEventSink;
 use App\Modules\Shared\Domain\ValueObject\ErrorLevel;
@@ -150,4 +152,85 @@ it('la huella que se guarda es la que calcula el dominio', function (): void {
     );
 
     expect(DB::table('error_events')->value('fingerprint'))->toBe($esperada->value);
+})->group('RF-PD-15');
+
+// --- El historial de resoluciones (2.3.0, tarea 33.4) -----------------------
+
+it('reabrir el grupo al recurrir no borra quien lo resolvio', function (): void {
+    // La reapertura la hace el sumidero, por su propia conexion, y vacia el
+    // estado del grupo: el historial queda intacto y el listado lo enseña como
+    // resolucion anterior.
+    WorkforceFixtures::site();
+
+    $sumidero = app(ErrorEventSink::class);
+    $sumidero->record(informeDeError('la cola no responde'));
+
+    $usuario = ManagementUsers::withRole(UserRole::ADMIN);
+    $id = (int) DB::table('error_events')->orderBy('id')->firstOrFail()->id;
+    $resuelto = (new DateTimeImmutable('now'))->modify('-1 minute');
+
+    app(ErrorEventRepository::class)->resolve($id, $usuario->id, $resuelto);
+
+    $sumidero->record(informeDeError('la cola no responde', '2.3.0'));
+
+    expect(DB::table('error_events')->where('id', $id)->value('resolved_at'))->toBeNull()
+        ->and(DB::table('error_event_resolutions')->where('error_event_id', $id)->value('resolved_by_user_id'))->toBe($usuario->id);
+
+    $grupo = app(ErrorEventRepository::class)->page(new ErrorEventQuery(status: ErrorEventStatusFilter::Open))->rows[0] ?? null;
+
+    expect($grupo?->id)->toBe($id)
+        ->and($grupo?->previousResolution?->resolvedByUuid)->toBe($usuario->uuid)
+        ->and($grupo?->previousResolution?->resolvedAt->format('Y-m-d H:i:s'))->toBe($resuelto->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s'));
+})->group('RF-PD-15');
+
+it('dos resoluciones simultaneas dejan una sola fila de historial y un solo autor', function (): void {
+    // Dos pestañas del panel pulsando a la vez: la segunda espera el candado de
+    // la fila, ya no la ve abierta y no escribe nada, ni en el grupo ni en el
+    // historial.
+    WorkforceFixtures::site();
+
+    app(ErrorEventSink::class)->record(informeDeError('el planificador no arranca'));
+
+    $id = (int) DB::table('error_events')->orderBy('id')->firstOrFail()->id;
+    $autores = [ManagementUsers::withRole(UserRole::ADMIN)->id, ManagementUsers::withRole(UserRole::ADMIN)->id];
+
+    ParallelRequests::runTasks(2, static function (int $indice) use ($id, $autores): mixed {
+        app(ErrorEventRepository::class)->resolve($id, $autores[$indice], new DateTimeImmutable('now'));
+
+        return ['index' => $indice];
+    });
+
+    $historial = DB::table('error_event_resolutions')->where('error_event_id', $id)->get();
+
+    expect($historial)->toHaveCount(1)
+        ->and($historial[0]->resolved_by_user_id ?? null)->toBe(DB::table('error_events')->where('id', $id)->value('resolved_by_user_id'))
+        ->and(DB::table('error_events')->where('id', $id)->value('resolved_at'))->not->toBeNull();
+})->group('RF-PD-15', 'RQ-03');
+
+it('la migracion del historial copia las resoluciones vigentes', function (): void {
+    // El relleno, con datos confirmados que la conexion del propietario si ve:
+    // un grupo resuelto antes de actualizar y reabierto despues tiene que seguir
+    // enseñando quien lo resolvio.
+    WorkforceFixtures::site();
+
+    app(ErrorEventSink::class)->record(informeDeError('el disco esta lleno'));
+
+    $usuario = ManagementUsers::withRole(UserRole::ADMIN);
+    $id = (int) DB::table('error_events')->orderBy('id')->firstOrFail()->id;
+
+    DB::table('error_events')->where('id', $id)->update(['resolved_at' => now(), 'resolved_by_user_id' => $usuario->id]);
+
+    $migracion = require database_path('migrations/2026_11_01_100000_create_error_event_resolutions_table.php');
+
+    DB::setDefaultConnection('pgsql_migrator');
+
+    try {
+        DB::connection('pgsql_migrator')->transaction(static fn () => $migracion->down());
+        DB::connection('pgsql_migrator')->transaction(static fn () => $migracion->up());
+    } finally {
+        DB::setDefaultConnection('pgsql');
+    }
+
+    expect(DB::table('error_event_resolutions')->where('error_event_id', $id)->value('resolved_by_user_id'))->toBe($usuario->id)
+        ->and(DB::table('error_event_resolutions')->count())->toBe(1);
 })->group('RF-PD-15');

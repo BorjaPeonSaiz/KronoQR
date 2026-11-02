@@ -214,6 +214,9 @@ it('declara los veinticuatro conjuntos del catalogo, sin efimeros ni fontaneria'
         'users',
         'support_grants',
         'error_events',
+        // 2.3.0, tarea 33.4: el historial de resoluciones del historico de
+        // errores, que reabrir un grupo no vacia.
+        'error_event_resolutions',
         // Tarea 3.9: el registro de los informes generados en segundo plano
         // (RF-IN-06). Los FICHEROS no entran —su contenido ya esta en
         // `shift_entries`, `daily_totals` y `employment_contracts`—; lo que
@@ -513,5 +516,17 @@ it('exporta los intentos fallidos de procesar un fichaje, seudonimizados y sin l
         ->and($dataset?->columns())->toBe(['scan_id', 'device_uuid', 'origin', 'failed_at', 'exception_class'])
         ->and($dataset?->columns())->not->toContain('payload_fingerprint')
         ->and(DataExportCatalog::dataset('discarded_scan_reports')?->columns())->toContain('source')
-        ->and(DataExportCatalog::SCHEMA_VERSION)->toBe('7');
+        ->and(DataExportCatalog::SCHEMA_VERSION)->toBe('8');
 })->group('RF-PD-14', 'RL-20', 'RN-22');
+
+it('exporta el historial de resoluciones de errores por la huella y sin claves internas', function (): void {
+    // Tarea 33.4: la resolucion que una reapertura vacia en `error_events`
+    // sigue en el ZIP del cliente. Se cruza con `error_events.csv` por la
+    // huella y el autor va por su uuid (doc 01 §5.5).
+    $dataset = DataExportCatalog::dataset('error_event_resolutions');
+
+    expect($dataset)->not->toBeNull()
+        ->and($dataset?->columns())->toBe(['fingerprint', 'resolved_at', 'resolved_by_user_uuid'])
+        ->and($dataset?->columns())->not->toContain('error_event_id')
+        ->and($dataset?->columns())->not->toContain('resolved_by_user_id');
+})->group('RF-PD-15', 'RL-20', 'RF-PD-14');

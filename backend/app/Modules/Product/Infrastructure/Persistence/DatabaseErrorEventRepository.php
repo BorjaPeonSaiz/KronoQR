@@ -12,6 +12,7 @@ use App\Modules\Product\Domain\ValueObject\ErrorEventPage;
 use App\Modules\Product\Domain\ValueObject\ErrorEventStatusFilter;
 use App\Modules\Product\Domain\ValueObject\ErrorEventSummary;
 use App\Modules\Product\Domain\ValueObject\ErrorFingerprint;
+use App\Modules\Product\Domain\ValueObject\ErrorResolution;
 use App\Modules\Product\Domain\ValueObject\ErrorWriteOutcome;
 use App\Modules\Shared\Application\Port\ErrorEventSink;
 use App\Modules\Shared\Domain\ValueObject\ErrorLevel;
@@ -74,6 +75,12 @@ use Throwable;
  * que paso antes del arreglo, y reabrir con el le diria a quien lo arreglo que
  * no funciono cuando lo que ha llegado es historia.
  *
+ * **Reabrir vacia el estado, no el historial** (2.3.0): cada resolucion queda
+ * tambien en `error_event_resolutions`, solo-append, escrita en la misma
+ * sentencia que la resolucion (ver `resolve()`). Esta escritura no la toca, y
+ * por eso el sumidero sigue sin poder fallar por ella. El listado lee de ahi
+ * la resolucion anterior al ciclo actual.
+ *
  * ## La escritura NO lanza; la lectura SI
  *
  * Contrato de {@see ErrorEventSink}: un
@@ -85,14 +92,14 @@ use Throwable;
 final readonly class DatabaseErrorEventRepository implements ErrorEventRepository, ErrorHistoryRewriter
 {
     /**
-     * Las columnas del listado, con el autor de la resolucion ya resuelto a
+     * Las columnas de un grupo, con el autor de la resolucion ya resuelto a
      * `uuid` y nombre.
      *
      * `LEFT JOIN` y no `INNER`: un grupo abierto no tiene autor, y la clave
      * ajena es `nullOnDelete`, asi que una cuenta borrada tampoco puede hacer
      * desaparecer la fila del historico.
      */
-    private const string SELECT = <<<'SQL'
+    private const string COLUMNS = <<<'SQL'
         SELECT e.id,
                e.fingerprint,
                e.level,
@@ -114,8 +121,49 @@ final readonly class DatabaseErrorEventRepository implements ErrorEventRepositor
                e.resolved_at,
                u.uuid::text AS resolved_by_uuid,
                u.name AS resolved_by_name
+        SQL;
+
+    private const string FROM = <<<'SQL'
+
           FROM error_events e
           LEFT JOIN users u ON u.id = e.resolved_by_user_id
+        SQL;
+
+    /**
+     * Un grupo **sin el historial de resoluciones**, a proposito: es la lectura
+     * del re-saneado de ADR-048 (`groupsAfter()`, `findByFingerprint()`,
+     * `merge()`), y ese re-saneado lo ejecuta la migracion `2026_10_03_100300`,
+     * que en una instalacion nueva corre antes de que exista
+     * `error_event_resolutions`.
+     */
+    private const string SELECT = self::COLUMNS.self::FROM;
+
+    /**
+     * Un grupo para el panel, con **la resolucion anterior al ciclo actual**
+     * (2.3.0): la ultima fila de `error_event_resolutions` anterior a la
+     * resolucion en curso, o la ultima de todas si el grupo esta abierto. La
+     * resolucion en curso tambien tiene su fila en el historial —se escribe a
+     * la vez—, y por eso se excluye con `<` en vez de tomar la ultima sin mas.
+     * Recorre el indice del `UNIQUE (error_event_id, resolved_at)`.
+     */
+    private const string LISTING = self::COLUMNS.<<<'SQL'
+        ,
+               pr.resolved_at AS previous_resolved_at,
+               pr.resolved_by_uuid AS previous_resolved_by_uuid,
+               pr.resolved_by_name AS previous_resolved_by_name
+        SQL.self::FROM.<<<'SQL'
+
+          LEFT JOIN LATERAL (
+              SELECT r.resolved_at,
+                     ru.uuid::text AS resolved_by_uuid,
+                     ru.name AS resolved_by_name
+                FROM error_event_resolutions r
+                LEFT JOIN users ru ON ru.id = r.resolved_by_user_id
+               WHERE r.error_event_id = e.id
+                 AND (e.resolved_at IS NULL OR r.resolved_at < e.resolved_at)
+               ORDER BY r.resolved_at DESC
+               LIMIT 1
+          ) pr ON true
         SQL;
 
     /** Clave duplicada (`unique_violation`). */
@@ -291,7 +339,7 @@ final readonly class DatabaseErrorEventRepository implements ErrorEventRepositor
 
         /** @var list<object> $rows */
         $rows = $this->reads->select(
-            self::SELECT.$where.' ORDER BY e.last_seen_at DESC, e.id DESC LIMIT ? OFFSET ?',
+            self::LISTING.$where.' ORDER BY e.last_seen_at DESC, e.id DESC LIMIT ? OFFSET ?',
             [...$bindings, $perPage, $offset],
         );
 
@@ -316,15 +364,37 @@ final readonly class DatabaseErrorEventRepository implements ErrorEventRepositor
          * reescriba ni el autor ni el instante: no actualiza ninguna fila. Con
          * un `SELECT` antes, dos pestanas abiertas producirian dos autores
          * distintos para la misma resolucion, y el segundo ganaria.
+         *
+         * EL HISTORIAL, EN LA MISMA SENTENCIA (2.3.0). La fila de
+         * `error_event_resolutions` sale del `RETURNING` del `UPDATE`: si la
+         * segunda pulsacion no actualiza nada, tampoco inserta nada, y dos
+         * resoluciones simultaneas dejan una sola fila —la segunda espera el
+         * candado de la fila, vuelve a evaluar el `WHERE` y ya no la ve
+         * abierta—. Con dos sentencias habria un instante en el que el estado
+         * dice «resuelto» y el historial no. El `ON CONFLICT` solo cubre el
+         * caso degenerado de volver a resolver, tras una reapertura, en el
+         * mismo microsegundo que la vez anterior (un reloj detenido): es la
+         * misma resolucion, y no merece un `500`.
          */
-        $this->reads->update(
-            'UPDATE error_events SET resolved_at = ?, resolved_by_user_id = ?, updated_at = ? '
-            .'WHERE id = ? AND resolved_at IS NULL',
-            [self::timestamp($at), $userId, self::timestamp($at), $id],
+        $instant = self::timestamp($at);
+
+        $this->reads->affectingStatement(
+            <<<'SQL'
+                WITH resuelto AS (
+                    UPDATE error_events
+                       SET resolved_at = ?, resolved_by_user_id = ?, updated_at = ?
+                     WHERE id = ? AND resolved_at IS NULL
+                    RETURNING id, resolved_at, resolved_by_user_id
+                )
+                INSERT INTO error_event_resolutions (error_event_id, resolved_at, resolved_by_user_id, created_at)
+                SELECT id, resolved_at, resolved_by_user_id, ? FROM resuelto
+                ON CONFLICT (error_event_id, resolved_at) DO NOTHING
+                SQL,
+            [$instant, $userId, $instant, $id, $instant],
         );
 
         /** @var list<object> $rows */
-        $rows = $this->reads->select(self::SELECT.' WHERE e.id = ?', [$id]);
+        $rows = $this->reads->select(self::LISTING.' WHERE e.id = ?', [$id]);
 
         return $rows === [] ? null : self::hydrate($rows[0]);
     }
@@ -509,6 +579,31 @@ final readonly class DatabaseErrorEventRepository implements ErrorEventRepositor
 
             $merged = $groups[$survivorId]->absorb($groups[$absorbedId]);
 
+            /*
+             * EL HISTORIAL DEL ABSORBIDO PASA AL SUPERVIVIENTE antes de borrarlo
+             * (2.3.0). Se copia y no se reasigna: la tabla es solo-append y el
+             * rol de la aplicacion no tiene `UPDATE` sobre ella. Las filas
+             * originales se van con el grupo absorbido, por la cascada. El
+             * `UNIQUE (error_event_id, resolved_at)` hace la copia idempotente:
+             * una resolucion en el mismo instante en los dos grupos es la misma.
+             *
+             * Solo si la tabla existe: la migracion de re-saneado de la 2.2.0
+             * llega aqui en una instalacion nueva antes de que se cree, y
+             * entonces no hay historial que copiar.
+             */
+            if ($this->resolutionHistoryExists()) {
+                $this->reads->insert(
+                    <<<'SQL'
+                        INSERT INTO error_event_resolutions (error_event_id, resolved_at, resolved_by_user_id, created_at)
+                        SELECT ?, resolved_at, resolved_by_user_id, created_at
+                          FROM error_event_resolutions
+                         WHERE error_event_id = ?
+                        ON CONFLICT (error_event_id, resolved_at) DO NOTHING
+                        SQL,
+                    [$survivorId, $absorbedId],
+                );
+            }
+
             $this->reads->delete('DELETE FROM error_events WHERE id = ?', [$absorbedId]);
 
             $this->reads->update(
@@ -633,6 +728,32 @@ final readonly class DatabaseErrorEventRepository implements ErrorEventRepositor
             resolvedAt: $row->nullableInstant('resolved_at'),
             resolvedByUuid: $row->nullableString('resolved_by_uuid'),
             resolvedByName: $row->nullableString('resolved_by_name'),
+            previousResolution: self::previousResolution($row),
+        );
+    }
+
+    /** Si `error_event_resolutions` existe ya (ver `merge()`). */
+    private function resolutionHistoryExists(): bool
+    {
+        /** @var object{installed: bool|string|int|null}|null $row */
+        $row = $this->reads->selectOne("SELECT to_regclass('error_event_resolutions') IS NOT NULL AS installed");
+
+        return $row !== null && self::flag($row->installed);
+    }
+
+    /** La resolucion anterior al ciclo actual, si la hay (ver `LISTING`). */
+    private static function previousResolution(Row $row): ?ErrorResolution
+    {
+        $resolvedAt = $row->nullableInstant('previous_resolved_at');
+
+        if (! $resolvedAt instanceof DateTimeImmutable) {
+            return null;
+        }
+
+        return new ErrorResolution(
+            resolvedAt: $resolvedAt,
+            resolvedByUuid: $row->nullableString('previous_resolved_by_uuid'),
+            resolvedByName: $row->nullableString('previous_resolved_by_name'),
         );
     }
 

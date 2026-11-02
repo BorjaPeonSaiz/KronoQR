@@ -293,6 +293,7 @@ final readonly class DatabaseDataExportSource implements DataExportSource
         'users' => self::USERS,
         'support_grants' => self::SUPPORT_GRANTS,
         'error_events' => self::ERROR_EVENTS,
+        'error_event_resolutions' => self::ERROR_EVENT_RESOLUTIONS,
         'report_exports' => self::REPORT_EXPORTS,
         'weekly_summary_deliveries' => self::WEEKLY_SUMMARY_DELIVERIES,
         // `installation_settings` NO esta aqui: es la unica consulta que se
@@ -733,6 +734,21 @@ final readonly class DatabaseDataExportSource implements DataExportSource
           FROM error_events e
           LEFT JOIN users u ON u.id = e.resolved_by_user_id
          ORDER BY e.id
+        SQL;
+
+    /*
+     * El historial de resoluciones del historico de errores (RF-PD-15, 2.3.0),
+     * por la huella del grupo y con el autor por su `uuid`: ninguna clave
+     * interna sale del producto.
+     */
+    private const string ERROR_EVENT_RESOLUTIONS = <<<'SQL'
+        SELECT e.fingerprint,
+               to_char(r.resolved_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS resolved_at,
+               u.uuid::text AS resolved_by_user_uuid
+          FROM error_event_resolutions r
+          JOIN error_events e ON e.id = r.error_event_id
+          LEFT JOIN users u ON u.id = r.resolved_by_user_id
+         ORDER BY r.id
         SQL;
 
     /*

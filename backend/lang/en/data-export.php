@@ -528,8 +528,17 @@ return [
                 'occurrences' => 'How many times this same failure has happened since `first_seen_at`.',
                 'first_seen_at' => 'The first time it was seen.',
                 'last_seen_at' => 'The last one. This is the date the 90-day purge uses: a failure that keeps happening does not expire.',
-                'resolved_at' => 'When somebody marked it as resolved in the panel. **If the failure happens again it is cleared and the line reopens**, keeping its count.',
+                'resolved_at' => 'When somebody marked it as resolved in the panel. **If the failure happens again it is cleared and the line reopens**, keeping its count; the resolution is still in `error_event_resolutions.csv`.',
                 'resolved_by_user_uuid' => 'Who marked it as resolved.',
+            ],
+        ],
+
+        'error_event_resolutions' => [
+            'summary' => 'Every time somebody marked a failure in `error_events.csv` as resolved, **including the times before a reopening**: when a resolved failure happens again its line in `error_events.csv` reopens and loses who resolved it, but it is still recorded here. It is deleted with its failure after 90 days.',
+            'columns' => [
+                'fingerprint' => 'Fingerprint of the failure: the same column as in `error_events.csv`, to find its line.',
+                'resolved_at' => 'When it was marked as resolved.',
+                'resolved_by_user_uuid' => 'Who marked it. Empty if that account was deleted afterwards.',
             ],
         ],
 

@@ -111,7 +111,8 @@ interface ErrorEventRepository
      *
      * **Idempotente**: resolver uno ya resuelto no cambia nada y devuelve la
      * misma fila con su autor y su instante originales. La accion no tiene
-     * segundo efecto y no merece un `409`.
+     * segundo efecto —tampoco en el historial de resoluciones, que se escribe
+     * en la misma sentencia y solo si la fila cambio— y no merece un `409`.
      *
      * @return ErrorEvent|null Nulo si el identificador no existe, para que el
      *                         controlador responda `404`.

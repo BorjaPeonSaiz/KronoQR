@@ -135,8 +135,12 @@ final class DataExportCatalog
      * **`6` desde la 2.3.0** (V5-PA-4): `report_exports.csv` gana
      * `cancelled_at`, cuando quien pidio un informe en diferido lo detuvo. Una
      * columna mas es un cambio de forma.
+     *
+     * **`8` desde la 2.3.0** (tarea 33.4): el ZIP gana
+     * `error_event_resolutions.csv`, cada vez que un grupo del historico de
+     * errores se dio por resuelto. Un fichero nuevo es un cambio de forma.
      */
-    public const string SCHEMA_VERSION = '7';
+    public const string SCHEMA_VERSION = '8';
 
     /**
      * Los conjuntos de datos que van al ZIP, **en el orden en que se escriben**.
@@ -495,6 +499,22 @@ final class DataExportCatalog
                 'occurrences',
                 'first_seen_at',
                 'last_seen_at',
+                'resolved_at',
+                'resolved_by_user_uuid',
+            ]),
+
+            /*
+             * Cada vez que un grupo del historico se dio por resuelto (RF-PD-15,
+             * 2.3.0): el historial que reabrir el grupo no vacia.
+             *
+             * **Por `fingerprint`**, que es como se encuentra la linea en
+             * `error_events.csv`: la clave interna del grupo no sale del
+             * producto (doc 01 §5.5). Por el mismo motivo, el autor va por su
+             * `uuid`. Se purga con su grupo a los 90 dias, asi que nunca trae
+             * una huella que falte en el otro fichero.
+             */
+            ExportedDataset::csv('error_event_resolutions', [
+                'fingerprint',
                 'resolved_at',
                 'resolved_by_user_uuid',
             ]),

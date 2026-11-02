@@ -747,6 +747,10 @@ ALTER TABLE shift_entries ADD CONSTRAINT shift_entries_chk_order
 `id`, `fingerprint` (hash de clase + punto de fallo + mensaje normalizado, UNIQUE), `level` (`error`|`critical`), `source` (`api`|`worker`|`scheduler`|`console`|`kiosk`|`admin`|`portal`), `module`, `code`, `message`, `exception_class`, `file`, `line`, `context` (JSONB, **sin PII**: claves de lista cerrada, valores escalares filtrados según ADR-048), `trace_id`, `device_id` (NULL), `employee_uuid` (NULL, nunca el nombre), `app_version`, `occurrences` (INT), `first_seen_at`, `last_seen_at`, `resolved_at`, `resolved_by_user_id`
 *Un fallo que se repite mil veces es una fila con `occurrences = 1000`, no mil filas. Retención 90 días, igual que el log técnico (RL-11). No sustituye al log estructurado: lo complementa para que el cliente pueda diagnosticar desde el panel sin depender de que conserve el stack de observabilidad.*
 
+**`error_event_resolutions`** — historial de resoluciones de `error_events` (RF-PD-15, 2.3.0)
+`id`, `error_event_id` (FK `ON DELETE CASCADE`), `resolved_at`, `resolved_by_user_id` (FK `nullOnDelete`), `created_at`; `UNIQUE (error_event_id, resolved_at)`
+*Una fila cada vez que un grupo se da por resuelto, escrita en la misma sentencia que la resolución. Reabrir el grupo vacía `error_events.resolved_at` y `resolved_by_user_id`, pero no este historial: el panel enseña la resolución anterior. **Solo-append**: el usuario de aplicación tiene `SELECT` e `INSERT`; se purga con su grupo por la cascada. Sin relevancia legal, así que no entra en `audit_log`; sale en la exportación íntegra y no en el paquete de diagnóstico.*
+
 **`audit_log`** — solo-append, con encadenamiento por hash, **particionada por año** (ADR-027)
 `id`, `occurred_at` (TIMESTAMPTZ), `actor_type`, `actor_id`, `action`, `subject_type`, `subject_id`, `payload` (JSONB), `prev_hash`, `hash`, `ip` (INET), `user_agent`. Clave primaria `(id, occurred_at)`, porque la clave de partición debe formar parte de toda restricción única.
 *Permisos:* el usuario de aplicación tiene `INSERT` y `SELECT`, **nunca** `UPDATE` ni `DELETE` sobre esta tabla ni sobre ninguna de sus particiones.
