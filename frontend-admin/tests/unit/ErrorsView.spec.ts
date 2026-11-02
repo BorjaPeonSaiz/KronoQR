@@ -294,4 +294,44 @@ describe('pantalla del historico de errores', () => {
 
     expect(wrapper.find('[data-test="previous-resolution-87"]').exists()).toBe(false)
   })
+
+  it('la fila resuelta enseña quien la resolvio y cuando, en la zona del centro (RF-PD-15)', async () => {
+    stubRoutes({
+      '/diagnostics/errors': () =>
+        jsonResponse(
+          errorEventCollection([
+            errorEvent({
+              // 07:05 UTC son las 09:05 en Madrid (CEST).
+              resolved_at: '2026-09-09T07:05:00.000000Z',
+              resolved_by: { uuid: '0199f0aa-1111-7000-8000-0123456789ab', name: 'Jefa de cocina' },
+            }),
+          ]),
+        ),
+    })
+
+    const wrapper = await mountErrorsView()
+    const label = wrapper.find('[data-test="resolved-87"]')
+
+    expect(label.text()).toContain('Resuelto por Jefa de cocina el')
+    expect(label.text()).toContain('09:05')
+    expect(label.text()).not.toContain('07:05')
+  })
+
+  it('la fila resuelta sin autor (soporte o cuenta borrada) enseña solo la fecha (RF-PD-15, RF-PD-11)', async () => {
+    stubRoutes({
+      '/diagnostics/errors': () =>
+        jsonResponse(
+          errorEventCollection([
+            errorEvent({ resolved_at: '2026-09-09T07:05:00.000000Z', resolved_by: null }),
+          ]),
+        ),
+    })
+
+    const wrapper = await mountErrorsView(['diagnostics:*'])
+    const label = wrapper.find('[data-test="resolved-87"]')
+
+    expect(label.text()).toMatch(/^Resuelto el /)
+    expect(label.text()).not.toContain(' por ')
+    expect(label.text()).toContain('09:05')
+  })
 })

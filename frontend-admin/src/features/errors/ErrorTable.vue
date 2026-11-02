@@ -71,6 +71,15 @@ function lastSeenLabel(entry: ErrorEvent): string {
   return formatInstant(entry.last_seen_at, props.timeZone, locale.value)
 }
 
+function resolvedLabel(entry: ErrorEvent): string {
+  const date = formatInstant(entry.resolved_at ?? '', props.timeZone, locale.value)
+
+  // Sin autor para un acceso de soporte o si la cuenta se borro (RF-PD-11, ADR-020).
+  return entry.resolved_by === null
+    ? t('errorEvents.table.resolvedAnonymous', { date })
+    : t('errorEvents.table.resolvedBy', { name: entry.resolved_by.name, date })
+}
+
 function previousResolutionLabel(resolution: ErrorEventResolution): string {
   const date = formatInstant(resolution.resolved_at, props.timeZone, locale.value)
 
@@ -233,7 +242,7 @@ function contextLines(entry: ErrorEvent): ContextLine[] {
                   class="text-sm text-kq-text-muted"
                   :data-test="`resolved-${entry.id}`"
                 >
-                  {{ t('errorEvents.table.resolved') }}
+                  {{ resolvedLabel(entry) }}
                 </span>
               </div>
             </td>

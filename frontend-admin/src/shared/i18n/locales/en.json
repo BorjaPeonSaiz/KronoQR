@@ -2785,7 +2785,8 @@
       "actions": "Actions",
       "expand": "Show detail",
       "collapse": "Hide detail",
-      "resolved": "Resolved",
+      "resolvedBy": "Resolved by {name} on {date}",
+      "resolvedAnonymous": "Resolved on {date}",
       "previousResolution": "Previously resolved by {name} on {date}",
       "previousResolutionAnonymous": "Previously resolved on {date}"
     },
