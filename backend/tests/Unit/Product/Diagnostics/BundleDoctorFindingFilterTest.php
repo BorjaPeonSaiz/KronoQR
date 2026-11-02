@@ -121,6 +121,22 @@ it('el host de APP_URL sale como [app_host]', function (): void {
     expect($finding->params)->toBe(['host' => '[app_host]', 'port' => 443]);
 })->group('RL-19', 'RF-PD-09');
 
+it('una clave app_url con la direccion entera sale como [app_host]; su estado pasa', function (): void {
+    // Revision de la 33.8: `app_url` estaba en PASS_KEYS, y una sonda que
+    // pusiera ahi APP_URL la habria sacado tal cual. `TlsProbe` dice el estado
+    // en `app_url_state`.
+    $finding = bundleDoctorFiltered(
+        ['app_url' => 'https://fichaje.hotel-ejemplo-sol.test/'],
+        ['app_url' => 'https://fichaje.hotel-ejemplo-sol.test', 'app_url_state' => 'unparseable'],
+    );
+
+    expect($finding->params)->toBe(['app_url' => '[app_host]'])
+        ->and($finding->details)->toBe(['app_url' => '[app_host]', 'app_url_state' => 'unparseable'])
+        ->and(BundleDoctorFindingFilter::classify('app_url'))->toBe(BundleDoctorFindingFilter::HOST)
+        ->and(BundleDoctorFindingFilter::classify('app_url_state'))->toBe(BundleDoctorFindingFilter::PASS)
+        ->and(BundleDoctorFindingFilter::PASS_KEYS)->not->toContain('app_url');
+})->group('RL-19', 'RF-PD-09');
+
 it('una clave sin clasificar se descarta: falla cerrado', function (): void {
     $finding = bundleDoctorFiltered(
         ['count' => 3, 'domicilio' => '/srv/hotel-ejemplo-sol'],

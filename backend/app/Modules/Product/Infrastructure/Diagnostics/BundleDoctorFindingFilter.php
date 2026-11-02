@@ -24,7 +24,7 @@ use App\Modules\Product\Domain\ValueObject\DoctorFinding;
  * - **Etiqueta del producto** (`first`, `second`, `name`, `names`…): pasa si es
  *   una de las raices de clase que nombra el producto
  *   (`PRODUCT_DATA_EXPORT_PATH`); si no, se trata como ubicacion.
- * - **Host** (`host`): sale `[app_host]`. Es el nombre publico del hotel.
+ * - **Host** (`host`, `app_url`): sale `[app_host]`. Es el nombre publico del hotel.
  *
  * **Una clave que no esta en ninguna se descarta**: falla cerrado. La sonda
  * nueva que añada una clave sin clasificarla pierde ese dato en el paquete, no
@@ -50,7 +50,7 @@ final readonly class BundleDoctorFindingFilter implements DoctorFindingFilter
      * Las claves que pasan tal cual. Ordenadas para poder revisarlas.
      */
     public const array PASS_KEYS = [
-        'age_seconds', 'ahead', 'allowed', 'app_env', 'app_url', 'app_version', 'applied_migrations',
+        'age_seconds', 'ahead', 'allowed', 'app_env', 'app_url_state', 'app_version', 'applied_migrations',
         'behind', 'broadcast_connection', 'by_action', 'by_day', 'by_role',
         'can_delete', 'can_update', 'cap', 'category', 'ceiling', 'chain', 'checked_at', 'configured',
         'connection', 'count', 'current_rows',
@@ -89,8 +89,12 @@ final readonly class BundleDoctorFindingFilter implements DoctorFindingFilter
     /** Las que llevan el nombre de una raiz de clase del producto. */
     public const array LABEL_KEYS = ['directories', 'first', 'name', 'names', 'outside_volume', 'second'];
 
-    /** Las que llevan el nombre de `APP_URL`. */
-    public const array HOST_KEYS = ['host'];
+    /**
+     * Las que llevan el nombre de `APP_URL`, o `APP_URL` entera: `app_url` no
+     * la emite ninguna sonda hoy (`TlsProbe` dice su estado en `app_url_state`),
+     * y si una la emitiera mañana saldria como `[app_host]`, nunca tal cual.
+     */
+    public const array HOST_KEYS = ['app_url', 'host'];
 
     /** Como `PermissionsProbe` y `GeneratedFilesProbe` unen varias rutas en un texto. */
     private const string JOINER = ', ';
