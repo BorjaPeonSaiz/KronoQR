@@ -48,8 +48,9 @@
 //                      camino —tarjeta ya resuelta, ajustes leidos, jornada
 //                      cargada— y desde la 2.3.0 se rellena hasta el mismo
 //                      suelo que los otros tres (enmienda de ADR-005, 33.6):
-//                      `aggregate.js` lo juzga con el presupuesto de RS-03
-//                      frente a las tres clases (`RS-03-RN-18`).
+//                      `aggregate.js` juzga sus MINIMOS con el presupuesto de
+//                      RS-03 frente a las tres clases (`RS-03-RN-18`); la
+//                      mediana se publica sin juzgar (decision del 02-11-2026).
 //   batch       1 lote de 50 por minuto: 25 pares entrada/salida del MISMO
 //                      empleado, enviados en orden inverso a su `occurred_at`,
 //                      con UN elemento imposible de reconciliar (RN-18).
@@ -231,7 +232,8 @@ const SCENARIOS = {
    * RN-18 comparte el cuerpo generico pero **no el camino**: llega con la
    * tarjeta ya resuelta, los ajustes leidos y la jornada del empleado cargada.
    * Desde la 2.3.0 el guardian comun lo rellena hasta el mismo suelo, y
-   * `RS-03-RN-18` lo juzga contra las tres clases con el presupuesto de RS-03;
+   * `RS-03-RN-18` juzga sus minimos contra las tres clases con el presupuesto de
+   * RS-03 (la mediana, solo informativa, decision del 02-11-2026);
    * va aparte para que un rojo diga cual de los dos caminos se separo.
    *
    * MEDIO r/s Y NO UNO: el presupuesto por origen sale del cubo con fuga del
@@ -684,7 +686,8 @@ export function idempotentResend() {
  * exigir un suelo que se notaria en el cambio de turno.
  *
  * SON TRES Y NO CUATRO: el rechazo de RN-18 tiene su propio escenario y su
- * propio veredicto, `RS-03-RN-18`, con el mismo presupuesto. Meterlo aqui haria
+ * propio veredicto, `RS-03-RN-18`, con el mismo presupuesto sobre los minimos.
+ * Meterlo aqui haria
  * que el veredicto de RS-03 dejara de significar «los rechazos de credencial son
  * indistinguibles» y no diria cual de los dos caminos se separo.
  */
@@ -739,8 +742,9 @@ export function genericRejection() {
  * Un fichaje que NO se puede reconciliar con el registro.
  *
  * QUE SE MIDE Y QUE NO. No se juzga aqui ninguna separacion de tiempos: eso lo
- * hace `aggregate.js` en `RS-03-RN-18`, con el presupuesto de RS-03 frente a los
- * tres rechazos de credencial (enmienda de ADR-005, tarea 33.6: el guardian
+ * hace `aggregate.js` en `RS-03-RN-18`, con el presupuesto de RS-03 sobre los
+ * MINIMOS frente a los tres rechazos de credencial; la mediana, con carga, queda
+ * por encima del suelo y se publica sin juzgar (decision del 02-11-2026; enmienda de ADR-005, tarea 33.6: el guardian
  * comun rellena todo rechazo hasta el mismo suelo). Hasta la 2.3.0 era una cifra
  * informativa, porque A-13 (doc 07 §6) aceptaba que este camino tardara mas.
  *

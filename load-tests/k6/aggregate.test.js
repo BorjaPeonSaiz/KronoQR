@@ -9,11 +9,12 @@
 // un `check()` de contrato fallido. Asi el fallo senala la condicion y no «algo
 // del agregado».
 //
-// EL CUARTO RECHAZO, `RS-03-RN-18`, SE JUZGA COMO RS-03 desde la 2.3.0 (enmienda
-// de ADR-005, tarea 33.6; hasta entonces era informativo por A-13 del doc 07
-// §6). La pasada verde lo lleva justo en el tope: 20 ms por encima de las tres
-// clases de credencial, en mediana y en minimo, sea cual sea la velocidad de la
-// maquina; 21 ms ya es rojo.
+// EL CUARTO RECHAZO, `RS-03-RN-18`, SE JUZGA desde la 2.3.0 (enmienda de ADR-005,
+// tarea 33.6; hasta entonces era informativo por A-13 del doc 07 §6), y desde
+// la decision del 02-11-2026 SOLO POR LOS MINIMOS: la mediana se publica sin
+// juzgar. La pasada verde lo lleva justo en el tope: 20 ms por encima de las
+// tres clases de credencial, sea cual sea la velocidad de la maquina; 21 ms en
+// el minimo ya es rojo, y 80 en la mediana no.
 //
 // Se corre a mano; `make` no la ejecuta porque no hay etapa de Node para
 // `load-tests/`:
@@ -550,22 +551,36 @@ test('[RS-03][RN-18] da verde con el cuarto rechazo justo en el tope de separaci
 
   assert.equal(statusOf(summary, 'RS-03-RN-18'), 'pass')
   assert.equal(summary.reject_out_of_order.firm, true)
-  assert.match(summary.verdicts['RS-03-RN-18'].detail, /hasta 20\.0 ms en mediana/)
+  assert.match(summary.verdicts['RS-03-RN-18'].detail, /JUZGA la separacion de minimos frente a la credencial: hasta 20\.0 ms/)
   assert.equal(exitCodeOf(summary), 0)
 })
 
-test('[RS-03][RN-18] falla cuando la mediana del cuarto rechazo se separa 21 ms', () => {
+test('[RS-03][RN-18] da verde con la mediana separada 80 ms si los minimos quedan dentro', () => {
+  // Decision del propietario del 02-11-2026 (run 41411268664): con carga, la
+  // mediana de RN-18 queda por encima del suelo porque su camino tarda mas que
+  // el; esa diferencia la acepta A-13 y se publica sin juzgar. Lo que filtra a
+  // quien mide tiempos es el minimo, y ese esta en el tope.
+  const summary = runAnalysis(greenRun({ outOfOrderDurations: [50, ...Array(19).fill(110)] }))
+
+  assert.equal(summary.reject_out_of_order.separation_ms.median.signature, 80)
+  assert.equal(summary.reject_out_of_order.separation_ms.minimum.signature, 20)
+  assert.equal(statusOf(summary, 'RS-03-RN-18'), 'pass')
+  assert.match(summary.verdicts['RS-03-RN-18'].detail, /INFORMATIVA, no juzga: la separacion de medianas, hasta 80\.0 ms/)
+  assert.equal(exitCodeOf(summary), 0)
+})
+
+test('[RS-03][RN-18] falla cuando los minimos del cuarto rechazo se separan 21 ms', () => {
   const summary = runAnalysis(greenRun({ outOfOrderDurations: Array(20).fill(51) }))
 
   assert.equal(statusOf(summary, 'RS-03-RN-18'), 'fail')
-  assert.match(summary.verdicts['RS-03-RN-18'].detail, /hasta 21\.0 ms en mediana/)
+  assert.match(summary.verdicts['RS-03-RN-18'].detail, /minimos frente a la credencial: hasta 21\.0 ms/)
   assert.equal(exitCodeOf(summary), 1)
 })
 
 test('[RS-03][RN-18] falla cuando solo se separa el minimo', () => {
   // Las tres clases de credencial con minimo 30 y mediana 60; RN-18 todo a 60:
   // la mediana cuadra y el minimo se separa 30 ms. El suelo se ve en el minimo,
-  // y por eso se juzgan los dos.
+  // y por eso es lo que se juzga.
   const summary = runAnalysis(
     greenRun({ rejectDurations: [30, ...Array(19).fill(60)], outOfOrderDurations: Array(20).fill(60) }),
   )
@@ -573,7 +588,7 @@ test('[RS-03][RN-18] falla cuando solo se separa el minimo', () => {
   assert.equal(statusOf(summary, 'RS-03'), 'pass')
   assert.equal(summary.reject_out_of_order.separation_ms.median.signature, 0)
   assert.equal(statusOf(summary, 'RS-03-RN-18'), 'fail')
-  assert.match(summary.verdicts['RS-03-RN-18'].detail, /hasta 30\.0 ms en minimo/)
+  assert.match(summary.verdicts['RS-03-RN-18'].detail, /minimos frente a la credencial: hasta 30\.0 ms/)
 })
 
 test('[RS-03][RN-18] un cuarto rechazo mas RAPIDO que la credencial tambien falla', () => {
@@ -1548,7 +1563,7 @@ test('[V21-5-QA-01][RS-03][RN-18] con el runner degradado una separacion de 30 m
 
   assert.equal(summary.machine.degraded, true)
   assert.equal(statusOf(summary, 'RS-03-RN-18'), 'unreliable')
-  assert.match(summary.verdicts['RS-03-RN-18'].detail, /hasta 30\.0 ms en mediana/)
+  assert.match(summary.verdicts['RS-03-RN-18'].detail, /minimos frente a la credencial: hasta 30\.0 ms/)
 })
 
 test('[V21-5-QA-01][RS-03][RN-18] con el runner degradado un cuarto rechazo por debajo del suelo sigue siendo rojo', () => {

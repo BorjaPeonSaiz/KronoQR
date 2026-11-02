@@ -97,7 +97,11 @@ use Throwable;
  * (RN-18)— cargan la jornada y tardaban mas que uno de credencial, con el mismo
  * `422` generico. Rellenarlos aqui, en el unico sitio por el que pasan las tres
  * puertas, los iguala sin tocar el caso de uso, y medido desde la entrada del
- * escaneo: el suelo sencillo del resolutor queda dentro. Tres limites:
+ * escaneo: el suelo sencillo del resolutor queda dentro. **Iguala lo que tarda
+ * menos que el suelo**, que es el minimo y lo que filtra a quien mide tiempos;
+ * con carga, el camino de RN-18 tarda mas que el suelo y su mediana queda por
+ * encima, diferencia que acepta A-13 (k6 `RS-03-RN-18` juzga los minimos y
+ * publica la mediana, decision del propietario del 02-11-2026). Tres limites:
  *
  * - **Solo `isRejected()`.** El aceptado no espera, y el anti-rebote tampoco:
  *   es un desenlace aceptado y viaja en su `200` (ADR-031).

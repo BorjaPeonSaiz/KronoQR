@@ -245,7 +245,8 @@ const REJECT_CLASSES = ['signature', 'unknown', 'revoked']
  *
  * DESDE LA 2.3.0 SE JUZGA (enmienda de ADR-005, tarea 33.6): el guardian comun de
  * las tres puertas rellena todo rechazo hasta el mismo suelo, y `RS-03-RN-18`
- * aplica a esta fase el presupuesto de RS-03 frente a las tres clases. Sigue
+ * aplica a esta fase el presupuesto de RS-03 frente a las tres clases sobre
+ * los MINIMOS; la mediana se publica sin juzgar (decision del 02-11-2026). Sigue
  * siendo una fase aparte porque lo que compara RS-03 son las clases de
  * credencial entre si, y mezclarlas escondera cual de las dos cosas se rompio.
  */
@@ -1196,11 +1197,20 @@ function analyse(results, options = {}) {
   // cifra informativa. Desde la 2.3.0, `UnprocessableScanGuard` rellena TODO
   // rechazo de las tres puertas hasta el mismo suelo, medido desde la entrada
   // del escaneo, y el `422` de RN-18 tiene que ser tan indistinguible como los
-  // otros tres. Se juzga igual que RS-03: los mismos suelos de muestras, el
-  // mismo tope de separacion sobre la mediana Y sobre el minimo, el suelo de
-  // tiempo sobre el minimo, y «no fiable» en vez de rojo si el runner va
+  // otros tres. Se juzga con los mismos suelos de muestras que RS-03, el suelo
+  // de tiempo sobre el minimo y «no fiable» en vez de rojo si el runner va
   // degradado (decision 19 de la 3.6). Sin las tres clases de credencial
   // medidas no hay contra que comparar: `unmeasurable`.
+  //
+  // SOLO LOS MINIMOS BLOQUEAN (decision del propietario del 02-11-2026, tras el
+  // run 41411268664). El suelo iguala lo que tarda menos que el, y el minimo es
+  // la muestra que menos cola llevo: es lo que filtra a quien mide tiempos, y
+  // ahi RN-18 se queda dentro del tope (10-12 ms). La MEDIANA, con carga, queda
+  // por encima del suelo —el camino de RN-18 carga la jornada y pregunta al
+  // agregado, y eso tarda mas que el suelo— y se separa unos 80 ms. Se publica
+  // en la misma linea, como informacion: esa diferencia la acepta A-13 por su
+  // motivo de siempre (hace falta un token de quiosco y un `occurred_at`
+  // fabricado, y el anti-rebote de ADR-031 ya es mejor discriminador).
   //
   // El anti-rebote sigue siendo un `200` sin suelo (ADR-031) y no entra aqui:
   // un `200` en esta fase se cuenta aparte, como `reconciled`.
@@ -1241,11 +1251,8 @@ function analyse(results, options = {}) {
   const outOfOrderMedianSpread = outOfOrderMeasurable ? widestOf(outOfOrderSeparation.median) : null
   const outOfOrderMinimumSpread = outOfOrderMeasurable ? widestOf(outOfOrderSeparation.minimum) : null
   const outOfOrderFloorRespected = outOfOrderAnswered.min !== null && outOfOrderAnswered.min >= rejectionFloorMs
-  const outOfOrderSpreadOk =
-    outOfOrderMedianSpread !== null &&
-    outOfOrderMinimumSpread !== null &&
-    outOfOrderMedianSpread <= REJECT_SPREAD_BUDGET_MS &&
-    outOfOrderMinimumSpread <= REJECT_SPREAD_BUDGET_MS
+  // Solo el minimo: la mediana se publica y no juzga (ver arriba).
+  const outOfOrderSpreadOk = outOfOrderMinimumSpread !== null && outOfOrderMinimumSpread <= REJECT_SPREAD_BUDGET_MS
   const outOfOrderStatus = !outOfOrderMeasurable
     ? 'unmeasurable'
     : !outOfOrderFloorRespected
@@ -1267,11 +1274,12 @@ function analyse(results, options = {}) {
           `${REJECT_SAMPLES_RATIO_FLOOR * 100} % de las ofrecidas)`
         : !rejectMeasurable
           ? 'sin las tres clases de credencial medidas (RS-03 no evaluable) no hay contra que comparar'
-          : `separacion frente a la credencial de hasta ${outOfOrderMedianSpread.toFixed(1)} ms en mediana ` +
-            `(${separationText(outOfOrderSeparation.median)}) y de hasta ${outOfOrderMinimumSpread.toFixed(1)} ms ` +
-            `en minimo (${separationText(outOfOrderSeparation.minimum)}); tope ${REJECT_SPREAD_BUDGET_MS}; ` +
-            `suelo de ${rejectionFloorMs} ms ${outOfOrderFloorRespected ? 'respetado' : 'NO respetado'} ` +
-            `sobre el minimo (${round(outOfOrderAnswered.min)} ms)`),
+          : `JUZGA la separacion de minimos frente a la credencial: hasta ${outOfOrderMinimumSpread.toFixed(1)} ms ` +
+            `(${separationText(outOfOrderSeparation.minimum)}; tope ${REJECT_SPREAD_BUDGET_MS}) y el suelo de ` +
+            `${rejectionFloorMs} ms sobre el minimo (${round(outOfOrderAnswered.min)} ms, ` +
+            `${outOfOrderFloorRespected ? 'respetado' : 'NO respetado'}). INFORMATIVA, no juzga: la separacion de ` +
+            `medianas, hasta ${outOfOrderMedianSpread.toFixed(1)} ms (${separationText(outOfOrderSeparation.median)}), ` +
+            'aceptada por A-13'),
   )
 
   const outOfOrder = {
