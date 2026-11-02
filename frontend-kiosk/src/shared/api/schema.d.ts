@@ -5008,11 +5008,32 @@ export interface paths {
          *     recibe `403`, porque decidir que sus datos salen es del cliente y de
          *     nadie mas.
          *
-         *     **Sin cifrado, a proposito.** El cliente tiene que poder abrir el
-         *     fichero y comprobar que no lleva nada que no quiera enviar antes de
-         *     enviarlo; un paquete cifrado se lo impediria. El `manifest` lleva el
-         *     `sha256` del resto del documento para que soporte detecte una copia
-         *     alterada o truncada.
+         *     **El anonimizado sale legible; el que lleva datos personales, cifrado**
+         *     (RL-19, ADR-020, enmienda del 01-11-2026). El anonimizado es un JSON en
+         *     claro, `application/json`, que el cliente abre y revisa antes de
+         *     enviarlo, y **no lleva rutas del servidor ni el nombre de `APP_URL`**:
+         *     las ubicaciones salen como etiqueta del producto (`<backup_path>`,
+         *     `<backup_path>/reports`) o `[path]`, y el host como `[app_host]`. El
+         *     `manifest` lleva el `sha256` del resto del documento para que soporte
+         *     detecte una copia alterada o truncada.
+         *
+         *     Con `include_personal_data: true` la respuesta es un **sobre cifrado**,
+         *     `application/vnd.kronoqr.diagnostics-sealed+json`
+         *     (`SealedDiagnosticsBundle`): el paquete entero va cifrado con
+         *     XChaCha20-Poly1305 bajo una clave aleatoria, y esa clave va en un sobre
+         *     sellado X25519 para la clave publica **de soporte** del fabricante
+         *     —distinta de la de licencias—. La instalacion no tiene la clave privada:
+         *     ni el cliente ni nadie con acceso al servidor puede abrirlo, y el
+         *     fabricante solo con `tools/diagnostics-opener/`. Lo que el cliente si
+         *     lee es la **cabecera en claro**: que secciones lleva, cuantas filas y
+         *     que columnas de cada coleccion, y la huella, que coincide con el
+         *     `sha256` de los dos asientos de `audit_log`. La cabecera va atada al
+         *     contenido como datos asociados del cifrado: alterarla hace que el sobre
+         *     no abra. **Si la instalacion no tiene la clave publica de soporte, el
+         *     paquete con datos personales no se genera** (`503`, `type`
+         *     `urn:kronoqr:problem:diagnostics-sealing-unavailable`): ni se recoge
+         *     nada ni queda asiento, y nunca sale en claro. El anonimizado no depende
+         *     de esa clave.
          *
          *     **Funciona con la licencia caducada o ausente** (regla dura 15): es
          *     justamente lo que se necesita cuando algo va mal.
@@ -5024,7 +5045,11 @@ export interface paths {
          *
          *     **Auditada** (regla dura 6): cada generacion deja
          *     `diagnostics.bundle_generated` con si iba anonimizado, que secciones
-         *     lleva, su `sha256` y su tamano.
+         *     lleva, su `sha256` (la huella del texto en claro), su tamano, si salio
+         *     cifrado (`sealed`) y, cuando lo esta, el identificador de la clave
+         *     (`recipient_key_id`) y el `sha256` de los bytes entregados
+         *     (`sealed_sha256`). `diagnostics.personal_data_included` lleva las
+         *     mismas tres.
          *
          *     La seccion `error_events` (RF-PD-15, tarea 5.12) lleva el resumen por
          *     origen y nivel y los grupos del periodo con su `trace_id`; si la tabla
@@ -13127,7 +13152,18 @@ export interface components {
              *     con `status: ok`.
              */
             fix: string | null;
-            /** @description Cifras y rutas que apoyan el veredicto. Nunca secretos ni datos personales. */
+            /**
+             * @description Cifras que apoyan el veredicto. Nunca secretos ni datos personales.
+             *
+             *     **En `product:doctor` local salen las rutas reales**, que es lo que
+             *     necesita quien administra el servidor. **Dentro del paquete de
+             *     diagnostico no** (ADR-020, enmienda del 01-11-2026): `details` y los
+             *     parametros de `summary` y `fix` pasan por una lista cerrada de
+             *     claves. Una ubicacion sale como la etiqueta de su raiz del producto
+             *     (`<backup_path>`, `<storage_root>/app`, `<backup_metrics>`…) o como
+             *     `[path]` si no cuelga de ninguna; el nombre de `APP_URL`, como
+             *     `[app_host]`; y una clave que la lista no conoce no sale.
+             */
             details?: {
                 [key: string]: unknown;
             };
@@ -13206,8 +13242,26 @@ export interface components {
              *     quedan la marca (`BRANDING_*`), `KIOSK_SERVICE_CODE` y
              *     `BASELINE_MANUAL_HOURS_PER_MONTH`; de `PAYROLL_EXPORT_COLUMNS` viaja
              *     el identificador de cada columna, nunca su rotulo.
+             *
+             *     **Sin rutas del servidor** (ADR-020, enmienda del 01-11-2026): en
+             *     `env` no entra ningun valor con `/` o `\` que llegue por prefijo, ni
+             *     `BRANDING_LOGO_ROOT`. Lo que soporte necesita saber de cada
+             *     ubicacion va en `locations`, por rol y sin el valor: `customized`
+             *     (distinta de la de serie), `exists` y `writable`. Los roles son
+             *     `backup_path`, `backup_metrics`, `storage_root`,
+             *     `application_root`, `diagnostics`, `data_export`,
+             *     `console_exports`, `retention_reports`, `technical_log` y
+             *     `branding_logo_root`.
              */
             configuration: {
+                locations?: {
+                    [key: string]: {
+                        customized: boolean;
+                        exists: boolean;
+                        writable: boolean;
+                    };
+                };
+            } & {
                 [key: string]: unknown;
             };
             /**
@@ -13306,8 +13360,17 @@ export interface components {
              *     se sustituye por un recuento `omitted_lines`. **Nunca el
              *     `.detalle.log`**, que puede llevar datos personales y es `0600` de
              *     root (doc 07 §6).
+             *
+             *     **Sin rutas del servidor** (ADR-020, enmienda del 01-11-2026): el
+             *     directorio de los informes va como `location:
+             *     "<backup_path>/reports"`, nunca como ruta, y dentro de las lineas
+             *     conservadas cada ruta absoluta sale como la etiqueta de su raiz o
+             *     como `[path]`.
              */
             updates: {
+                /** @constant */
+                location?: "<backup_path>/reports";
+            } & {
                 [key: string]: unknown;
             };
             /**
@@ -13344,10 +13407,101 @@ export interface components {
              *     quienes tienen actividad en el periodo o una incidencia abierta**,
              *     tramos y fichajes de los ultimos `period_days` referidos por
              *     `employee_uuid` y sin `client_meta`, e incidencias abiertas.
+             *
+             *     **Nunca viaja en un `DiagnosticsBundle` en claro**: el paquete que
+             *     la lleva sale siempre como `SealedDiagnosticsBundle`, y esta forma
+             *     es la del documento que hay dentro del sobre.
              */
             personal_data?: {
                 [key: string]: unknown;
             };
+        };
+        /**
+         * SealedDiagnosticsBundle
+         * @description El paquete de diagnostico **con datos personales**, cifrado para el
+         *     fabricante (RL-19, ADR-020, enmienda del 01-11-2026). Es un sobre
+         *     hibrido:
+         *
+         *     1. el `DiagnosticsBundle` entero, tal cual se escribiria en claro, se
+         *        cifra con XChaCha20-Poly1305-IETF bajo una clave aleatoria de un solo
+         *        uso y el `nonce` de este documento;
+         *     2. esa clave va en `sealed_key`, en un sobre sellado X25519
+         *        (`crypto_box_seal` de libsodium) para la clave publica **de soporte**
+         *        del fabricante, que es distinta de la de licencias;
+         *     3. los **datos asociados** del cifrado son la forma canonica (claves
+         *        ordenadas, sin espacios) de este mismo documento **sin**
+         *        `sealed_key`, `nonce` ni `ciphertext`: la cabecera. Cambiar
+         *        cualquier campo de la cabecera —`anonymized`, la lista de
+         *        secciones, un recuento— hace que el sobre no abra.
+         *
+         *     La instalacion no tiene la clave privada. Lo abre el fabricante con
+         *     `tools/diagnostics-opener/`. **Lo que el cliente puede leer** es la
+         *     cabecera: que secciones lleva, cuantas filas y que columnas tiene cada
+         *     coleccion de `personal_data`, y la huella del texto en claro
+         *     (`manifest.sha256`), que es la misma del asiento
+         *     `diagnostics.bundle_generated` y de `diagnostics.personal_data_included`
+         *     en su `audit_log`. El `sha256` de los bytes de este fichero esta en los
+         *     dos asientos como `sealed_sha256`.
+         *
+         *     El sobre **no autentica a quien lo genera**: cualquiera con la clave
+         *     publica podria fabricar uno. La referencia de que salio de esta
+         *     instalacion es su asiento en `audit_log`.
+         */
+        SealedDiagnosticsBundle: {
+            /** @constant */
+            format: "kronoqr-diagnostics-sealed";
+            /**
+             * @description Version de la forma del sobre. Cambia solo si cambia el cifrado o la cabecera.
+             * @constant
+             */
+            envelope_version: 1;
+            /** @constant */
+            algorithm: "x25519-sealedbox+xchacha20poly1305-ietf";
+            /**
+             * @description Los 16 primeros caracteres hexadecimales del SHA-256 de la clave
+             *     publica de soporte para la que va cifrado. Es lo que elige la clave
+             *     privada al abrirlo, tambien despues de una rotacion. Lo dice
+             *     `product:doctor` (`diagnostics.recipient_key`).
+             */
+            recipient_key_id: string;
+            /**
+             * @description Copia en claro del manifiesto del paquete de dentro. Al abrirlo se
+             *     comprueba que coincide con el descifrado.
+             */
+            manifest: components["schemas"]["DiagnosticsManifest"] & {
+                /** @constant */
+                anonymized?: false;
+            };
+            /** @description Lo que lleva `personal_data`, sin ningun valor. */
+            contents: {
+                period_days: number;
+                /** @description Tamano en bytes del paquete en claro que va cifrado. */
+                plaintext_bytes: number;
+                /**
+                 * @description `included` si la seccion `personal_data` va dentro; `omitted` si
+                 *     no cupo en `PRODUCT_DIAGNOSTICS_MAX_BYTES`; `unavailable` si no
+                 *     se pudo leer.
+                 * @enum {string}
+                 */
+                status: "included" | "omitted" | "unavailable";
+                /**
+                 * @description Solo con `status: included`. Por coleccion (`employees`,
+                 *     `shift_entries`, `scan_events`, `incidents`), cuantas filas van
+                 *     y los **nombres** de sus columnas.
+                 */
+                collections?: {
+                    [key: string]: {
+                        rows: number;
+                        columns: string[];
+                    };
+                };
+            };
+            /** @description La clave del contenido en un sobre sellado X25519, en base64. */
+            sealed_key: string;
+            /** @description Los 24 bytes del `nonce` de XChaCha20-Poly1305, en base64. */
+            nonce: string;
+            /** @description El paquete en claro cifrado, con su etiqueta de autenticacion, en base64. */
+            ciphertext: string;
         };
         /**
          * SupportScope
@@ -15026,6 +15180,36 @@ export interface components {
         DependencyUnavailable: {
             headers: {
                 /** @description Segundos hasta el siguiente intento, minimo 1. */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description El paquete de diagnostico no se puede generar ahora. No es culpa de
+         *     quien lo pide, y **no se ha recogido nada ni queda ningun asiento**. Dos
+         *     `type`:
+         *
+         *     - `urn:kronoqr:problem:service-unavailable` — la base de datos o Redis
+         *       no responden (ADR-059), con `Retry-After`, como en el resto de rutas.
+         *     - `urn:kronoqr:problem:diagnostics-sealing-unavailable` — se pidio el
+         *       paquete **con datos personales** y la instalacion no tiene una clave
+         *       publica de soporte valida para cifrarlo (ADR-020, enmienda del
+         *       01-11-2026). Sin esa clave el paquete con datos personales no se
+         *       genera nunca, y nunca sale en claro. **Sin `Retry-After`**: esperar no
+         *       lo arregla. El paquete anonimizado se sigue generando con normalidad,
+         *       y es el que hay que enviar; si soporte necesita los datos, la
+         *       instalacion tiene que actualizarse a una version publicada, que trae
+         *       la clave. El `detail` lo dice, sin ningun valor de la clave.
+         */
+        DiagnosticsBundleUnavailable: {
+            headers: {
+                /**
+                 * @description Solo con `urn:kronoqr:problem:service-unavailable`. Segundos hasta el
+                 *     siguiente intento, minimo 1.
+                 */
                 "Retry-After"?: number;
                 [name: string]: unknown;
             };
@@ -20348,18 +20532,35 @@ export interface operations {
         };
         responses: {
             /**
-             * @description El paquete, como documento JSON descargable. `Content-Disposition`
-             *     lleva el nombre de fichero `kronoqr-diagnostics-<version>-<UTC>.json`
-             *     para que el navegador lo guarde sin que el panel tenga que inventar
-             *     uno.
+             * @description El paquete, como documento descargable, en uno de dos tipos segun lo
+             *     pedido (el tipo lo decide `include_personal_data`, no la cabecera
+             *     `Accept`):
+             *
+             *     - `application/json` — el paquete **anonimizado**,
+             *       `DiagnosticsBundle`, con nombre de fichero
+             *       `kronoqr-diagnostics-<version>-<UTC>.json`.
+             *     - `application/vnd.kronoqr.diagnostics-sealed+json` — el paquete
+             *       **con datos personales**, siempre cifrado,
+             *       `SealedDiagnosticsBundle`, con nombre
+             *       `kronoqr-diagnostics-<version>-<UTC>.sealed.json`.
+             *
+             *     `Content-Disposition` lleva el nombre para que el navegador lo
+             *     guarde sin que el panel tenga que inventar uno. Las dos respuestas
+             *     llevan `Cache-Control: no-store`.
              */
             200: {
                 headers: {
-                    /** @description `attachment; filename="kronoqr-diagnostics-2.2.0-20260908T101500Z.json"` */
+                    /**
+                     * @description `attachment; filename="kronoqr-diagnostics-2.3.0-20261101T101500Z.json"`,
+                     *     o `…T101500Z.sealed.json` en el cifrado.
+                     */
                     "Content-Disposition"?: string;
+                    /** @description Lleva `no-store`: el paquete no se guarda en ninguna cache. */
+                    "Cache-Control"?: string;
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/vnd.kronoqr.diagnostics-sealed+json": components["schemas"]["SealedDiagnosticsBundle"];
                     "application/json": components["schemas"]["DiagnosticsBundle"];
                 };
             };
@@ -20368,7 +20569,7 @@ export interface operations {
             415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
-            503: components["responses"]["DependencyUnavailable"];
+            503: components["responses"]["DiagnosticsBundleUnavailable"];
         };
     };
     listErrorEvents: {
