@@ -2330,9 +2330,12 @@ through your contract's channel. **Support does not go into your server**
   forgotten bundle —perhaps with personal data in it (§12.3)— from staying on
   the server forever.
 
-It is **a single readable JSON file**, `kronoqr-diagnostics-<versión>-<fecha>.json`,
-unencrypted on purpose: **open it before sending it** and check that it carries
-nothing you do not want to send. Its header (`manifest`) carries the
+The default bundle, the **anonymised** one, is **a single readable JSON file**,
+`kronoqr-diagnostics-<versión>-<fecha>.json`, unencrypted on purpose: **open it
+before sending it** and check that it carries nothing you do not want to send.
+(The one with personal data leaves encrypted and is called `….sealed.json`:
+§12.3.)
+Its header (`manifest`) carries the
 fingerprint of the whole document, header included, and with it you can check that it was
 not altered or cut short on the way. Support checks it on receipt; to check it
 yourself before sending it, from the installation directory and with the path
@@ -2350,6 +2353,19 @@ name**, the health of each tablet **without its name**, the grouped error
 history (from the version that adds it), aggregate counters, the report of the
 last update (only the lines in the report format, and never its
 `.detalle.log`) and **only counts** of the audit trail.
+
+**No paths from your server and not its name (since 2.3.0).** No folder on
+your server travels with its real path. Where the `doctor` report or the last
+update report would mention `/srv/my-hotel/backups`, the bundle says
+`<backup_path>`; a subfolder comes out as `<backup_path>/daily`, and a path
+that belongs to no product location as `[path]`. The public name of your
+installation (the one in `APP_URL`) comes out as `[app_host]`. What support
+needs to know about each location goes in `configuration.locations`: whether
+it is the default one (`customized`), whether it exists (`exists`) and whether
+it can be written to (`writable`), never where it is. `.env` variables whose
+value is a path (`BRANDING_LOGO_ROOT`, `PRODUCT_DIAGNOSTICS_PATH`…) do not
+travel. **Nothing changes on your server**: `product:doctor` and `./doctor.sh`
+still show you the real path, which is what you need to fix whatever fails.
 
 **What it carries from the error history.** Each error appears with its code,
 its origin, its class, how many times it has happened and when it happened
@@ -2494,10 +2510,83 @@ you are communicating personal data to a third party: read
 [`legal-obligations.md`](legal-obligations.md) §8 first, and have the
 processing agreement signed.
 
-**The product does not encrypt this file**, so that you can open it and check
-what leaves before sending it. Send it only through the encrypted channel set by
-your support and processing agreement, never by unencrypted email, and delete it
-from the server and from your computer as soon as you have sent it.
+**It leaves encrypted for the vendor (since 2.3.0).** The bundle with personal
+data is no longer a readable JSON: it is an **encrypted envelope** for the
+vendor's support key, which **only the vendor can open**. Neither you nor
+anyone with access to your server can read its content, and nor can anyone who
+intercepts it on the way. You recognise it by its name,
+`kronoqr-diagnostics-<version>-<date>.sealed.json`, and when you generate it
+from the console the result says so (the console speaks the installation
+language; in English):
+
+```text
+Diagnostics bundle WITH PERSONAL DATA generated and encrypted.
+
+  File:      /var/www/html/storage/app/diagnostics/kronoqr-diagnostics-2.3.0-20261101T101500Z.sealed.json
+  Encrypted: for the vendor support key 3f9c1a7e5b2d4c80
+  ...
+```
+
+**What you can check is its header**, which is in clear text at the start of
+the file (`less <file>`): which sections it carries (`manifest.sections`) and,
+for each personal-data collection, **how many rows and which columns**
+(`contents.collections`), without any value. If the header says something you
+do not want to send —more rows than you expected, a collection that is not
+needed—, do not send it and generate another one with a shorter period. The
+header is bound to the content: if anyone changes it, the vendor cannot open
+the envelope.
+
+**Checking it is the one you generated:**
+
+```bash
+docker compose exec app php artisan product:diagnostics --verify=<path of the .sealed.json>
+```
+
+It shows you which key it is for, the declared fingerprint and the file's
+fingerprint, and compares them with the `diagnostics.bundle_generated` entry
+in your audit trail. It must end with `and the file digest matches the one in
+the entry` and exit code `0`. It cannot check the content: it only opens with the
+vendor's private key, and the command says so.
+
+Even though it is encrypted, send it through the channel set by your support
+and processing agreement, and delete it from the server and from your computer
+as soon as you have sent it: the vendor is still a processor for that
+incident.
+
+#### What to do if…
+
+- **The panel warns that the bundle with personal data cannot be encrypted,
+  or the console ends with exit code `1` and the message "The bundle WITH
+  PERSONAL DATA has not been generated: this installation does not have the
+  vendor support public key…".** Your installation does not have the key used
+  to encrypt it, and the product never sends that bundle unencrypted.
+  **Nothing has been collected and no audit entry has been written.** Generate
+  the anonymised one, which is the one support asks for almost every time:
+
+  ```bash
+  docker compose exec app php artisan product:diagnostics
+  ```
+
+  Then look at the `diagnostics.recipient_key` check of
+  `docker compose exec app php artisan product:doctor`: its warning says what
+  to do. The key ships inside every published version of the product and is
+  not configured. If someone added `DIAGNOSTICS_RECIPIENT_PUBLIC_KEY` to the
+  `.env`, remove that line and recreate the containers (`docker compose up -d`).
+  If it is not in the `.env`, the image is not a published version: update with
+  `update.sh` to the version support tells you. **Clocking in, the record and
+  the anonymised bundle do not depend on this key.**
+- **`--verify` ends with exit code `2` and "THE FILE DIGEST DOES NOT MATCH the
+  one in the entry".** The file is not the one that was generated or part of it is
+  missing (a truncated copy, an attachment cut by email). Do not send it:
+  generate another one.
+- **`--verify` says there is no entry with that fingerprint in this
+  installation's audit trail.** The bundle was not generated on this
+  installation, or it was generated on another one restored later. Ask whoever
+  gave it to you where it comes from.
+- **Support tells you they cannot open it.** It is usually an incomplete or
+  modified copy: check the file you sent with `--verify` and, if it gives `0`,
+  tell support the key identifier it shows (`Encrypted: for the vendor support
+  key …`).
 
 ### 12.4 Granting support temporary access
 

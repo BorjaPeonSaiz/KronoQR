@@ -73,7 +73,7 @@ Y el escenario en el que ese acceso se usa mal no es el del atacante externo, si
 3. **El uso deja un asiento por ventana, no uno por petición.** `support_grant.used` se escribe como mucho una vez cada `PRODUCT_SUPPORT_USE_AUDIT_WINDOW_SECONDS` (900 s de serie) por concesión, porque cada asiento pasa por el candado global de [ADR-010](ADR-010-auditoria-solo-append-encadenada.md), el mismo que cada fichaje. `support_grants.accessed_at` sí se actualiza en cada petición. Una sesión de una hora deja cuatro asientos, suficientes para reconstruir cuándo estuvo dentro. Con `0` hay un asiento por petición, y solo tiene sentido mientras se investiga un incidente. Lo que el soporte **cambia** sí deja un asiento por cambio, con `actor_type = support_grant`.
 4. **El paquete es un único JSON sin cifrar, también cuando lleva datos personales** (`Product\Domain\ValueObject\DiagnosticsBundle`). No se cifra a propósito: el cliente tiene que poder inspeccionarlo antes de enviarlo, y el canal de envío es el de su contrato de soporte, fuera del producto. La integridad la da la huella del manifiesto. La sección `personal_data` solo la pide un `admin` (un token de soporte recibe `403`), deja su propio asiento (`diagnostics.personal_data_included`), pone `manifest.anonymized` a `false` y está acotada a `PRODUCT_DIAGNOSTICS_PERSONAL_DATA_MAX_PERIOD_DAYS` (31 días), 2000 fichas y 5000 filas por colección. `national_id_hash`, `email`, `pin_hash`, `photo_path` y `client_meta` no salen nunca. El fichero se borra a los `PRODUCT_DIAGNOSTICS_RETENTION_DAYS` (7 días de serie) o al generar el siguiente. Vive en el volumen de ficheros generados ([ADR-045](ADR-045-los-ficheros-generados-viven-en-un-volumen-compartido.md)).
 
-**Riesgo residual que esta enmienda hace explícito:** mientras está en el disco y durante su envío, un paquete con `personal_data` es una copia legible de la plantilla y de un mes de fichajes. Lo protegen los permisos del volumen, la caducidad de 7 días y el canal que elija el cliente, no el producto. Cifrarlo para el fabricante, con una clave pública del fabricante en el paquete de entrega, es la evolución posible, pero obliga a decidir antes si el cliente renuncia a inspeccionarlo. Lo valora `seguridad-cumplimiento` en doc 07 §6. Mientras tanto, la guía del cliente tiene que decir que ese fichero se envía por un canal cifrado y se borra al enviarlo.
+**Riesgo residual que esta enmienda hace explícito:** mientras está en el disco y durante su envío, un paquete con `personal_data` es una copia legible de la plantilla y de un mes de fichajes. Lo protegen los permisos del volumen, la caducidad de 7 días y el canal que elija el cliente, no el producto. Cifrarlo para el fabricante, con una clave pública del fabricante en el paquete de entrega, es la evolución posible, pero obliga a decidir antes si el cliente renuncia a inspeccionarlo. Lo valora `seguridad-cumplimiento` en doc 07 §6. Mientras tanto, la guía del cliente tiene que decir que ese fichero se envía por un canal cifrado y se borra al enviarlo. **Cerrado por la enmienda del 01-11-2026 (tarea 33.8): desde la 2.3.0 ese paquete sale cifrado para el fabricante; el punto 4 vale solo para el anonimizado.**
 
 ## Enmienda 14-10-2026 (bloque 12 de la 2.2.1, hallazgo V4-PL-1): el paquete se genera con PostgreSQL caído y su asiento se escribe al volver la base
 
@@ -119,3 +119,68 @@ alcance de soporte concede `reports:legal` ni `reports:*` (`SupportScope`). Ver 
 `read_only` no lleva `audit:read`; conceder a un acceso de soporte la lectura de `audit_log` exige ADR propio.
 
 Es la misma línea de minimización de este ADR. El ámbito estaba en el alcance porque la tabla del doc 02 §7.3 lo contemplaba, sin ninguna ruta que lo consumiera: la traza de correcciones —quién cambió qué hora, cuándo y por qué— es el conjunto más sensible del producto, y que el token del fabricante llegara a ella por arrastre de una línea escrita antes de que existiera el visor no sería una decisión. `read_only` queda en `diagnostics:*`, `attendance:read` y `employees:read`, y `SupportScopeTest` falla si algún alcance concede `audit:read`. Los tokens emitidos antes de la actualización lo conservan hasta caducar (72 h como máximo), sin ninguna ruta que lo lea; no hay migración.
+
+## Enmienda 01-11-2026 (2.3.0, tarea 33.8, diseño aprobado por `seguridad-cumplimiento`): el paquete con datos personales sale cifrado para el fabricante, y el anonimizado no lleva rutas del servidor ni el nombre del hotel
+
+**Motivo.** Dos filas del [doc 07](../07-seguridad-madurez-y-amenazas.md) §6 aceptadas hasta la 2.2.1: «el paquete con datos personales es un JSON sin cifrar, también al salir hacia el fabricante» (el riesgo residual de la enmienda del 08-10-2026) y «el paquete anonimizado lleva rutas del servidor del cliente». La primera dejaba la protección de la plantilla y de un mes de fichajes en manos del canal que eligiera el hotel. La segunda dejaba salir `BACKUP_PATH=/srv/<hotel>/…`, el directorio de la instalación y el nombre público de `APP_URL`, que dicen a quien recibe el paquete quién es el cliente y cómo está montado su servidor, sin aportar a soporte nada que no diga una etiqueta. **La decisión de este ADR no cambia**: lo que cambia es la forma en que sale el paquete. El punto 4 de la enmienda del 08-10-2026 queda en pie solo para el anonimizado.
+
+### 1. El paquete con datos personales sale en un sobre híbrido
+
+- **Cifrado.** El paquete en claro —el mismo texto, byte a byte, que se escribiría sin cifrar— se cifra con XChaCha20-Poly1305-IETF bajo una clave aleatoria de un solo uso. Esa clave va en un sobre sellado X25519 (`crypto_box_seal`) para la clave pública **de soporte** del fabricante y se borra de memoria (`Product\Infrastructure\Diagnostics\SodiumDiagnosticsBundleSealer`).
+- **La cabecera va en claro y atada al contenido.** Formato `kronoqr-diagnostics-sealed`, versión del sobre `1`, algoritmo, identificador de la clave, el `manifest` del paquete y `contents`: qué secciones lleva y, de `personal_data`, cuántas filas y qué columnas tiene cada colección, nunca un valor. Su forma canónica son los **datos asociados** del cifrado: cambiar `anonymized`, una sección o un recuento hace que el sobre no abra. Con un único `crypto_box_seal` del texto entero la cabecera no estaría atada a nada (`Product\Domain\ValueObject\SealedDiagnosticsBundle`).
+- **Cómo sale.** Por HTTP, `200` con `application/vnd.kronoqr.diagnostics-sealed+json` (contrato `SealedDiagnosticsBundle`); por consola, `kronoqr-diagnostics-<versión>-<UTC>.sealed.json`, `0600`. El anonimizado sigue siendo `application/json` y `.json`. `DiagnosticsBundle::toJson()` y el escritor **se niegan** a entregar en claro un paquete con `anonymized: false`: solo el sellador pide su texto (`DiagnosticsSealingTest`).
+- **Tope de tamaño.** `PRODUCT_DIAGNOSTICS_MAX_BYTES` vale para el fichero que sale. El recorte se hace contra unos tres cuartos del tope, por el base64, y si el sobre aún no cabe se vuelve a recortar sin volver a recolectar. Las seis secciones fijas no se sacrifican nunca.
+- **Los asientos lo dicen.** `diagnostics.bundle_generated` y `diagnostics.personal_data_included` añaden `sealed`, `recipient_key_id` y `sealed_sha256`, la huella de los bytes entregados; `sha256` sigue siendo la del texto en claro, la del `manifest`. El anonimizado lleva `sealed: false` y nada más del sobre. Este paquete nunca se aplaza: sin base no se genera (enmienda del 14-10-2026).
+
+### 2. Un par propio de soporte, compilado con cada versión
+
+- **No es el par de licencias.** Con la privada de soporte se abren paquetes; con la de licencias se emiten licencias. Separarlas evita que quien atiende el soporte pueda emitir licencias, deja que roten con ciclos distintos y hace que el compromiso de una no arrastre a la otra.
+- **La pública va compilada** en `backend/config/product.php`, como valor por defecto de `env('DIAGNOSTICS_RECIPIENT_PUBLIC_KEY', …)`: es la misma en todas las instalaciones de una versión y el cliente no la configura. La variable existe para dos usos y solo dos: las pruebas, que generan su propio par en cada ejecución, y una rotación de urgencia sin esperar a la versión siguiente. **Sin prefijo `PRODUCT_`** a propósito: los `PRODUCT_*` viajan en `configuration.env` por la regla de prefijos de `DiagnosticsConfigurationAllowlist`.
+- **`make release-gate` falla** si la pública no está puesta: una imagen sin ella no generaría el paquete con datos personales en ninguna instalación de esa versión. El par lo genera el propietario con `tools/diagnostics-opener/generate-keypair.php`; **ninguna clave real entra en el repositorio**.
+- **La privada vive en el llavero de soporte**, un fichero `<key_id>.key` por clave. `tools/diagnostics-opener/open.php` elige la que pide el sobre por su `recipient_key_id` (los 16 primeros hexadecimales del SHA-256 de la pública), comprueba la huella y que la cabecera describe el contenido, y escribe el paquete en claro `0600` sin sobrescribir nada. El abridor no entra en ninguna imagen (`.dockerignore` excluye `tools/`) y nada en el producto abre un sobre.
+- **Rotar** es generar un par nuevo, publicar una versión con la pública nueva y conservar la privada anterior en el llavero mientras queden paquetes cifrados con ella por abrir.
+
+### 3. Sin clave válida, el paquete con datos personales no se genera
+
+Una clave vacía, mal formada o de ceros es una clave que no hay. Se comprueba **antes de recoger nada**: no se recolecta, no queda ningún asiento y nunca sale en claro.
+
+- **Por HTTP**, `503` con `type` `urn:kronoqr:problem:diagnostics-sealing-unavailable` y **sin `Retry-After`**, porque esperar no lo arregla (respuesta `DiagnosticsBundleUnavailable`). El `detail` remite al anonimizado y no lleva ningún valor de la clave.
+- **Por consola**, código `1`, antes de preguntar quién firma, con un mensaje que remite al anonimizado y a `product:doctor`.
+- **`product:doctor`** lo dice en `diagnostics.recipient_key`: `ok` con el identificador de la clave, o **aviso, nunca fallo**. Fichar, el registro legal y el anonimizado no dependen de esta clave, y un fallo abortaría una actualización por algo que no impide trabajar.
+- El anonimizado no depende de la clave en ningún caso.
+
+### 4. El cliente renuncia a leer el contenido, y a cambio tiene la cabecera y el asiento
+
+La enmienda del 08-10-2026 dejaba el paquete sin cifrar para que el cliente pudiera inspeccionarlo. Con el sobre, el cliente ya no puede abrirlo: la instalación no tiene la privada. Lo compensan tres cosas:
+
+- la cabecera en claro, que dice qué secciones, cuántas filas y qué columnas salen;
+- los dos asientos con las dos huellas, que permiten comprobar que el fichero que se envía es el que se generó;
+- que esos datos los ve ya en su panel.
+
+`product:diagnostics --verify` sobre un `.sealed.json` enseña la clave, las dos huellas y el asiento con la misma huella. Sale con `2` si la cabecera no tiene la forma de un sobre de esta versión o si la huella del fichero no es la del asiento. Dice además que el contenido no se puede comprobar sin la privada del fabricante.
+
+### 5. El anonimizado no lleva rutas del servidor ni el nombre de `APP_URL`
+
+Se compara el valor configurado y su `realpath`, y gana la raíz más larga.
+
+- **Hallazgos de `doctor` dentro del paquete.** Cada clave de `params` y `details` pasa por una **lista cerrada** (`Product\Infrastructure\Diagnostics\BundleDoctorFindingFilter`), antes de redactarse.
+  - Las cifras, los estados y los enumerados pasan tal cual.
+  - Las ubicaciones salen como la etiqueta de su papel (`<backup_path>`, `<backup_path>/daily`) o como `[path]`.
+  - El host sale como `[app_host]`.
+  - **Una clave sin clasificar se descarta.** El filtro falla cerrado, y `DiagnosticsSealingTest` falla mientras una sonda emita una clave sin clasificar.
+- **Ubicaciones.** `configuration.locations` dice de cada uno de los diez papeles (`Product\Infrastructure\Diagnostics\DiagnosticsLocations`) si es la de serie, si existe y si se puede escribir, **sin el valor**.
+- **Informe de actualización.** `updates.location` es `<backup_path>/reports`, y las rutas de sus líneas conservadas salen etiquetadas.
+- **`.env`.** `BRANDING_LOGO_ROOT` sale de la lista exacta de `configuration.env`, y lo que entra por prefijo no se emite si su valor lleva una barra.
+- **El `product:doctor` local no cambia**: quien administra el servidor necesita la ruta real para arreglar lo que falla.
+
+### Lo que no hace
+
+- **No autentica a quien genera el sobre.** Cualquiera con la clave pública puede fabricar uno. La prueba de que salió de esta instalación es su asiento en `audit_log`, no el sobre.
+- **No protege el paquete dentro del proceso que lo genera.** El texto en claro existe en la memoria de `app` mientras se cifra, como existen los datos en la base de la que se leen.
+
+### Riesgo residual
+
+- **Quien tenga la privada de soporte** puede leer todos los paquetes cifrados con ella que un cliente haya enviado. Lo acotan el llavero separado del de licencias, la rotación y la obligación del encargo de borrar los datos al terminar la incidencia (RL-18).
+- **Compatibilidad.** Los paquetes con datos personales generados con una versión anterior a la 2.3.0 son JSON en claro y siguen las reglas de su versión. `--verify` los comprueba como siempre.
+
+**Pruebas:** `SealedDiagnosticsBundleTest`, `BundleDoctorFindingFilterTest`, `DiagnosticsResponsibleTest`, `DeliverDiagnosticsBundleTest` (unitarias), `DiagnosticsSealingTest` (arquitectura), `DiagnosticsPathsAndSealingTest` (integración: ida y vuelta con el abridor y un par generado al vuelo, cabecera alterada que no abre, anonimizado sin rutas ni host sobre una instalación sembrada), `DiagnosticsBundleContractTest` (los dos `200` y el `503`), `DiagnosticsConsoleTest` y `DiagnosticsRecipientKeyDoctorCheckTest`.
