@@ -97,6 +97,32 @@ return [
     'diagnostics_max_bytes' => (int) env('PRODUCT_DIAGNOSTICS_MAX_BYTES', 8 * 1024 * 1024),
 
     /*
+     * Clave PUBLICA X25519 de soporte del fabricante, en 64 hexadecimales, para
+     * la que se cifra el paquete de diagnostico con datos personales (RL-19,
+     * ADR-020, enmienda del 01-11-2026). El anonimizado no la usa.
+     *
+     * SE COMPILA CON LA IMAGEN DE CADA VERSION PUBLICADA, como la de licencias:
+     * es el segundo argumento de `env()`, y `make release-gate` falla si esta
+     * vacio. El cliente NO la toca. La variable de entorno existe para dos usos
+     * y solo dos: las pruebas, que generan su propio par en cada ejecucion, y una
+     * rotacion de urgencia sin esperar a la version siguiente.
+     *
+     * NO ES LA DE LICENCIAS. Con la privada de soporte se abren paquetes y con
+     * la de licencias se emiten licencias; separarlas evita que el equipo de
+     * soporte pueda emitir licencias, y que el compromiso de una arrastre a la
+     * otra. Rotan con ciclos distintos (`tools/diagnostics-opener/README.md`).
+     *
+     * SIN PREFIJO `PRODUCT_` A PROPOSITO: los `PRODUCT_*` viajan en
+     * `configuration.env` del paquete por la regla de prefijos, y esta no tiene
+     * por que viajar. Su identificador corto lo dice `product:doctor`
+     * (`diagnostics.recipient_key`).
+     *
+     * Vacia o no valida, el paquete con datos personales NO SE GENERA (`503`
+     * por HTTP, codigo `1` por consola): nunca sale en claro.
+     */
+    'diagnostics_recipient_public_key' => (string) env('DIAGNOSTICS_RECIPIENT_PUBLIC_KEY', ''),
+
+    /*
      * Peticiones por minuto y por cuenta de `POST /api/v1/diagnostics/bundle`.
      *
      * ZONA PROPIA Y MAS ESTRECHA QUE `throttle:management` (120 r/m), y no es

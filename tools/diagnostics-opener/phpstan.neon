@@ -1,0 +1,28 @@
+# Analisis estatico del abridor de paquetes de diagnostico, con el mismo umbral
+# que el backend (doc 02 §9.2: nivel 9, 0 errores, sin baseline).
+#
+# Va en un fichero propio porque el abridor no es parte del producto: no se
+# copia a ninguna imagen ni carga el autoloader del backend. Lo lanza
+# `make php-lint` desde backend/, con las rutas relativas a este fichero, y por
+# eso sirve igual en la CI (`../tools/...`) que en el contenedor
+# (`/var/www/repo/...`).
+#
+# `CanonicalJson` es la del producto (dominio puro): se escanea para conocer su
+# firma, no se analiza aqui.
+#
+# Sin `tmpDir`: en el contenedor el repositorio esta montado de solo lectura,
+# y la cache va a la temporal del sistema.
+
+parameters:
+    level: 9
+
+    paths:
+        - src
+        - open.php
+        - generate-keypair.php
+
+    scanFiles:
+        - ../../backend/app/Modules/Product/Domain/Support/CanonicalJson.php
+
+    ignoreErrors: []
+    reportUnmatchedIgnoredErrors: true

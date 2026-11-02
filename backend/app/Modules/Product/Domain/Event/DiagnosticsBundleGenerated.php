@@ -40,6 +40,13 @@ use DateTimeImmutable;
  * nunca el de la generacion: la cadena de ADR-010 y el sellado de ADR-027
  * suponen `occurred_at` creciente. Con `deferred = false` (el caso normal)
  * `generatedAt` es nulo y el asiento se escribe en el momento.
+ *
+ * ## `sealed`: el paquete con datos personales sale cifrado (ADR-020, enmienda
+ * del 01-11-2026)
+ *
+ * Entonces `sizeBytes` es el tamaño del sobre que se entrega, `sealedSha256` su
+ * huella y `recipientKeyId` la clave para la que va cifrado. `sha256` sigue
+ * siendo la huella del texto en claro, la que dice el manifiesto.
  */
 final readonly class DiagnosticsBundleGenerated implements DomainEvent
 {
@@ -61,6 +68,18 @@ final readonly class DiagnosticsBundleGenerated implements DomainEvent
          * firma la sesion, y en el anonimizado de consola.
          */
         public ?int $responsibleUserId = null,
+        /**
+         * Si salio cifrado para la clave de soporte del fabricante (ADR-020,
+         * enmienda del 01-11-2026). Solo el que lleva datos personales.
+         */
+        public bool $sealed = false,
+        /** Los 16 hexadecimales de la clave para la que va cifrado; nulo en claro. */
+        public ?string $recipientKeyId = null,
+        /**
+         * SHA-256 de los bytes entregados, el sobre entero; nulo en claro.
+         * `sha256` sigue siendo la huella del texto en claro.
+         */
+        public ?string $sealedSha256 = null,
     ) {}
 
     public function eventName(): string

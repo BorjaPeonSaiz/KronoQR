@@ -449,6 +449,13 @@ return [
                     .'entry has not been written for more than one hour (the oldest, from :oldest UTC). It is written '
                     .'automatically when the database is back; clocking in does not depend on this.',
             ],
+            'recipient_key' => [
+                'ok' => 'The diagnostic bundle with personal data can be generated: it is encrypted for the vendor '
+                    .'support key :key_id, which only the vendor can open.',
+                'warning' => 'This installation does not have the vendor support public key, so the diagnostic '
+                    .'bundle WITH PERSONAL DATA cannot be generated (it never leaves unencrypted). The anonymised '
+                    .'bundle, which is the usual one, works normally; clocking in does not depend on this.',
+            ],
         ],
 
         'files' => [
@@ -1067,6 +1074,15 @@ return [
                     ."If the database answers and the warning has not gone in five minutes, look at the\n"
                     ."«scheduler.heartbeat» check.\n"
                     .'See docs/cliente/en/operation.md §12.2, "If the database does not answer".',
+            ],
+            'recipient_key' => [
+                'warning' => "The key ships inside every published version of the product and is not configured. If\n"
+                    ."you see this warning, check whether someone put DIAGNOSTICS_RECIPIENT_PUBLIC_KEY in the .env:\n"
+                    ."if so, remove that line and recreate the containers:\n"
+                    ."  docker compose up -d\n"
+                    ."If it is not in the .env, the image is not a published version: update with update.sh to the\n"
+                    ."version support tells you. In the meantime, send the anonymised bundle.\n"
+                    .'See docs/cliente/en/operation.md §12.3, "What to do if…".',
             ],
         ],
 

@@ -218,6 +218,15 @@ return [
                 'green, contact support with that output.',
             ],
         ],
+        'sealing_unavailable' => [
+            'The bundle WITH PERSONAL DATA has not been generated: this installation does not',
+            'have the vendor support public key it is encrypted with, and that bundle never',
+            'leaves unencrypted. Nothing has been collected and no audit entry was written.',
+            'Generate the anonymised one, which does not need that key and is what support asks for:',
+            '  php artisan product:diagnostics',
+            'The key ships with every published version of the product. Look at the',
+            'diagnostics.recipient_key check of: php artisan product:doctor',
+        ],
         'pending_recorded' => [
             ':count pending audit entr(y/ies) of bundles generated while the database',
             'was not answering have been written to the audit log.',
@@ -238,6 +247,8 @@ return [
             'implications' => [
                 'What it means:',
                 '  - The file is no longer anonymised and must not be sent without need.',
+                '  - It leaves ENCRYPTED for the vendor: neither you nor anyone on this server can open',
+                '    it. You can read its header: which sections it carries and how many rows and columns.',
                 '  - The action is recorded in the audit log, signed by the account',
                 '    given in --responsible.',
                 '  - If you send it to the supplier, they act as data processor',
@@ -273,6 +284,19 @@ return [
             'check_before_sending' => [
                 'Before sending it, open it and check it carries nothing you do not want to send:',
                 '  less :path',
+            ],
+            'sealed' => [
+                'title' => 'Diagnostics bundle WITH PERSONAL DATA generated and encrypted.',
+                'key' => '  Encrypted: for the vendor support key :key',
+                'file_digest' => '  File digest: :digest',
+                'check_before_sending' => [
+                    'The content is encrypted and only the vendor can open it. What you can review',
+                    'before sending it is the header, which is in clear: which sections it carries and',
+                    'how many rows and which columns each personal data collection has.',
+                    '  less :path',
+                    'Both digests match the diagnostics.bundle_generated entry of your audit log.',
+                    'Send it through the channel of your support contract and delete it once sent.',
+                ],
             ],
             'verify_hint' => [
                 'Whoever receives it can check it has not been altered on the way with:',
@@ -313,6 +337,26 @@ return [
             'entry' => '  Entry:      :entry',
             'entry_pending' => 'PENDING: the database was not answering when it was generated; it is written by itself when it comes back',
             'entry_written' => 'written to the audit log when it was generated',
+            'sealed' => [
+                'title' => 'Bundle WITH PERSONAL DATA, encrypted for the support key :key: :path',
+                'malformed' => [
+                    'The file claims to be an encrypted bundle but its header does not have the',
+                    'expected shape: it cannot be trusted. Ask for it to be generated again.',
+                ],
+                'file_digest' => '  File digest: :digest',
+                'entry_found' => '  Entry:      diagnostics.bundle_generated of :at UTC, with the same digest',
+                'file_matches' => '              and the file digest matches the one in the entry',
+                'file_differs' => [
+                    'THE FILE DIGEST DOES NOT MATCH the one in the entry: it is not the file that was',
+                    'delivered, or part of it is missing. Ask for it to be generated again.',
+                ],
+                'entry_missing' => '  Entry:      there is none with that digest in the audit log of this installation',
+                'entry_unknown' => '  Entry:      the audit log could not be read (the database does not answer)',
+                'content_unchecked' => [
+                    'The content is not checked: it is encrypted and only opens with the vendor private',
+                    'key (tools/diagnostics-opener).',
+                ],
+            ],
         ],
     ],
 

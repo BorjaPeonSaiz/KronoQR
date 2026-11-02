@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Product\Application\Port;
 
 use App\Modules\Product\Domain\ValueObject\DiagnosticsBundle;
+use App\Modules\Product\Domain\ValueObject\SealedDiagnosticsBundle;
 use LogicException;
 
 /**
@@ -36,11 +37,17 @@ interface DiagnosticsBundleWriter
      * que si el proceso muere antes de publicarlo lo barre la purga por
      * antiguedad.
      *
+     * El paquete con datos personales solo llega sellado
+     * ({@see SealedDiagnosticsBundle}, ADR-020, enmienda del 01-11-2026): uno en
+     * claro con `anonymized: false` **se rechaza** sin escribir nada.
+     *
      * @param  string|null  $path  Ruta pedida con `--output` (fichero o
      *                             directorio), o nula para el directorio de
      *                             serie de la instalacion.
+     *
+     * @throws LogicException Con un paquete con datos personales sin sellar.
      */
-    public function stage(DiagnosticsBundle $bundle, ?string $path = null): StagedDiagnosticsBundle;
+    public function stage(DiagnosticsBundle|SealedDiagnosticsBundle $bundle, ?string $path = null): StagedDiagnosticsBundle;
 
     /**
      * Renombra el temporal a su destino, de forma atomica.

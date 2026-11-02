@@ -45,6 +45,18 @@ final readonly class PersonalDataIncludedInDiagnostics implements DomainEvent
          * panel, donde firma la sesion.
          */
         public ?int $responsibleUserId = null,
+        /**
+         * Si salio cifrado para la clave de soporte del fabricante (ADR-020,
+         * enmienda del 01-11-2026). Solo el que lleva datos personales.
+         */
+        public bool $sealed = false,
+        /** Los 16 hexadecimales de la clave para la que va cifrado; nulo en claro. */
+        public ?string $recipientKeyId = null,
+        /**
+         * SHA-256 de los bytes entregados, el sobre entero; nulo en claro.
+         * `sha256` sigue siendo la huella del texto en claro.
+         */
+        public ?string $sealedSha256 = null,
     ) {}
 
     public function eventName(): string

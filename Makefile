@@ -594,6 +594,8 @@ php-lint: tools-ready ## Estilo y tipos: Pint + PHPStan 9 (etapa 1 de la CI)
 	$(RUN_APP) vendor/bin/phpstan analyse --memory-limit=1G --no-progress
 	$(RUN_APP) vendor/bin/pint --test $(REPO_IN_APP)/tools/license-issuer
 	$(RUN_APP) vendor/bin/phpstan analyse -c $(REPO_IN_APP)/tools/license-issuer/phpstan.neon --memory-limit=1G --no-progress
+	$(RUN_APP) vendor/bin/pint --test $(REPO_IN_APP)/tools/diagnostics-opener
+	$(RUN_APP) vendor/bin/phpstan analyse -c $(REPO_IN_APP)/tools/diagnostics-opener/phpstan.neon --memory-limit=1G --no-progress
 
 deptrac: tools-ready ## Fronteras entre capas y modulos (etapa 2 de la CI)
 	$(RUN_APP) vendor/bin/deptrac analyse --fail-on-uncovered --no-progress
@@ -882,7 +884,14 @@ APP_VERSION ?= $(shell cat VERSION 2>/dev/null || echo 0.0.0-dev)
 # propio par en cada ejecucion y jamas usa uno fijo del repositorio (§7.7, RS-08).
 # Por eso es un objetivo aparte, y la tarea 5.4 lo invocara desde el paso que
 # construye la imagen de entrega.
-release-gate: ## Falla si la entrega saldria sin clave publica del fabricante o con SECURITY.md sin rellenar
+#
+# Lo mismo con la clave publica de SOPORTE (ADR-020, enmienda del 01-11-2026),
+# que es otro par: sin ella, el paquete de diagnostico con datos personales no se
+# genera en ninguna instalacion (nunca sale en claro). El par se genera con
+# `php tools/diagnostics-opener/generate-keypair.php` y la publica va en el valor
+# por defecto de `env('DIAGNOSTICS_RECIPIENT_PUBLIC_KEY', '')` de
+# `backend/config/product.php`.
+release-gate: ## Falla si la entrega saldria sin las claves publicas del fabricante o con SECURITY.md sin rellenar
 	@if grep -nE "\[(CONTACTO|CONFIRMAR|PLAZOS)" SECURITY.md; then \
 	  echo "[make] SECURITY.md aun lleva marcadores del propietario (lineas de arriba)."; \
 	  echo "[make] Una politica de divulgacion con [CONTACTO ...] o [PLAZOS ...] sin rellenar no se publica:"; \
@@ -901,6 +910,20 @@ release-gate: ## Falla si la entrega saldria sin clave publica del fabricante o 
 	  echo "[make] y pega la PUBLICA (64 caracteres hexadecimales) como valor por defecto de"; \
 	  echo "[make] env('LICENSE_PUBLIC_KEY', '') en backend/config/license.php."; \
 	  echo "[make] La PRIVADA va al gestor de secretos del fabricante, nunca al repositorio."; \
+	  exit 1; \
+	fi
+	@if grep -qE "env\('DIAGNOSTICS_RECIPIENT_PUBLIC_KEY', '[0-9a-fA-F]{64}'\)" backend/config/product.php; then \
+	  echo "[make] Clave publica de soporte presente. Puerta de release en verde."; \
+	else \
+	  echo "[make] La clave publica de SOPORTE NO esta puesta en backend/config/product.php."; \
+	  echo "[make] Una imagen de entrega construida asi NO GENERA el paquete de diagnostico con"; \
+	  echo "[make] datos personales (503 en el panel, codigo 1 en la consola): soporte no podria"; \
+	  echo "[make] pedirlo en ninguna instalacion de esta version."; \
+	  echo "[make]"; \
+	  echo "[make] Genera el par UNA VEZ:  php tools/diagnostics-opener/generate-keypair.php --keyring=$$HOME/.kronoqr/diagnostics"; \
+	  echo "[make] y pega la PUBLICA (64 caracteres hexadecimales) como valor por defecto de"; \
+	  echo "[make] env('DIAGNOSTICS_RECIPIENT_PUBLIC_KEY', '') en backend/config/product.php."; \
+	  echo "[make] Es OTRO par, no el de licencias. La PRIVADA se queda en el llavero de soporte."; \
 	  exit 1; \
 	fi
 

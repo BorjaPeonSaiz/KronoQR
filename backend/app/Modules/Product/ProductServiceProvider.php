@@ -13,6 +13,7 @@ use App\Modules\Product\Application\Port\DataExportGuide;
 use App\Modules\Product\Application\Port\DataExportQueue;
 use App\Modules\Product\Application\Port\DataExportRepository;
 use App\Modules\Product\Application\Port\DataExportSource;
+use App\Modules\Product\Application\Port\DiagnosticsBundleSealer;
 use App\Modules\Product\Application\Port\DiagnosticsBundleWriter;
 use App\Modules\Product\Application\Port\DoctorFindingFilter;
 use App\Modules\Product\Application\Port\DoctorTranslator;
@@ -135,6 +136,7 @@ use App\Modules\Product\Infrastructure\Diagnostics\Probe\ApplicationProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\BackupOffsiteProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\BackupProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\DatabaseProbe;
+use App\Modules\Product\Infrastructure\Diagnostics\Probe\DiagnosticsRecipientKeyProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\DiskProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\EdgeNetworksProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\ErrorHistoryProbe;
@@ -154,6 +156,7 @@ use App\Modules\Product\Infrastructure\Diagnostics\Probe\TlsProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\QueueSupervisors;
 use App\Modules\Product\Infrastructure\Diagnostics\RuntimeService;
 use App\Modules\Product\Infrastructure\Diagnostics\ServiceInspector;
+use App\Modules\Product\Infrastructure\Diagnostics\SodiumDiagnosticsBundleSealer;
 use App\Modules\Product\Infrastructure\Diagnostics\TextfileMetricsReader;
 use App\Modules\Product\Infrastructure\Export\TranslatedDataExportGuide;
 use App\Modules\Product\Infrastructure\Export\ZipDataExportArchiveWriter;
@@ -2058,6 +2061,12 @@ final class ProductServiceProvider extends ServiceProvider
                         $app->make(PendingDiagnosticsAudits::class),
                         $app->make(Clock::class),
                     ),
+                    /*
+                     * Si el paquete con datos personales se puede cifrar
+                     * (ADR-020, enmienda del 01-11-2026). Aviso: el anonimizado
+                     * y el fichaje no dependen de la clave.
+                     */
+                    new DiagnosticsRecipientKeyProbe($app->make(DiagnosticsBundleSealer::class)),
                     new ApplicationProbe(
                         timezone: Config::string('app.timezone'),
                         debug: Config::boolean('app.debug'),
@@ -2131,6 +2140,17 @@ final class ProductServiceProvider extends ServiceProvider
             ),
         );
 
+        // El sobre del paquete con datos personales, para la clave de soporte
+        // del fabricante, que no es la de licencias (ADR-020, enmienda del
+        // 01-11-2026). Lectura tolerante: sin clave, no hay sobre, y el
+        // anonimizado sigue funcionando.
+        $this->app->bind(
+            DiagnosticsBundleSealer::class,
+            static fn (): SodiumDiagnosticsBundleSealer => new SodiumDiagnosticsBundleSealer(
+                self::text(Config::get('product.diagnostics_recipient_public_key')) ?? '',
+            ),
+        );
+
         // Lo que el informe de `doctor` puede llevar dentro del paquete: sin
         // rutas del servidor ni el nombre de `APP_URL` (ADR-020, enmienda del
         // 01-11-2026). Solo lo usa `DoctorCollector`; el `product:doctor` local
@@ -2194,6 +2214,7 @@ final class ProductServiceProvider extends ServiceProvider
                 failures: $app->make(ProbeFailureClassifier::class),
                 accounts: $app->make(ResponsibleAccounts::class),
                 ledger: $app->make(SerializedLedgerWrite::class),
+                sealer: $app->make(DiagnosticsBundleSealer::class),
             ),
         );
     }

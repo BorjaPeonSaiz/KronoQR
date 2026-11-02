@@ -96,6 +96,17 @@ final class ProblemDetails
     public const string TYPE_PDF_RENDERING_BUSY = 'urn:kronoqr:problem:pdf-rendering-busy';
 
     /**
+     * Se pidio el paquete de diagnostico con datos personales y la instalacion
+     * no tiene la clave publica de soporte para cifrarlo (ADR-020, enmienda del
+     * 01-11-2026).
+     *
+     * **Tipo propio y no `TYPE_SERVICE_UNAVAILABLE`**, aunque los dos sean `503`
+     * en la misma ruta: aquel dice «reintenta pasado `Retry-After`» y este «no
+     * reintentes: genera el anonimizado». El panel lo explica asi.
+     */
+    public const string TYPE_DIAGNOSTICS_SEALING_UNAVAILABLE = 'urn:kronoqr:problem:diagnostics-sealing-unavailable';
+
+    /**
      * Peticion mal formada.
      *
      * **No es lo mismo que `TYPE_VALIDATION_FAILED` y la diferencia importa en
@@ -989,6 +1000,26 @@ final class ProblemDetails
             'Servicio no disponible',
             JsonResponse::HTTP_SERVICE_UNAVAILABLE,
             $detail,
+        );
+    }
+
+    /**
+     * El paquete de diagnostico con datos personales no se puede cifrar porque
+     * la instalacion no tiene la clave publica de soporte: `503` **sin
+     * `Retry-After`**, porque esperar no lo arregla.
+     * {@see self::TYPE_DIAGNOSTICS_SEALING_UNAVAILABLE}
+     *
+     * El `detail` es fijo, dice la salida —el anonimizado— y no lleva ningun
+     * valor de la clave.
+     */
+    public static function diagnosticsSealingUnavailable(): JsonResponse
+    {
+        return self::response(
+            self::TYPE_DIAGNOSTICS_SEALING_UNAVAILABLE,
+            'Cifrado del paquete no disponible',
+            JsonResponse::HTTP_SERVICE_UNAVAILABLE,
+            'Esta instalacion no tiene la clave publica de soporte, asi que el paquete con datos personales no se '
+                .'puede cifrar y no se genera. Genera el paquete anonimizado, que no la necesita.',
         );
     }
 

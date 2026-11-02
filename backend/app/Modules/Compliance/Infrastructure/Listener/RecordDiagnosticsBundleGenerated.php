@@ -121,9 +121,27 @@ final readonly class RecordDiagnosticsBundleGenerated
                 'sha256' => $event->sha256,
                 'size_bytes' => $event->sizeBytes,
                 'generated_by' => $event->generatedBy,
+                ...self::sealing($event->sealed, $event->recipientKeyId, $event->sealedSha256),
                 ...$deferral,
             ]),
         ));
+    }
+
+    /**
+     * Si salio cifrado y, si lo esta, para que clave y con que huella de los
+     * bytes entregados (ADR-020, enmienda del 01-11-2026). Con las dos huellas,
+     * el cliente compara la cabecera del sobre que tiene delante
+     * (`manifest.sha256`) y el fichero entero (`sha256sum`) con este asiento.
+     *
+     * @return array<string, bool|string>
+     */
+    public static function sealing(bool $sealed, ?string $recipientKeyId, ?string $sealedSha256): array
+    {
+        if (! $sealed || $recipientKeyId === null || $sealedSha256 === null) {
+            return ['sealed' => false];
+        }
+
+        return ['sealed' => true, 'recipient_key_id' => $recipientKeyId, 'sealed_sha256' => $sealedSha256];
     }
 
     /**

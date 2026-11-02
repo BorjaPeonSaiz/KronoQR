@@ -8,6 +8,7 @@ use App\Modules\Product\Application\Port\DeferredAuditReceipt;
 use App\Modules\Product\Application\Port\DiagnosticsBundleWriter;
 use App\Modules\Product\Application\Port\StagedDiagnosticsBundle;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsBundle;
+use App\Modules\Product\Domain\ValueObject\SealedDiagnosticsBundle;
 use LogicException;
 use RuntimeException;
 use Throwable;
@@ -23,6 +24,13 @@ use Throwable;
  * copia de la plantilla al alcance de quien pase por ahi. Se escribe cerrado
  * siempre: distinguir por contenido seria una decision que algun dia se toma
  * mal.
+ *
+ * ## El que lleva datos personales, solo cifrado
+ *
+ * Desde la enmienda de ADR-020 del 01-11-2026 ese paquete llega aqui como
+ * {@see SealedDiagnosticsBundle} y se escribe como `.sealed.json`. Uno en claro
+ * con `anonymized: false` no se escribe: lanza `LogicException` antes de tocar
+ * el disco. Los permisos `0600` siguen valiendo para los dos.
  *
  * ## Falla ruidosamente, y con la ruta en el mensaje
  *
@@ -44,16 +52,16 @@ final readonly class JsonDiagnosticsBundleWriter implements DiagnosticsBundleWri
      * antiguedad lo barre como a cualquier paquete (ADR-045 §g): no queda un
      * fichero `0600` olvidado para siempre.
      */
-    public function stage(DiagnosticsBundle $bundle, ?string $path = null): StagedDiagnosticsBundle
+    public function stage(DiagnosticsBundle|SealedDiagnosticsBundle $bundle, ?string $path = null): StagedDiagnosticsBundle
     {
-        $target = $path ?? rtrim($this->defaultDirectory, '/').'/'.$bundle->manifest->fileName();
-
-        // Con `--output=carpeta/` se compone el nombre; con `--output=fichero.json`
-        // se respeta. Quien pasa un directorio casi siempre quiere lo primero.
-        if (is_dir($target)) {
-            $target = rtrim($target, '/').'/'.$bundle->manifest->fileName();
+        // ADR-020, enmienda del 01-11-2026: el paquete con datos personales no
+        // se escribe nunca en claro. `toJson()` ya se niega; esto lo dice antes
+        // de crear ningun directorio.
+        if ($bundle instanceof DiagnosticsBundle && ! $bundle->manifest->anonymized) {
+            throw new LogicException('Un paquete con datos personales no se escribe sin cifrar.');
         }
 
+        $target = $this->target($bundle, $path);
         $directory = \dirname($target);
 
         if (! is_dir($directory) && ! @mkdir($directory, 0o700, true) && ! is_dir($directory)) {
@@ -82,8 +90,21 @@ final readonly class JsonDiagnosticsBundleWriter implements DiagnosticsBundleWri
             temporary: $temporary,
             target: $target,
             sha256: $bundle->manifest->sha256,
-            auditPending: $bundle->generationEntryPending(),
+            auditPending: $bundle instanceof DiagnosticsBundle && $bundle->generationEntryPending(),
         );
+    }
+
+    /**
+     * Donde va el paquete: `.json` el anonimizado y `.sealed.json` el cifrado.
+     * Con `--output=carpeta/` se compone el nombre; con `--output=fichero.json`
+     * se respeta. Quien pasa un directorio casi siempre quiere lo primero.
+     */
+    private function target(DiagnosticsBundle|SealedDiagnosticsBundle $bundle, ?string $path): string
+    {
+        $name = $bundle instanceof SealedDiagnosticsBundle ? $bundle->fileName() : $bundle->manifest->fileName();
+        $target = $path ?? rtrim($this->defaultDirectory, '/').'/'.$name;
+
+        return is_dir($target) ? rtrim($target, '/').'/'.$name : $target;
     }
 
     public function publish(StagedDiagnosticsBundle $staged, ?DeferredAuditReceipt $receipt = null): string

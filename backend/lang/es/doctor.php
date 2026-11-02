@@ -494,6 +494,13 @@ return [
                     .'en la auditoria lleva mas de una hora sin escribirse (el mas antiguo, de las :oldest UTC). Se '
                     .'escribe solo cuando la base vuelve; fichar no depende de esto.',
             ],
+            'recipient_key' => [
+                'ok' => 'El paquete de diagnostico con datos personales se puede generar: sale cifrado para la '
+                    .'clave de soporte del fabricante :key_id, que solo el fabricante puede abrir.',
+                'warning' => 'Esta instalacion no tiene la clave publica de soporte del fabricante, asi que el '
+                    .'paquete de diagnostico CON DATOS PERSONALES no se puede generar (nunca sale sin cifrar). El '
+                    .'paquete anonimizado, que es el habitual, funciona con normalidad; fichar no depende de esto.',
+            ],
         ],
 
         // --- Ficheros generados (ADR-045) -----------------------------------
@@ -1130,6 +1137,15 @@ return [
                     ."Si la base sigue sin responder, arreglala primero: el asiento se escribira solo. Si la base\n"
                     ."responde y el aviso no desaparece en cinco minutos, mira la comprobacion «scheduler.heartbeat».\n"
                     .'Ver docs/cliente/operacion.md §12.2, «Si la base de datos no responde».',
+            ],
+            'recipient_key' => [
+                'warning' => "La clave viene dentro de cada version publicada del producto y no se configura. Si\n"
+                    ."ves este aviso, mira si alguien puso DIAGNOSTICS_RECIPIENT_PUBLIC_KEY en el .env: si es asi,\n"
+                    ."quita esa linea y recrea los contenedores:\n"
+                    ."  docker compose up -d\n"
+                    ."Si no esta en el .env, la imagen no es una version publicada: actualiza con update.sh a la\n"
+                    ."version que te indique soporte. Mientras tanto, envia el paquete anonimizado.\n"
+                    .'Ver docs/cliente/operacion.md §12.3, «Qué hacer si…».',
             ],
         ],
 
