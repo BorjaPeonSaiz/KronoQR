@@ -64,6 +64,32 @@ test(
 )
 
 test(
+  'una fila reabierta enseña quién la resolvió antes y cuándo, en la zona del centro',
+  { tag: ['@RF-PD-15'] },
+  async ({ page }) => {
+    await stubManagementApi(page, { role: 'admin' })
+    await stubErrorEventsApi(page, {
+      entries: [
+        {
+          ...KIOSK_CRITICAL_ERROR,
+          previous_resolution: {
+            resolved_at: '2026-09-08T10:15:00.000000Z',
+            resolved_by: { uuid: '0199f0aa-1111-7000-8000-0123456789ab', name: 'Jefa de cocina' },
+          },
+        },
+      ],
+    })
+
+    await logInAsAdmin(page)
+    await page.goto('/errors')
+
+    await expect(page.getByTestId(`previous-resolution-${ERROR_EVENT_ID}`)).toContainText(
+      'Resuelto antes por Jefa de cocina el',
+    )
+  },
+)
+
+test(
   'expandir la fila enseña el detalle, el bloque «que hacer», y el trace_id se copia',
   { tag: ['@RF-PD-15'] },
   async ({ page, context }) => {

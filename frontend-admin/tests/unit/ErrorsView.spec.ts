@@ -233,4 +233,65 @@ describe('pantalla del historico de errores', () => {
     // El resto de la pantalla sigue funcionando: sigue pudiendo leer el historico.
     expect(wrapper.find('[data-test="error-row"]').exists()).toBe(true)
   })
+
+  it('una fila reabierta enseña quien la resolvio antes y cuando, en la zona del centro (RF-PD-15)', async () => {
+    stubRoutes({
+      '/diagnostics/errors': () =>
+        jsonResponse(
+          errorEventCollection([
+            errorEvent({
+              previous_resolution: {
+                // 10:15 UTC son las 12:15 en Madrid (CEST): nunca la zona del navegador.
+                resolved_at: '2026-09-08T10:15:00.000000Z',
+                resolved_by: {
+                  uuid: '0199f0aa-1111-7000-8000-0123456789ab',
+                  name: 'Jefa de cocina',
+                },
+              },
+            }),
+          ]),
+        ),
+    })
+
+    const wrapper = await mountErrorsView()
+    const line = wrapper.find('[data-test="previous-resolution-87"]')
+
+    expect(line.exists()).toBe(true)
+    expect(line.text()).toContain('Resuelto antes por Jefa de cocina el')
+    expect(line.text()).toContain('12:15')
+    expect(line.text()).not.toContain('10:15')
+  })
+
+  it('sin autor (acceso de soporte o cuenta borrada), la linea omite el nombre (RF-PD-15, RF-PD-11)', async () => {
+    stubRoutes({
+      '/diagnostics/errors': () =>
+        jsonResponse(
+          errorEventCollection([
+            errorEvent({
+              previous_resolution: {
+                resolved_at: '2026-09-08T10:15:00.000000Z',
+                resolved_by: null,
+              },
+            }),
+          ]),
+        ),
+    })
+
+    const wrapper = await mountErrorsView(['diagnostics:*'])
+    const line = wrapper.find('[data-test="previous-resolution-87"]')
+
+    expect(line.text()).toMatch(/^Resuelto antes el /)
+    expect(line.text()).not.toContain(' por ')
+    expect(line.text()).toContain('12:15')
+  })
+
+  it('un grupo que nunca se resolvio no enseña la linea de resolucion anterior (RF-PD-15)', async () => {
+    stubRoutes({
+      '/diagnostics/errors': () => jsonResponse(errorEventCollection()),
+    })
+
+    const wrapper = await mountErrorsView()
+
+    expect(wrapper.find('[data-test="previous-resolution-87"]').exists()).toBe(false)
+  })
 })

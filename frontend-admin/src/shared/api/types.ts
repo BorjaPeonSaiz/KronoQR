@@ -264,6 +264,7 @@ export type PayrollExportGranularity = Parameters_['PayrollGranularity']
 // que define su propio cuerpo local y no importa estos tipos (ADR-036: el
 // paquete comun no depende del `schema.d.ts` de una SPA concreta).
 export type ErrorEvent = Schemas['ErrorEvent']
+export type ErrorEventResolution = Schemas['ErrorEventResolution']
 export type ErrorEventCollection = Schemas['ErrorEventCollection']
 export type ErrorEventPageMeta = Schemas['ErrorEventPageMeta']
 export type ErrorSource = Schemas['ErrorSource']

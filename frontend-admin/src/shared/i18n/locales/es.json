@@ -2785,7 +2785,9 @@
       "actions": "Acciones",
       "expand": "Ver detalle",
       "collapse": "Ocultar detalle",
-      "resolved": "Resuelto"
+      "resolved": "Resuelto",
+      "previousResolution": "Resuelto antes por {name} el {date}",
+      "previousResolutionAnonymous": "Resuelto antes el {date}"
     },
     "detail": {
       "exceptionClass": "Clase de la excepción",

@@ -2785,7 +2785,9 @@
       "actions": "Actions",
       "expand": "Show detail",
       "collapse": "Hide detail",
-      "resolved": "Resolved"
+      "resolved": "Resolved",
+      "previousResolution": "Previously resolved by {name} on {date}",
+      "previousResolutionAnonymous": "Previously resolved on {date}"
     },
     "detail": {
       "exceptionClass": "Exception class",
