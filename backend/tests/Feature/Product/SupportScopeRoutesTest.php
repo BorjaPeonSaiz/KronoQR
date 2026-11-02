@@ -105,8 +105,9 @@ it('encuentra rutas de escritura que analizar', function (): void {
 })->group('RF-PD-11');
 
 it('los ambitos de lectura de read_only no abren NINGUNA ruta que escriba', function (): void {
-    // `attendance:read`, `employees:read` y `audit:read`. Si alguna ruta que no
-    // sea `GET` aceptara cualquiera de los tres, `read_only` dejaria de ser de
+    // `attendance:read` y `employees:read` (sin `audit:read` desde la 2.3.0,
+    // enmienda de ADR-020). Si alguna ruta que no sea `GET` aceptara cualquiera
+    // de los dos, `read_only` dejaria de ser de
     // solo lectura sin que nadie lo hubiera decidido.
     //
     // LA UNICA EXCEPCION, Y NO ESCRIBE NADA: `POST /api/v1/broadcasting/auth`.
@@ -278,8 +279,8 @@ it('ningun alcance lleva un ambito que el contrato prohibe', function (SupportSc
  *   de exclusiones no haria eso: seguiria verde.
  * - Y al reves: una ruta de lectura nueva con dato personal que nadie cierre
  *   aparece el mismo dia en que se escribe, y hay que decidir explicitamente si
- *   el fabricante la lee. Que es la decision que con `audit:read` ya quedo
- *   anotada como riesgo abierto en el docblock de `SupportScope::ReadOnly`.
+ *   el fabricante la lee. Es la decision que la enmienda de ADR-020 (33.3)
+ *   tomo con `audit:read`: ningun alcance lo lleva, y concederlo exige ADR propio.
  *
  * **No sustituye a `AbsenceSupportAccessTest`**, que es quien prueba el `403`
  * con la baja medica y la nota dentro y quien comprueba que no queda asiento de

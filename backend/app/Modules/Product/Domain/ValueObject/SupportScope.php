@@ -97,9 +97,9 @@ enum SupportScope: string
      * `GET /employees/{uuid}/workdays`, que **son** la razon de ser del alcance
      * y dejan su asiento de divulgacion con el actor de soporte delante (RS-05).
      *
-     * **Lo que lo hace de solo lectura son sus tres ambitos, no su rol.** Lleva
-     * `attendance:read`, `employees:read` y `audit:read`, y esas tres familias
-     * no abren en toda la API ni una sola ruta que no sea `GET` — lo comprueba
+     * **Lo que lo hace de solo lectura son sus ambitos, no su rol.** Lleva
+     * `attendance:read` y `employees:read` (ademas de `diagnostics:*`), y esas
+     * dos familias no abren en toda la API ni una sola ruta que no sea `GET` — lo comprueba
      * `SupportScopeRoutesTest` recorriendo las rutas registradas, no un
      * comentario. Ante las policies actua como `admin`, que es lo unico que le
      * permite llegar a las pantallas del registro horario; ver
@@ -110,21 +110,19 @@ enum SupportScope: string
      * para la Inspeccion son actos del cliente con valor legal, y el fabricante
      * no los hace ni con permiso (RL-19).
      *
-     * ## `audit:read` NO TIENE HOY NINGUNA RUTA QUE LO CONSUMA
+     * ## NINGUN ACCESO DE SOPORTE LLEVA `audit:read` (enmienda de ADR-020, 33.3)
      *
-     * Y por eso este alcance, en la practica, abre jornadas y plantilla y nada
-     * mas: ninguna ruta de `routes/api_v1.php` pide ese ambito porque no hay
-     * ningun endpoint de `audit_log`. El ambito esta declarado porque la tabla
-     * del §7.3 lo contempla, no porque hoy sirva de algo.
+     * Hasta la 2.3.0 este alcance lo llevaba porque la tabla del §7.3 lo
+     * contemplaba, sin ninguna ruta que lo consumiera. Se retira: la traza de
+     * correcciones —quien cambio que hora, cuando y por que, con el actor de
+     * cada asiento— es el conjunto mas sensible del producto, y que el token del
+     * fabricante llegara a el por arrastre de una linea escrita antes de que
+     * existiera la ruta no seria una decision, seria un descuido.
      *
-     * **El dia que ese endpoint se escriba hay que decidir explicitamente si un
-     * acceso de soporte lo alcanza, y esa decision no la hereda de aqui.** La
-     * traza de correcciones —quien cambio que hora, cuando y por que, con el
-     * actor de cada asiento— es el conjunto mas sensible del producto, y que el
-     * token del fabricante llegue a el por arrastre de una linea escrita antes
-     * de que existiera la ruta no es una decision: es un descuido. Riesgo
-     * abierto en el doc 07 §6 (cierre de Fase 5, 09-09-2026), con dueño y sin
-     * fecha, porque la fecha la pone quien escriba la ruta.
+     * **Concederselo el dia que exista un visor de `audit_log` exige un ADR
+     * propio**, no una linea en este `match`. `SupportScopeTest` falla si algun
+     * alcance lo concede. Los tokens emitidos antes de la 2.3.0 lo conservan
+     * hasta caducar (72 h como maximo), sin ninguna ruta que lo lea.
      */
     case ReadOnly = 'read_only';
 
@@ -179,9 +177,10 @@ enum SupportScope: string
         return match ($this) {
             // Solo el paquete anonimizado y el historico de errores.
             self::Diagnostics => ['diagnostics:*'],
-            // Lo anterior y las tres familias de LECTURA del §7.3. Ninguna de
-            // las tres abre una ruta que no sea `GET` (SupportScopeRoutesTest).
-            self::ReadOnly => ['diagnostics:*', 'attendance:read', 'employees:read', 'audit:read'],
+            // Lo anterior y las dos familias de LECTURA del §7.3 que hacen falta
+            // para diagnosticar un calculo de horas. Ninguna abre una ruta que no
+            // sea `GET` (SupportScopeRoutesTest). Sin `audit:read`: ver arriba.
+            self::ReadOnly => ['diagnostics:*', 'attendance:read', 'employees:read'],
             // Lo de `diagnostics` y la configuracion de la instalacion, que
             // incluye el perfil de cumplimiento y los quioscos (§7.3,
             // precisiones 4 y 5).
@@ -213,11 +212,14 @@ enum SupportScope: string
      * | Alcance | Ambitos | Lo que abre de verdad |
      * | --- | --- | --- |
      * | `diagnostics` | `diagnostics:*` | El paquete anonimizado y el historico de errores |
-     * | `read_only` | + `attendance:read`, `employees:read`, `audit:read` | **Solo rutas `GET`**: jornadas y plantilla. **No** la presencia en vivo, el resumen de cumplimiento, las ausencias ni el catalogo de departamentos: los cierran sus policies (el ultimo, `DepartmentPolicy::canRead()`) |
+     * | `read_only` | + `attendance:read`, `employees:read` | **Solo rutas `GET`**: jornadas y plantilla. **No** la presencia en vivo, el resumen de cumplimiento, las ausencias ni el catalogo de departamentos: los cierran sus policies (el ultimo, `DepartmentPolicy::canRead()`) |
      * | `configuration` | + `settings:*` | Ajustes de instalacion y quioscos. **No** el perfil de cumplimiento: lo cierra su policy (RL-01, RL-02) |
      *
-     * **Que los tres ambitos de lectura no abran ni una sola ruta de escritura no
-     * se confia: se comprueba.** `SupportScopeRoutesTest` recorre las rutas
+     * **Ningun alcance lleva `audit:read`**: leer `audit_log` desde un acceso de
+     * soporte exige ADR propio (enmienda de ADR-020, 33.3).
+     *
+     * **Que los ambitos de lectura no abran ni una sola ruta de escritura no se
+     * confia: se comprueba.** `SupportScopeRoutesTest` recorre las rutas
      * registradas y falla si alguna que no sea `GET` los acepta. Es lo que
      * convierte «solo lectura» en una propiedad verificada y no en el nombre de
      * un enum.

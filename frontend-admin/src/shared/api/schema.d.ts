@@ -5224,7 +5224,7 @@ export interface paths {
          *     | `scope` | Puede | Actua como |
          *     | --- | --- | --- |
          *     | `diagnostics` | Generar el paquete de diagnostico **anonimizado** y consultar el historico de errores | `admin` solo ante las policies de diagnostico |
-         *     | `read_only` | Lo anterior y **leer** jornadas, tramos, plantilla y auditoria | `admin`, con ambitos de solo lectura (`attendance:read`, `employees:read`, `audit:read`): lo que impide escribir es el ambito, no el rol. No actua como `auditor` porque ese rol, a proposito, no lee el diario de jornadas (lo suyo es la exportacion legal, que ningun alcance concede) |
+         *     | `read_only` | Lo anterior y **leer** jornadas, tramos y plantilla | `admin`, con ambitos de solo lectura (`attendance:read`, `employees:read`; ningun alcance lleva `audit:read`): lo que impide escribir es el ambito, no el rol. No actua como `auditor` porque ese rol, a proposito, no lee el diario de jornadas (lo suyo es la exportacion legal, que ningun alcance concede) |
          *     | `configuration` | Lo de `diagnostics` y **cambiar** la configuracion operativa de la instalacion y los quioscos (emparejar y desvincular) | `admin`. **No** el perfil de cumplimiento: los umbrales legales y los años de conservacion los fija el cliente con su asesoria (RL-01, RL-02, regla dura 14), y `ComplianceProfilePolicy` cierra el `PATCH` a todo actor de soporte aunque el ambito lo alcance |
          *
          *     **Lo que ningun alcance concede nunca**: activar licencias, conceder o

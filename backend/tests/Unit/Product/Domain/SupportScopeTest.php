@@ -60,6 +60,9 @@ it('ningun alcance concede las potestades que son solo del cliente', function (S
         TokenAbility::ATTENDANCE_CORRECT,
         TokenAbility::REPORTS_ALL,
         TokenAbility::REPORTS_LEGAL,
+        // Enmienda de ADR-020 (2.3.0, 33.3): leer `audit_log` desde un acceso de
+        // soporte exige ADR propio, y hasta entonces ningun alcance lo concede.
+        TokenAbility::AUDIT_READ,
     ];
 
     foreach ($prohibidos as $prohibido) {
@@ -85,12 +88,12 @@ it('cada alcance añade a lo anterior y no sustituye', function (): void {
     }
 })->group('RF-PD-11');
 
-it('read_only es exactamente las tres familias de LECTURA del §7.3', function (): void {
+it('read_only es exactamente el diagnostico y las dos familias de LECTURA del registro', function (): void {
+    // Sin `audit:read` desde la 2.3.0 (enmienda de ADR-020, 33.3).
     expect(SupportScope::ReadOnly->abilities())->toBe([
         TokenAbility::DIAGNOSTICS_ALL->value,
         TokenAbility::ATTENDANCE_READ->value,
         TokenAbility::EMPLOYEES_READ->value,
-        TokenAbility::AUDIT_READ->value,
     ]);
 })->group('RF-PD-11', 'RL-19');
 

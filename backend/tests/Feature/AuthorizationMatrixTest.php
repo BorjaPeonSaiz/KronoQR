@@ -483,8 +483,9 @@ function authorizationMatrixAbilitiesThatOpenNothing(array $abilitiesByActor): a
 it('no concede a ningun actor un ambito que no le abra ninguna ruta', function (): void {
     // La unica excepcion, a la vista: `audit:read` de `admin`. El contrato lo
     // dice («Hoy no lo exige ninguna ruta», `openapi.yaml`, `securitySchemes`)
-    // y `SupportScope` lo razona: lo contempla la tabla del doc 02 §7.3 para el
-    // visor del registro de auditoria, que aun no existe. La prueba siguiente
+    // y lo contempla la tabla del doc 02 §7.3 para el visor del registro de
+    // auditoria, que aun no existe. Solo `admin`: ningun acceso de soporte lo
+    // lleva desde la 2.3.0 (enmienda de ADR-020, 33.3). La prueba siguiente
     // obliga a revisar la excepcion el dia que una ruta lo pida.
     $excepciones = [AuthorizationMatrix::ADMIN.' · '.TokenAbility::AUDIT_READ->value];
 
@@ -498,8 +499,8 @@ it('no concede a ningun actor un ambito que no le abra ninguna ruta', function (
 
 it('mantiene audit:read sin ninguna ruta que lo exija', function (): void {
     // Si aparece el visor de auditoria, la excepcion de arriba sobra y hay que
-    // decidir quien lo lee, incluido el acceso de soporte `read_only`, que
-    // tambien lleva este ambito (`SupportScope`, ADR-020).
+    // decidir quien lo lee. Un acceso de soporte no lo lleva: concederselo
+    // exige ADR propio (enmienda de ADR-020, 33.3; `SupportScopeTest`).
     expect(authorizationMatrixRoutesRequiring(TokenAbility::AUDIT_READ->value))->toBe([]);
 })->group('RQ-07', 'RF-PD-11');
 
