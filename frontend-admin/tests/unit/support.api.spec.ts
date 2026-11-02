@@ -1,11 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  DIAGNOSTICS_SEALING_UNAVAILABLE_TYPE,
+  SEALED_BUNDLE_MEDIA_TYPE,
   generateDiagnosticsBundle,
   grantSupportAccess,
+  isDiagnosticsSealingUnavailable,
   listSupportGrants,
   revokeSupportAccess,
 } from '@/features/support/support.api'
-import { jsonResponse, stubFetch } from './support/harness'
+import { jsonResponse, problemResponse, stubFetch } from './support/harness'
 
 // `support.api.ts` (RF-PD-09, RF-PD-11, ADR-020): sin cliente generado propio,
 // lo que se comprueba aqui es que cada funcion pide la ruta y el metodo que
@@ -64,6 +67,74 @@ describe('generateDiagnosticsBundle', () => {
       include_personal_data: false,
       period_days: 7,
     })
+  })
+
+  it('acepta los dos tipos: el JSON en claro y el sobre cifrado', async () => {
+    const spy = stubFetch(() => bundleResponse('kronoqr-diagnostics-2.3.0-20260908T101500Z.json'))
+
+    await generateDiagnosticsBundle({ include_personal_data: false, period_days: 7 })
+
+    const [, init] = spy.mock.calls[0] as [string, RequestInit]
+    const accept = new Headers(init.headers).get('Accept') ?? ''
+
+    expect(accept).toContain('application/json')
+    expect(accept).toContain(SEALED_BUNDLE_MEDIA_TYPE)
+  })
+
+  it('con datos personales guarda el sobre cifrado con el nombre .sealed.json de la cabecera', async () => {
+    stubFetch(
+      () =>
+        new Response(JSON.stringify({ sealed: true }), {
+          status: 200,
+          headers: {
+            'Content-Type': SEALED_BUNDLE_MEDIA_TYPE,
+            'Content-Disposition':
+              'attachment; filename=kronoqr-diagnostics-2.3.0-20260908T101500Z.sealed.json',
+          },
+        }),
+    )
+
+    const document_ = await generateDiagnosticsBundle({
+      include_personal_data: true,
+      period_days: 7,
+    })
+
+    expect(document_.filename).toBe('kronoqr-diagnostics-2.3.0-20260908T101500Z.sealed.json')
+    expect(document_.blob.type).toBe(SEALED_BUNDLE_MEDIA_TYPE)
+  })
+
+  it('sin Content-Disposition, el nombre de reserva conserva la extension de cada tipo', async () => {
+    stubFetch(
+      () => new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } }),
+    )
+
+    expect(
+      (await generateDiagnosticsBundle({ include_personal_data: false, period_days: 7 })).filename,
+    ).toBe('kronoqr-diagnostics.json')
+    expect(
+      (await generateDiagnosticsBundle({ include_personal_data: true, period_days: 7 })).filename,
+    ).toBe('kronoqr-diagnostics.sealed.json')
+  })
+
+  it('el 503 de sellado se reconoce por su type y no lleva Retry-After', async () => {
+    stubFetch(() => problemResponse(503, DIAGNOSTICS_SEALING_UNAVAILABLE_TYPE))
+
+    const failure = await generateDiagnosticsBundle({
+      include_personal_data: true,
+      period_days: 7,
+    }).catch((error: unknown) => error)
+
+    expect(isDiagnosticsSealingUnavailable(failure)).toBe(true)
+    expect((failure as { retryAfterSeconds: number | null }).retryAfterSeconds).toBeNull()
+  })
+
+  it('un 503 generico de «inténtalo más tarde» no se confunde con el de sellado', async () => {
+    stubFetch(() => problemResponse(503, 'urn:kronoqr:problem:service-unavailable'))
+
+    const failure = await generateDiagnosticsBundle().catch((error: unknown) => error)
+
+    expect(isDiagnosticsSealingUnavailable(failure)).toBe(false)
+    expect(isDiagnosticsSealingUnavailable(new Error('x'))).toBe(false)
   })
 })
 

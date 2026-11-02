@@ -8,6 +8,7 @@
 import { expect, test } from '@playwright/test'
 import {
   DIAGNOSTICS_BUNDLE_FILENAME,
+  DIAGNOSTICS_SEALED_BUNDLE_FILENAME,
   ISSUED_SUPPORT_TOKEN,
   SUPPORT_GRANT_ACTIVE,
   SUPPORT_GRANT_UUID,
@@ -95,6 +96,93 @@ test(
     expect(
       (request?.body as { include_personal_data?: boolean } | null)?.include_personal_data,
     ).toBe(true)
+  },
+)
+
+test(
+  'el paquete anonimizado se descarga como .json y se puede abrir y revisar',
+  { tag: ['@RF-PD-09', '@RL-19'] },
+  async ({ page }) => {
+    await stubManagementApi(page, { role: 'admin' })
+
+    await logInAsAdmin(page)
+    await page.goto('/support')
+
+    const download = page.waitForEvent('download')
+
+    await page.getByTestId('generate-bundle').click()
+
+    const file = await download
+
+    expect(file.suggestedFilename()).toMatch(/^kronoqr-diagnostics-.+\.json$/)
+    expect(file.suggestedFilename()).not.toContain('.sealed.')
+    await expect(page.getByTestId('diagnostics-success')).toContainText(
+      'revísalo antes de enviarlo',
+    )
+    await expect(page.getByTestId('sealing-unavailable')).not.toBeVisible()
+  },
+)
+
+test(
+  'con datos personales avisa de que sale cifrado y descarga el .sealed.json',
+  { tag: ['@RF-PD-09', '@RL-19'] },
+  async ({ page }) => {
+    await stubManagementApi(page, { role: 'admin' })
+
+    await logInAsAdmin(page)
+    await page.goto('/support')
+
+    await page.getByTestId('include-personal-data').check()
+
+    await expect(page.getByTestId('personal-data-warning')).toContainText('cifrado')
+    await expect(page.getByTestId('personal-data-warning')).toContainText('anonimizado')
+
+    const download = page.waitForEvent('download')
+
+    await page.getByTestId('generate-bundle').click()
+
+    const file = await download
+
+    expect(file.suggestedFilename()).toBe(DIAGNOSTICS_SEALED_BUNDLE_FILENAME)
+    await expect(page.getByTestId('diagnostics-success')).toContainText(
+      DIAGNOSTICS_SEALED_BUNDLE_FILENAME,
+    )
+    await expect(page.getByTestId('diagnostics-success')).toContainText('cifrado')
+  },
+)
+
+test(
+  'sin clave de soporte el 503 de sellado dice que envies el anonimizado, sin reintento',
+  { tag: ['@RF-PD-09', '@RL-19'] },
+  async ({ page }) => {
+    const api = await stubManagementApi(page, { role: 'admin', sealingOutcome: 'unavailable' })
+
+    await logInAsAdmin(page)
+    await page.goto('/support')
+
+    await page.getByTestId('include-personal-data').check()
+    await page.getByTestId('generate-bundle').click()
+
+    const notice = page.getByTestId('sealing-unavailable')
+
+    await expect(notice).toBeVisible()
+    await expect(notice).toHaveAttribute('role', 'alert')
+    await expect(notice).toContainText('no puede generar el paquete con datos personales')
+    await expect(notice).toContainText('paquete anonimizado')
+    await expect(page.getByTestId('diagnostics-success')).not.toBeVisible()
+
+    // Sin reintento automatico: una sola peticion.
+    expect(api.requests.filter((it) => it.path === '/api/v1/diagnostics/bundle')).toHaveLength(1)
+
+    // El anonimizado sigue saliendo.
+    await page.getByTestId('include-personal-data').uncheck()
+
+    const download = page.waitForEvent('download')
+
+    await page.getByTestId('generate-bundle').click()
+
+    expect((await download).suggestedFilename()).toBe(DIAGNOSTICS_BUNDLE_FILENAME)
+    await expect(notice).not.toBeVisible()
   },
 )
 

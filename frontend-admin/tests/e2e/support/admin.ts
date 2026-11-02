@@ -1403,6 +1403,10 @@ export const ISSUED_SUPPORT_GRANT: IssuedSupportGrant = {
 /** El nombre de fichero que trae `Content-Disposition` de `POST /diagnostics/bundle`. */
 export const DIAGNOSTICS_BUNDLE_FILENAME = 'kronoqr-diagnostics-2.2.0-20260908T101500Z.json'
 
+/** Idem para el sobre cifrado (`include_personal_data: true`), `application/vnd.kronoqr.diagnostics-sealed+json`. */
+export const DIAGNOSTICS_SEALED_BUNDLE_FILENAME =
+  'kronoqr-diagnostics-2.2.0-20260908T101500Z.sealed.json'
+
 // --- Exportacion integra de datos (RF-PD-14, RL-20, tarea 5.10) -------------
 
 /** El `uuid` que el doble asigna a la exportacion que crea `POST /api/v1/data-export`. */
@@ -1776,6 +1780,13 @@ export interface ManagementApiOptions {
    */
   readonly supportGrants?: SupportGrant[]
   /**
+   * `unavailable`: la instalacion no tiene la clave publica de soporte y
+   * `POST /diagnostics/bundle` con datos personales responde el `503`
+   * `diagnostics-sealing-unavailable` (RL-19, sin `Retry-After`). El anonimizado
+   * sigue saliendo. Por omision, `ok`.
+   */
+  readonly sealingOutcome?: 'ok' | 'unavailable'
+  /**
    * Las exportaciones integras que devuelve `GET /api/v1/data-export` de
    * partida (RF-PD-14, RL-20, tarea 5.10). Por omision, ninguna. El doble la
    * mantiene mutable: `POST` crea una fila `pending` que el propio doble hace
@@ -2001,6 +2012,7 @@ export async function stubManagementApi(
   const payrollExportOutcome = options.payrollExportOutcome ?? 'ok'
   const adoptionReportOutcome = options.adoptionReportOutcome ?? 'ok'
   const correctionOutcome = options.correctionOutcome ?? 'ok'
+  const sealingOutcome = options.sealingOutcome ?? 'ok'
   const baseUser =
     options.role === 'manager'
       ? MANAGER_USER
@@ -5077,6 +5089,33 @@ export async function stubManagementApi(
             include_personal_data?: boolean
             period_days?: number
           } | null
+
+          if (payload?.include_personal_data === true) {
+            if (sealingOutcome === 'unavailable') {
+              await route.fulfill({
+                status: 503,
+                contentType: 'application/problem+json',
+                body: JSON.stringify({
+                  type: 'urn:kronoqr:problem:diagnostics-sealing-unavailable',
+                  title: 'Service Unavailable',
+                  status: 503,
+                }),
+              })
+
+              return
+            }
+
+            await route.fulfill({
+              status: 200,
+              contentType: 'application/vnd.kronoqr.diagnostics-sealed+json',
+              headers: {
+                'Content-Disposition': `attachment; filename=${DIAGNOSTICS_SEALED_BUNDLE_FILENAME}`,
+              },
+              body: JSON.stringify({ header: { sections: ['manifest'] }, ciphertext: 'AAAA' }),
+            })
+
+            return
+          }
 
           await route.fulfill({
             status: 200,

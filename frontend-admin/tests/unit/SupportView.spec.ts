@@ -164,6 +164,85 @@ describe('pantalla de soporte', () => {
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:kronoqr')
   })
 
+  it('con datos personales el aviso dice que sale cifrado y la descarga se anuncia como cifrada', async () => {
+    stubRoutes({
+      '/site': () => jsonResponse(SITE),
+      '/support/grants': () => jsonResponse(supportGrantCollection([])),
+      '/diagnostics/bundle': () =>
+        new Response('{}', {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/vnd.kronoqr.diagnostics-sealed+json',
+            'Content-Disposition':
+              'attachment; filename=kronoqr-diagnostics-2.3.0-20260908T101500Z.sealed.json',
+          },
+        }),
+    })
+
+    const wrapper = await mountSupportView()
+
+    await wrapper.find<HTMLInputElement>('[data-test="include-personal-data"]').setValue(true)
+    await settle()
+
+    expect(wrapper.find('[data-test="personal-data-warning"]').text()).toContain('cifrado')
+
+    await wrapper.find('[data-test="generate-bundle"]').trigger('click')
+    await settle()
+
+    expect(wrapper.find('[data-test="diagnostics-success"]').text()).toBe(
+      es.support.diagnostics.successSealed.replace(
+        '{filename}',
+        'kronoqr-diagnostics-2.3.0-20260908T101500Z.sealed.json',
+      ),
+    )
+  })
+
+  it('el 503 de sellado enseña su mensaje propio, sin reintento ni texto generico', async () => {
+    let calls = 0
+
+    stubRoutes({
+      '/site': () => jsonResponse(SITE),
+      '/support/grants': () => jsonResponse(supportGrantCollection([])),
+      '/diagnostics/bundle': () => {
+        calls += 1
+
+        return problemResponse(503, 'urn:kronoqr:problem:diagnostics-sealing-unavailable')
+      },
+    })
+
+    const wrapper = await mountSupportView()
+
+    await wrapper.find<HTMLInputElement>('[data-test="include-personal-data"]').setValue(true)
+    await settle()
+    await wrapper.find('[data-test="generate-bundle"]').trigger('click')
+    await settle()
+
+    const notice = wrapper.find('[data-test="sealing-unavailable"]')
+
+    expect(notice.exists()).toBe(true)
+    expect(notice.attributes('role')).toBe('alert')
+    expect(notice.text()).toContain(es.support.diagnostics.sealingUnavailable.title)
+    expect(notice.text()).toContain(es.support.diagnostics.sealingUnavailable.advice)
+    expect(wrapper.find('[data-test="diagnostics-success"]').exists()).toBe(false)
+    expect(calls).toBe(1)
+  })
+
+  it('un 503 generico del paquete usa el aviso general, no el de sellado', async () => {
+    stubRoutes({
+      '/site': () => jsonResponse(SITE),
+      '/support/grants': () => jsonResponse(supportGrantCollection([])),
+      '/diagnostics/bundle': () => problemResponse(503, 'urn:kronoqr:problem:service-unavailable'),
+    })
+
+    const wrapper = await mountSupportView()
+
+    await wrapper.find('[data-test="generate-bundle"]').trigger('click')
+    await settle()
+
+    expect(wrapper.find('[data-test="sealing-unavailable"]').exists()).toBe(false)
+    expect(wrapper.find('[role="alert"]').exists()).toBe(true)
+  })
+
   it('conceder un acceso enseña el token una sola vez y lo lista como activa', async () => {
     let granted = false
 
