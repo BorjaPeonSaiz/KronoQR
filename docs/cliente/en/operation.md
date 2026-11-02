@@ -2555,8 +2555,8 @@ incident.
 
 #### What to do if…
 
-- **The panel warns that the bundle with personal data cannot be encrypted,
-  or the console ends with exit code `1` and the message "The bundle WITH
+- **The panel says "This installation cannot generate the package with
+  personal data", or the console ends with exit code `1` and the message "The bundle WITH
   PERSONAL DATA has not been generated: this installation does not have the
   vendor support public key…".** Your installation does not have the key used
   to encrypt it, and the product never sends that bundle unencrypted.

@@ -2522,8 +2522,8 @@ fabricante sigue siendo encargado del tratamiento para esa incidencia.
 
 #### Qué hacer si…
 
-- **El panel avisa de que el paquete con datos personales no se puede cifrar,
-  o la consola termina con código `1` y el mensaje «No se ha generado el paquete CON DATOS
+- **El panel dice «Esta instalación no puede generar el paquete con datos
+  personales», o la consola termina con código `1` y el mensaje «No se ha generado el paquete CON DATOS
   PERSONALES: esta instalacion no tiene la clave publica de soporte…».** Tu
   instalación no tiene la clave con la que se cifra, y el producto no envía
   nunca ese paquete sin cifrar. **No se ha recogido nada ni ha quedado ningún
