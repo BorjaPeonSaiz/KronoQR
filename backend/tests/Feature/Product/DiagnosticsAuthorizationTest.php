@@ -9,6 +9,7 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Identity\PortalLogins;
+use Tests\Support\Product\DiagnosticsRecipient;
 use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -36,6 +37,10 @@ uses(RefreshDatabase::class);
 beforeEach(function (): void {
     WorkforceFixtures::site();
     LicenseKeys::install();
+    // Con la clave publica de soporte instalada: el que lleva datos personales
+    // sale cifrado (ADR-020, enmienda del 01-11-2026), y sin ella el `403` de
+    // un rol se confundiria con el `503` de una instalacion sin clave.
+    DiagnosticsRecipient::install();
 });
 
 it('no deja entrar sin token', function (): void {

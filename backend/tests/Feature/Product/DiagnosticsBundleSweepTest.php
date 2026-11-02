@@ -9,6 +9,7 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Identity\ConsoleSignature;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Product\DataExports;
+use Tests\Support\Product\DiagnosticsRecipient;
 use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Shared\GeneratedFilesSandbox;
 use Tests\Support\Shared\RecordingGeneratedFileMetrics;
@@ -147,14 +148,16 @@ it('no sigue un enlace simbolico con nombre de paquete y lo cuenta como rechazo'
 })->group('RF-PD-09', 'RL-19');
 
 it('barre igual el paquete con datos personales: el nombre no distingue', function (): void {
-    // El escritor da el mismo nombre al anonimizado y al que lleva datos
-    // personales (`DiagnosticsManifest::fileName()`), y es el segundo el que
-    // de verdad no puede quedarse en el disco.
+    // El que lleva datos personales sale cifrado como `.sealed.json`
+    // (ADR-020, enmienda del 01-11-2026) y casa con el mismo patron. Cifrado o
+    // no, es el que de verdad no puede quedarse en el disco.
+    DiagnosticsRecipient::install();
     Artisan::call('product:diagnostics', ['--with-personal-data' => true, ...ConsoleSignature::for(ManagementUsers::withRole(UserRole::ADMIN))]);
 
     $escritos = glob(diagnosticsSweepRoot().'/kronoqr-diagnostics-*.json') ?: [];
 
-    expect($escritos)->toHaveCount(1);
+    expect($escritos)->toHaveCount(1)
+        ->and($escritos[0] ?? '')->toEndWith('.sealed.json');
 
     diagnosticsSweepClockIn(8 * DIAGNOSTICS_SWEEP_DAY);
     diagnosticsSweepHourlyPass();

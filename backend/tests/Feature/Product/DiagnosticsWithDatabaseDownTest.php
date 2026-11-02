@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Event;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Clock\MockClock;
 use Tests\Support\Health\CountingPostgresConnector;
+use Tests\Support\Product\DiagnosticsRecipient;
 use Tests\Support\Time\WallClockBudget;
 
 /*
@@ -389,6 +390,9 @@ it('con PostgreSQL caido genera el paquete en tiempo acotado, en mediana (V4-PL-
 })->group('RF-PD-09', 'performance');
 
 it('con PostgreSQL caido, --with-personal-data no genera nada porque no se puede auditar (RL-19, V4-PL-1)', function (): void {
+    // Con la clave de soporte instalada, para que lo que falle sea la base y no
+    // el cifrado (ADR-020, enmienda del 01-11-2026).
+    DiagnosticsRecipient::install();
     diagnosticsDbDownBreakDatabase();
     $log = diagnosticsDbDownLog();
 

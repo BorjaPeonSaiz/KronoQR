@@ -6,7 +6,9 @@ use App\Modules\Product\Application\UseCase\GenerateDiagnosticsBundleHandler;
 use App\Modules\Product\Application\UseCase\RecordErrorEvent;
 use App\Modules\Product\Domain\Support\ErrorMessageSanitizer;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsActor;
+use App\Modules\Product\Domain\ValueObject\DiagnosticsBundle;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsOptions;
+use App\Modules\Product\Domain\ValueObject\SealedDiagnosticsBundle;
 use App\Modules\Product\Infrastructure\Capture\ExecutionContext;
 use App\Modules\Shared\Application\Port\ErrorEventSink;
 use App\Modules\Shared\Domain\ValueObject\ErrorLevel;
@@ -21,6 +23,7 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Identity\PortalLogins;
+use Tests\Support\Product\DiagnosticsRecipient;
 use Tests\Support\Product\ErrorHistoryConnection;
 use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Product\SeededPersonalData;
@@ -61,6 +64,51 @@ const CORREO_SEMBRADO = 'filomena.zaldivar@hotel-ejemplo.example';
 const DNI_SEMBRADO = '49871234Z';
 
 const NOMBRE_DE_QUIOSCO_SEMBRADO = 'Tablet de Anastasio (recepcion)';
+
+/** El anonimizado sale en claro, como `DiagnosticsBundle`. */
+function volumenAnonimizado(): DiagnosticsBundle
+{
+    $bundle = app(GenerateDiagnosticsBundleHandler::class)
+        ->handle(DiagnosticsOptions::anonymized(), DiagnosticsActor::User);
+
+    if (! $bundle instanceof DiagnosticsBundle) {
+        throw new LogicException('El paquete anonimizado salio sellado.');
+    }
+
+    return $bundle;
+}
+
+/**
+ * El paquete con datos personales sale sellado (ADR-020, enmienda del
+ * 01-11-2026). Se genera para un par de soporte recien generado y se abre con
+ * el abridor del fabricante: lo que se inspecciona es lo que de verdad viaja
+ * dentro del sobre.
+ *
+ * @return array{sealed: SealedDiagnosticsBundle, json: string, document: array<string, mixed>}
+ */
+function volumenConDatosPersonales(int $days): array
+{
+    $recipient = DiagnosticsRecipient::install();
+
+    try {
+        $sealed = app(GenerateDiagnosticsBundleHandler::class)
+            ->handle(DiagnosticsOptions::withPersonalData($days), DiagnosticsActor::User);
+
+        if (! $sealed instanceof SealedDiagnosticsBundle) {
+            throw new LogicException('El paquete con datos personales tiene que salir sellado.');
+        }
+
+        $document = $recipient->openedDocument($sealed->toJson());
+
+        return [
+            'sealed' => $sealed,
+            'json' => (string) json_encode($document, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            'document' => $document,
+        ];
+    } finally {
+        DiagnosticsRecipient::uninstall();
+    }
+}
 
 /**
  * Una instalacion con 500 personas, tres quioscos y 90 dias de fichajes.
@@ -294,8 +342,7 @@ afterEach(function (): void {
 it('genera un paquete anonimizado sobre 500 empleados y 90 dias sin una sola PII', function (): void {
     $employees = instalacionConVolumen();
 
-    $bundle = app(GenerateDiagnosticsBundleHandler::class)
-        ->handle(DiagnosticsOptions::anonymized(), DiagnosticsActor::User);
+    $bundle = volumenAnonimizado();
 
     $json = $bundle->toJson();
 
@@ -390,9 +437,7 @@ it('genera un paquete anonimizado sobre 500 empleados y 90 dias sin una sola PII
 it('no lleva ningun secreto de la instalacion', function (): void {
     instalacionConVolumen();
 
-    $json = app(GenerateDiagnosticsBundleHandler::class)
-        ->handle(DiagnosticsOptions::anonymized(), DiagnosticsActor::User)
-        ->toJson();
+    $json = volumenAnonimizado()->toJson();
 
     // Los nombres de las variables tampoco, porque una clave ausente no dice
     // nada y una «redactada» confirma que existe.
@@ -416,12 +461,11 @@ it('con datos personales lleva la plantilla, pero nunca el DNI ni el correo ni c
     // fuera: su forma no la controla nadie.
     instalacionConVolumen();
 
-    $bundle = app(GenerateDiagnosticsBundleHandler::class)
-        ->handle(DiagnosticsOptions::withPersonalData(7), DiagnosticsActor::User);
+    ['sealed' => $sealed, 'json' => $json, 'document' => $document] = volumenConDatosPersonales(7);
 
-    $json = $bundle->toJson();
-
-    expect($bundle->manifest->anonymized)->toBeFalse()
+    expect($sealed->manifest->anonymized)->toBeFalse()
+        // Lo que sale de la instalacion no la lleva en claro; la lleva dentro.
+        ->and($sealed->toJson())->not->toContain('Marta Lopez Garcia')
         ->and($json)->toContain('Marta Lopez Garcia')
         // Y aun asi:
         ->and($json)->not->toContain(DNI_SEMBRADO)
@@ -430,7 +474,7 @@ it('con datos personales lleva la plantilla, pero nunca el DNI ni el correo ni c
         ->and($json)->not->toContain(NOMBRE_DE_QUIOSCO_SEMBRADO);
 
     /** @var array<string, mixed> $personal */
-    $personal = $bundle->sections['personal_data'];
+    $personal = $document['personal_data'];
 
     /** @var array{items: list<array<string, mixed>>, total: int, truncated: bool} $employees */
     $employees = $personal['employees'];
@@ -491,21 +535,27 @@ it('cabe en el tope configurado y dice de que ha prescindido', function (): void
 
     config(['product.diagnostics_max_bytes' => 40_000]);
 
-    $bundle = app(GenerateDiagnosticsBundleHandler::class)
-        ->handle(DiagnosticsOptions::withPersonalData(31), DiagnosticsActor::User);
+    ['sealed' => $sealed, 'document' => $document] = volumenConDatosPersonales(31);
 
     /** @var array<string, mixed> $personal */
-    $personal = $bundle->sections['personal_data'];
+    $personal = $document['personal_data'];
+    /** @var array<string, array<string, mixed>> $sections */
+    $sections = $document;
 
-    expect($personal['status'])->toBe('omitted')
+    // La cabecera del sobre lo dice sin abrirlo. Que el tope se mide sobre el
+    // sobre lo fija `DiagnosticsResponsibleTest`: con uno tan bajo como este ni
+    // las seis secciones fijas caben, y se entregan igual porque no se
+    // sacrifican nunca.
+    expect($sealed->contents['status'])->toBe('omitted')
+        ->and($personal['status'])->toBe('omitted')
         ->and($personal['reason'])->toBe('size_limit')
         ->and($personal['bytes'])->toBeGreaterThan(0)
         // Las seis secciones que responden a las primeras preguntas de cualquier
         // incidencia no se sacrifican nunca.
-        ->and($bundle->sections['doctor'])->toHaveKey('checks')
-        ->and($bundle->sections['installation'])->toHaveKey('product_version')
-        ->and($bundle->sections['configuration'])->toHaveKey('env')
-        ->and($bundle->sections['license'])->toHaveKey('state');
+        ->and($sections['doctor'])->toHaveKey('checks')
+        ->and($sections['installation'])->toHaveKey('product_version')
+        ->and($sections['configuration'])->toHaveKey('env')
+        ->and($sections['license'])->toHaveKey('state');
 })->group('RF-PD-09');
 
 it('lleva el historico de errores del periodo y ni una PII de las que los errores traian dentro', function (): void {
@@ -522,8 +572,7 @@ it('lleva el historico de errores del periodo y ni una PII de las que los errore
 
     // --- Act ----------------------------------------------------------------
 
-    $bundle = app(GenerateDiagnosticsBundleHandler::class)
-        ->handle(DiagnosticsOptions::anonymized(), DiagnosticsActor::User);
+    $bundle = volumenAnonimizado();
 
     $json = $bundle->toJson();
 
@@ -755,8 +804,7 @@ it('genera un paquete anonimizado sin ninguno de los datos sembrados por las tre
 
     // --- Act ----------------------------------------------------------------
 
-    $bundle = app(GenerateDiagnosticsBundleHandler::class)
-        ->handle(DiagnosticsOptions::anonymized(), DiagnosticsActor::User);
+    $bundle = volumenAnonimizado();
 
     $json = $bundle->toJson();
 
@@ -799,11 +847,10 @@ it('con datos personales el grupo del portal si lleva su employee_uuid', functio
     $employees = instalacionConVolumen();
     $empleadoDelPortal = volumenSembrarPorLasTresPuertas($employees);
 
-    $bundle = app(GenerateDiagnosticsBundleHandler::class)
-        ->handle(DiagnosticsOptions::withPersonalData(7), DiagnosticsActor::User);
+    ['document' => $document] = volumenConDatosPersonales(7);
 
     /** @var array{groups: list<array{source: string, employee_uuid: string|null}>} $errores */
-    $errores = $bundle->sections['error_events'];
+    $errores = $document['error_events'];
 
     $delPortal = array_values(array_filter(
         $errores['groups'],
@@ -837,8 +884,7 @@ it('vuelve a sanear al empaquetar una fila que no paso por RecordErrorEvent', fu
 
     $sembrados = ['Ofelia Mesa Blanco', 'Ruperta Mayor Cruz', 'OfeliaMesaBlanco', 'ES91 2100 0418 4502 0005 1332'];
 
-    $bundle = app(GenerateDiagnosticsBundleHandler::class)
-        ->handle(DiagnosticsOptions::anonymized(), DiagnosticsActor::User);
+    $bundle = volumenAnonimizado();
 
     /** @var array{groups: list<array<string, mixed>>} $errores */
     $errores = $bundle->sections['error_events'];

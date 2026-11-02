@@ -11,6 +11,8 @@ use App\Modules\Product\Domain\Exception\DiagnosticsAuditNotDeferred;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsActor;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsBundle;
 use App\Modules\Product\Domain\ValueObject\PendingDiagnosticsAudit;
+use App\Modules\Product\Domain\ValueObject\SealedDiagnosticsBundle;
+use Tests\Support\Product\RecordingDiagnosticsSealer;
 
 /*
  * La entrega del paquete en el disco: temporal, pendiente y renombrado, en ese
@@ -43,11 +45,16 @@ function deliverDiagnosticsUnit(bool $saveFails = false, bool $publishFails = fa
             private readonly bool $publishFails,
         ) {}
 
-        public function stage(DiagnosticsBundle $bundle, ?string $path = null): StagedDiagnosticsBundle
+        public function stage(DiagnosticsBundle|SealedDiagnosticsBundle $bundle, ?string $path = null): StagedDiagnosticsBundle
         {
             $this->log->append('stage:'.($path ?? 'default'));
 
-            return new StagedDiagnosticsBundle('/tmp/staging.json', '/tmp/final.json', $bundle->manifest->sha256, $bundle->generationEntryPending());
+            return new StagedDiagnosticsBundle(
+                '/tmp/staging.json',
+                '/tmp/final.json',
+                $bundle->manifest->sha256,
+                $bundle instanceof DiagnosticsBundle && $bundle->generationEntryPending(),
+            );
         }
 
         public function publish(StagedDiagnosticsBundle $staged, ?DeferredAuditReceipt $receipt = null): string
@@ -162,3 +169,22 @@ it('si el renombrado falla sin asiento pendiente, solo borra el temporal', funct
     expect(static fn () => $delivery->handle(deliverDiagnosticsUnitBundle(false)))->toThrow(RuntimeException::class);
     expect($log->getArrayCopy())->toBe(['stage:default', 'publish', 'discard:/tmp/staging.json']);
 })->group('RF-PD-09');
+
+it('el paquete con datos personales llega sellado y se entrega sin asiento pendiente: nunca se aplaza', function (): void {
+    // ADR-020, enmiendas del 14-10 y del 01-11-2026: solo el anonimizado puede
+    // llegar con el asiento pendiente. El sobre lleva sus dos asientos ya
+    // escritos, asi que la entrega es temporal y renombrado, sin pendiente.
+    ['delivery' => $delivery, 'log' => $log, 'receipts' => $receipts] = deliverDiagnosticsUnit();
+    $sealed = (new RecordingDiagnosticsSealer)->seal(DiagnosticsBundle::of(
+        productVersion: '2.3.0',
+        generatedAt: new DateTimeImmutable('2026-11-01T10:15:00Z'),
+        anonymized: false,
+        generatedBy: DiagnosticsActor::User,
+        sections: ['installation' => ['v' => 1]],
+        maxBytes: 8 * 1024 * 1024,
+    ), 7);
+
+    expect($delivery->handle($sealed, '/salida'))->toBe('/tmp/final.json')
+        ->and($log->getArrayCopy())->toBe(['stage:/salida', 'publish'])
+        ->and($receipts->getArrayCopy())->toBe([null]);
+})->group('RF-PD-09', 'RL-19');

@@ -9,6 +9,7 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Product\DataExports;
+use Tests\Support\Product\DiagnosticsRecipient;
 use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -150,16 +151,20 @@ it('el paquete anonimizado no lleva employee_uuid y el que tiene datos personale
     grupoParaElPaquete();
 
     $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN));
+    // El que lleva datos personales sale cifrado (ADR-020, enmienda del
+    // 01-11-2026): se abre con la privada del par de la prueba.
+    $recipient = DiagnosticsRecipient::install();
 
     $anonimo = Api::as($token)->post('/api/v1/diagnostics/bundle')->assertOk();
-    $completo = Api::as($token)
+    $completo = $recipient->openedDocument((string) Api::as($token)
         ->post('/api/v1/diagnostics/bundle', ['include_personal_data' => true, 'period_days' => 7])
-        ->assertOk();
+        ->assertOk()
+        ->getContent());
 
     /** @var array<string, mixed> $grupoAnonimo */
     $grupoAnonimo = $anonimo->json('error_events.groups.0');
     /** @var array<string, mixed> $grupoCompleto */
-    $grupoCompleto = $completo->json('error_events.groups.0');
+    $grupoCompleto = data_get($completo, 'error_events.groups.0');
 
     expect($grupoAnonimo)->not->toHaveKey('employee_uuid')
         ->and((string) json_encode($anonimo->json('error_events')))->not->toContain('0199f0aa-2222-7000-8000-0123456789ab')

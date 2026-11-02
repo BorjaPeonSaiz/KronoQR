@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\DB;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Identity\ConsoleSignature;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\DiagnosticsRecipient;
 use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -37,6 +38,10 @@ beforeEach(function (): void {
     WorkforceFixtures::site();
     LicenseKeys::install();
     FrozenTime::at('2026-06-15 09:00:00');
+    // El paquete con datos personales sale cifrado (ADR-020, enmienda del
+    // 01-11-2026): un par de soporte nuevo en cada prueba. Las que prueban la
+    // instalacion sin clave lo retiran.
+    DiagnosticsRecipient::install();
 
     Config::set('product.diagnostics_storage_path', directorioDePaquetes());
 });
@@ -353,9 +358,95 @@ it('--verify devuelve 2 si un paquete con datos personales se hace pasar por ano
 
     $result = runDiagnostics(['--verify' => $path]);
 
+    // Desde la enmienda de ADR-020 del 01-11-2026 ese paquete es un sobre: con
+    // la cabecera cambiada ya no es el fichero que dice su asiento.
     expect($result['code'])->toBe(2)
-        ->and($result['output'])->toContain('LA HUELLA NO COINCIDE')
+        ->and($result['output'])->toContain('LA HUELLA DEL FICHERO NO COINCIDE')
         ->and($result['output'])->not->toContain('Anonimo:   si');
+})->group('RF-PD-09', 'RL-19');
+
+it('--with-personal-data escribe un sobre .sealed.json sin un dato en claro y dice para que clave va', function (): void {
+    app()->setLocale('es');
+    WorkforceFixtures::employee(WorkforceFixtures::onlySiteId(), firstName: 'Marta', lastName: 'Lopez');
+    $recipient = DiagnosticsRecipient::install();
+
+    $result = runDiagnostics(['--with-personal-data' => true, '--period-days' => 7, ...ConsoleSignature::for(ManagementUsers::withRole(UserRole::ADMIN))]);
+
+    $path = paqueteEscrito();
+    $content = (string) file_get_contents($path);
+
+    expect($result['code'])->toBe(0, $result['output'])
+        ->and($path)->toEndWith('.sealed.json')
+        ->and($result['output'])->toContain('generado y cifrado')
+        ->and($result['output'])->toContain($recipient->keyId)
+        ->and($result['output'])->toContain(hash('sha256', $content))
+        ->and($content)->not->toContain('Marta')
+        ->and(substr(sprintf('%o', (int) fileperms($path)), -3))->toBe('600');
+
+    // Y el fabricante lo abre con su privada.
+    expect($recipient->openedDocument($content)['manifest'] ?? null)->toBeArray();
+})->group('RF-PD-09', 'RL-19', 'RS-08');
+
+it('--verify sobre un sobre intacto devuelve 0, dice su asiento y que el contenido no se comprueba', function (): void {
+    app()->setLocale('es');
+    $recipient = DiagnosticsRecipient::install();
+    runDiagnostics(['--with-personal-data' => true, ...ConsoleSignature::for(ManagementUsers::withRole(UserRole::ADMIN))]);
+
+    $result = runDiagnostics(['--verify' => paqueteEscrito()]);
+
+    expect($result['code'])->toBe(0, $result['output'])
+        ->and($result['output'])->toContain($recipient->keyId)
+        ->and($result['output'])->toContain('con la misma huella')
+        ->and($result['output'])->toContain('coincide con la del asiento')
+        ->and($result['output'])->toContain('El contenido no se comprueba');
+})->group('RF-PD-09', 'RL-19');
+
+it('--verify devuelve 2 con un sobre cortado o con la cabecera rota', function (Closure $estropear, string $dice): void {
+    app()->setLocale('es');
+    runDiagnostics(['--with-personal-data' => true, ...ConsoleSignature::for(ManagementUsers::withRole(UserRole::ADMIN))]);
+    $path = paqueteEscrito();
+
+    /** @var array<string, mixed> $document */
+    $document = json_decode((string) file_get_contents($path), true, 512, JSON_THROW_ON_ERROR);
+    file_put_contents($path, json_encode($estropear($document), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n");
+
+    $result = runDiagnostics(['--verify' => $path]);
+
+    expect($result['code'])->toBe(2, $result['output'])
+        ->and($result['output'])->toContain($dice);
+})->with([
+    'texto cifrado recortado' => [
+        static fn (array $d): array => [...$d, 'ciphertext' => substr(is_string($d['ciphertext'] ?? null) ? $d['ciphertext'] : '', 0, 40)],
+        'LA HUELLA DEL FICHERO NO COINCIDE',
+    ],
+    'sin la clave sellada' => [
+        static fn (array $d): array => array_diff_key($d, ['sealed_key' => true]),
+        'su cabecera no tiene la forma',
+    ],
+    'otra version del sobre' => [
+        static fn (array $d): array => [...$d, 'envelope_version' => 99],
+        'su cabecera no tiene la forma',
+    ],
+])->group('RF-PD-09', 'RL-19');
+
+it('--with-personal-data sin clave publica de soporte sale con 1, sin preguntar quien firma, sin fichero ni asiento', function (): void {
+    app()->setLocale('es');
+    DiagnosticsRecipient::uninstall();
+    $antes = DB::table('audit_log')->count();
+
+    // Sin --responsible a proposito: la clave se mira antes que la firma, y
+    // nadie tiene que confirmar nada para un paquete que no se va a generar.
+    $result = runDiagnostics(['--with-personal-data' => true]);
+
+    expect($result['code'])->toBe(1, $result['output'])
+        ->and($result['output'])->toContain('no tiene la')
+        ->and($result['output'])->toContain('php artisan product:diagnostics')
+        ->and($result['output'])->not->toContain('Falta --responsible')
+        ->and(glob(directorioDePaquetes().'/*.json'))->toBe([])
+        ->and(DB::table('audit_log')->count())->toBe($antes);
+
+    // El anonimizado no depende de la clave.
+    expect(runDiagnostics()['code'])->toBe(0);
 })->group('RF-PD-09', 'RL-19');
 
 it('--verify devuelve 2 si el fichero no existe o no es un paquete', function (): void {
