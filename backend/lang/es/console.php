@@ -350,6 +350,11 @@ return [
                     'LA HUELLA DEL FICHERO NO COINCIDE con la del asiento: no es el fichero que se',
                     'entrego, o le falta parte. Pide que se vuelva a generar.',
                 ],
+                'entry_not_sealed' => [
+                    'ESE ASIENTO ES DE UN PAQUETE QUE NO SALIO CIFRADO: la auditoria no guarda la',
+                    'huella de ningun sobre con esa cabecera, asi que este fichero no es lo que se',
+                    'entrego. No lo des por bueno y pide que se vuelva a generar.',
+                ],
                 'entry_missing' => '  Asiento:   no hay ninguno con esa huella en la auditoria de esta instalacion',
                 'entry_unknown' => '  Asiento:   no se ha podido consultar la auditoria (la base de datos no responde)',
                 'content_unchecked' => [

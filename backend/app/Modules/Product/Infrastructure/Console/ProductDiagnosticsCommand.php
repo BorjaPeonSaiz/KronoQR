@@ -78,7 +78,7 @@ use Throwable;
  * |---|---|
  * | `0` | El paquete se genero, o el que se verifico esta integro (en el cifrado: su cabecera tiene la forma de un sobre y, si hay asiento, la huella del fichero es la suya). |
  * | `1` | No se genero: no se pudo escribir el fichero, no se pudo dejar constancia en `audit_log` (ni ahora ni como pendiente), o se respondio que no a la confirmacion de los datos personales, o se pidio con datos personales y no hay clave publica de soporte para cifrarlo. El mensaje dice cual y que hacer. |
- * | `2` | Con `--verify`: la huella no coincide, el fichero no es un paquete, o es un sobre mal formado o distinto del que dice su asiento. Con `--with-personal-data`: periodo fuera de rango, falta `--responsible`, la cuenta no es `admin` activa (al preguntar o al firmar), o sin terminal falta o no cuadra `--responsible-confirm`. |
+ * | `2` | Con `--verify`: la huella no coincide, el fichero no es un paquete, o es un sobre mal formado, distinto del que dice su asiento o cuyo asiento es de un paquete que no salio cifrado. Con `--with-personal-data`: periodo fuera de rango, falta `--responsible`, la cuenta no es `admin` activa (al preguntar o al firmar), o sin terminal falta o no cuadra `--responsible-confirm`. |
  *
  * ## Funciona con la licencia caducada o ausente (regla dura 15)
  *
@@ -594,7 +594,17 @@ final class ProductDiagnosticsCommand extends Command
 
         $this->line($this->text('verify.sealed.entry_found', ['at' => UtcInstant::wallTime($entry['occurred_at'])]));
 
-        if ($entry['sealed_sha256'] !== null && ! hash_equals($entry['sealed_sha256'], $fileDigest)) {
+        // Un asiento sin huella del fichero es de un paquete que no salio
+        // cifrado: el sobre que se tiene delante no es lo que ese asiento
+        // registro. Nunca «coincide» sin haber comparado nada.
+        if ($entry['sealed_sha256'] === null) {
+            $this->line('');
+            $this->paragraph('verify.sealed.entry_not_sealed');
+
+            return 2;
+        }
+
+        if (! hash_equals($entry['sealed_sha256'], $fileDigest)) {
             $this->line('');
             $this->paragraph('verify.sealed.file_differs');
 

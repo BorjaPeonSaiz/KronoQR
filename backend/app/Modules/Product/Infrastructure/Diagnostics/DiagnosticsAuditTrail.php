@@ -30,6 +30,10 @@ final readonly class DiagnosticsAuditTrail
      * El asiento mas reciente con esa huella del texto en claro, o nulo si no
      * hay ninguno. Lanza si la base no responde: quien llama lo dice asi.
      *
+     * `sealed_sha256` es nulo si el asiento es de un paquete que no salio
+     * cifrado (`sealed: false`, o anterior a la enmienda): `--verify` de un
+     * sobre lo trata como un desacuerdo, no como «sin huella que comparar».
+     *
      * @return array{occurred_at: DateTimeImmutable, sealed_sha256: string|null}|null
      */
     public function generation(string $sha256): ?array
@@ -50,13 +54,24 @@ final readonly class DiagnosticsAuditTrail
             return null;
         }
 
-        $payload = \is_string($values['payload'] ?? null) ? json_decode($values['payload'], true) : null;
-
         return [
             'occurred_at' => new DateTimeImmutable($values['occurred_at']),
-            'sealed_sha256' => \is_array($payload) && \is_string($payload['sealed_sha256'] ?? null)
-                ? $payload['sealed_sha256']
-                : null,
+            'sealed_sha256' => self::sealedDigest($values['payload'] ?? null),
         ];
+    }
+
+    /**
+     * La huella del fichero entregado, solo de un asiento que dice haber salido
+     * cifrado: con `sealed: false` una huella seria contradictoria y no se usa.
+     */
+    private static function sealedDigest(mixed $payload): ?string
+    {
+        $payload = \is_string($payload) ? json_decode($payload, true) : null;
+
+        if (! \is_array($payload) || ($payload['sealed'] ?? null) !== true) {
+            return null;
+        }
+
+        return \is_string($payload['sealed_sha256'] ?? null) ? $payload['sealed_sha256'] : null;
     }
 }

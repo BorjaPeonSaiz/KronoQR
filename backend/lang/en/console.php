@@ -350,6 +350,11 @@ return [
                     'THE FILE DIGEST DOES NOT MATCH the one in the entry: it is not the file that was',
                     'delivered, or part of it is missing. Ask for it to be generated again.',
                 ],
+                'entry_not_sealed' => [
+                    'THAT ENTRY IS FROM A BUNDLE THAT WAS NOT ENCRYPTED: the audit log holds no digest',
+                    'of any envelope with that header, so this file is not what was delivered. Do',
+                    'not trust it and ask for it to be generated again.',
+                ],
                 'entry_missing' => '  Entry:      there is none with that digest in the audit log of this installation',
                 'entry_unknown' => '  Entry:      the audit log could not be read (the database does not answer)',
                 'content_unchecked' => [

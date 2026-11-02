@@ -520,3 +520,35 @@ it('una baja durante la generacion no deja asientos ni paquete (salida 2)', func
 it('rechaza el periodo fuera de rango con codigo de uso', function (): void {
     expect(runDiagnostics(['--with-personal-data' => true, '--period-days' => 0])['code'])->toBe(2);
 })->group('RF-PD-09', 'RL-19');
+
+it('--verify de un sobre cuyo asiento es de un paquete que no salio cifrado sale con 2 y lo dice', function (): void {
+    // Revision de la 33.8: un asiento sin `sealed_sha256` —el de un paquete
+    // anonimizado, `sealed: false`— no puede dar por buena la huella de un
+    // sobre que no se ha comparado con nada. La orden habla el idioma de la
+    // instalacion; el texto en ingles se mira aparte, al final.
+    app()->setLocale('es');
+    runDiagnostics();
+    $anonimizado = paqueteEscrito();
+
+    /** @var array{manifest: array{sha256: string}} $claro */
+    $claro = json_decode((string) file_get_contents($anonimizado), true, 512, JSON_THROW_ON_ERROR);
+    unlink($anonimizado);
+
+    runDiagnostics(['--with-personal-data' => true, ...ConsoleSignature::for(ManagementUsers::withRole(UserRole::ADMIN))]);
+    $sobre = paqueteEscrito();
+
+    /** @var array{manifest: array<string, mixed>} $documento */
+    $documento = json_decode((string) file_get_contents($sobre), true, 512, JSON_THROW_ON_ERROR);
+    $documento['manifest']['sha256'] = $claro['manifest']['sha256'];
+    file_put_contents($sobre, json_encode($documento, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)."\n");
+
+    $result = runDiagnostics(['--verify' => $sobre]);
+
+    $ingles = trans('console.product_diagnostics.verify.sealed.entry_not_sealed', [], 'en');
+
+    expect($result['code'])->toBe(2, $result['output'])
+        ->and($result['output'])->toContain('ESE ASIENTO ES DE UN PAQUETE QUE NO SALIO CIFRADO')
+        ->and($result['output'])->not->toContain('coincide con la del asiento')
+        ->and(is_array($ingles) ? implode(' ', array_filter($ingles, is_string(...))) : '')
+        ->toContain('THAT ENTRY IS FROM A BUNDLE THAT WAS NOT ENCRYPTED');
+})->group('RF-PD-09', 'RL-19');
