@@ -617,15 +617,23 @@ it('calcula la misma huella que el registro del fichaje, de una sola fuente', fu
  * RS-03, A-13 (enmienda de ADR-005, 33.6): **todo rechazo** que pasa por el
  * guardian dura al menos su suelo —el mismo que el descarte—, medido desde la
  * entrada del escaneo. El aceptado y el anti-rebote no esperan (ADR-031). Con
- * un `ConstantTimeFloor` real de 30 ms: lo que se mide es la espera de verdad,
- * no una llamada a un doble.
+ * un `ConstantTimeFloor` real: lo que se mide es la espera de verdad, no una
+ * llamada a un doble.
+ *
+ * **Las cotas son suelos, o techos con un orden de magnitud de margen** (D4,
+ * `WallClockAssertionsTest`): lo que se afirma es que el guardian espera o no
+ * espera, y una maquina cargada no convierte un «no espera» de microsegundos en
+ * uno de dos segundos.
  */
 const GUARDIAN_FLOOR_MS = 30;
 
+/** El suelo de las pruebas de «no espera»: si el guardian rellenara, se veria. */
+const GUARDIAN_LARGE_FLOOR_MS = 2_000;
+
 /** Lo que tarda el guardian en devolver ese resultado, en milisegundos. */
-function guardianDuracionDe(RegisterScanResult $resultado): float
+function guardianDuracionDe(RegisterScanResult $resultado, int $suelo = GUARDIAN_FLOOR_MS): float
 {
-    $guardian = guardianDePrueba(['suelo' => GUARDIAN_FLOOR_MS]);
+    $guardian = guardianDePrueba(['suelo' => $suelo]);
     $inicio = hrtime(true);
 
     expect($guardian->register(escaneoGuardado(), static fn (): RegisterScanResult => $resultado))->toBe($resultado);
@@ -660,9 +668,10 @@ it('no hace esperar al fichaje aceptado ni al anti-rebote', function (Closure $d
     /** @var RegisterScanResult $resultado */
     $resultado = $desenlace();
 
-    // La mitad del suelo deja margen al planificador sin dejar pasar una espera
-    // entera: si el guardian rellenara, tardaria 30 ms o mas.
-    expect(guardianDuracionDe($resultado))->toBeLessThan(GUARDIAN_FLOOR_MS / 2);
+    // Con un suelo de dos segundos, rellenar se ve sin ambiguedad: devolver un
+    // resultado sin esperar cuesta microsegundos, y la mitad del suelo es el
+    // margen para cualquier maquina.
+    expect(guardianDuracionDe($resultado, GUARDIAN_LARGE_FLOOR_MS))->toBeLessThan(GUARDIAN_LARGE_FLOOR_MS / 2);
 })->with([
     'entrada' => [static fn (): RegisterScanResult => RegisterScanResult::accepted(
         scanId: GUARDIAN_SCAN_ID,
@@ -686,20 +695,20 @@ it('no hace esperar al fichaje aceptado ni al anti-rebote', function (Closure $d
 ])->group('RS-03', 'RF-AT-06', 'RNF-P-01');
 
 it('cuenta el suelo desde la entrada del escaneo, no desde que el caso de uso devuelve', function (): void {
-    // Un rechazo que ya tardo 20 ms en el caso de uso espera solo lo que falta:
-    // el suelo iguala por abajo, no se suma.
-    $guardian = guardianDePrueba(['suelo' => GUARDIAN_FLOOR_MS]);
+    // Un rechazo que ya tardo 250 ms en el caso de uso espera solo lo que falta
+    // hasta 300: el suelo iguala por abajo, no se suma. Sumado, serian 550.
+    $guardian = guardianDePrueba(['suelo' => 300]);
     $rechazo = RegisterScanResult::rejected(GUARDIAN_SCAN_ID, ScanResult::REJECTED_OUT_OF_ORDER, guardianInstante(), guardianInstante(), GUARDIAN_EMPLOYEE);
     $inicio = hrtime(true);
 
     $guardian->register(escaneoGuardado(), static function () use ($rechazo): RegisterScanResult {
-        usleep(20_000);
+        usleep(250_000);
 
         return $rechazo;
     });
 
     $duracion = (hrtime(true) - $inicio) / 1_000_000;
 
-    expect($duracion)->toBeGreaterThanOrEqual((float) GUARDIAN_FLOOR_MS)
-        ->and($duracion)->toBeLessThan(GUARDIAN_FLOOR_MS + 15.0);
+    expect($duracion)->toBeGreaterThanOrEqual(300.0)
+        ->and($duracion)->toBeLessThan(500.0);
 })->group('RS-03', 'RN-18');

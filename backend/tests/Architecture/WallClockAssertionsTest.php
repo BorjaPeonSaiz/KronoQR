@@ -31,7 +31,9 @@ use Tests\Support\Time\WallClockBudget;
  * de la maquina.
  */
 const WALL_CLOCK_ASSERTIONS_SIN_PRESUPUESTO = [
+    'tests/Feature/Attendance/OutOfOrderScanTest.php' => 'afirma un SUELO (todo rechazo rellenado hasta el doble del de RS-03, 33.6): una maquina cargada solo lo aleja',
     'tests/Feature/Attendance/UnprocessableScanDiscardTest.php' => 'afirma un SUELO (el relleno hasta el doble del de RS-03): una maquina cargada solo lo aleja',
+    'tests/Unit/Attendance/Application/UnprocessableScanGuardTest.php' => 'afirma SUELOS del guardian (33.6) y dos techos con un orden de magnitud de margen que solo distinguen «espera» de «no espera» (2 s frente a microsegundos, 300 ms frente a 550)',
     'tests/Feature/Health/CircuitBreakerWiringTest.php' => 'escribe un instante en el fichero del cortacircuitos; no mide nada',
     'tests/Integration/Database/ParallelRequestsBarrierTest.php' => 'compara el ORDEN de dos lecturas del reloj monotono (soltar antes que empezar), no una duracion: una maquina cargada no lo invierte',
     'tests/Integration/Install/InstallInterruptionTest.php' => 'plazo de espera de un proceso hijo, no una afirmacion de tiempo',
