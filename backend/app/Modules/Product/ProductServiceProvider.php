@@ -14,6 +14,7 @@ use App\Modules\Product\Application\Port\DataExportQueue;
 use App\Modules\Product\Application\Port\DataExportRepository;
 use App\Modules\Product\Application\Port\DataExportSource;
 use App\Modules\Product\Application\Port\DiagnosticsBundleWriter;
+use App\Modules\Product\Application\Port\DoctorFindingFilter;
 use App\Modules\Product\Application\Port\DoctorTranslator;
 use App\Modules\Product\Application\Port\ErrorEventRepository;
 use App\Modules\Product\Application\Port\ErrorMetrics;
@@ -110,6 +111,7 @@ use App\Modules\Product\Infrastructure\Console\ProductTelemetryCommand;
 use App\Modules\Product\Infrastructure\Console\SupportGrantCommand;
 use App\Modules\Product\Infrastructure\Console\SupportGrantsPruneReasonsCommand;
 use App\Modules\Product\Infrastructure\Console\SupportRevokeCommand;
+use App\Modules\Product\Infrastructure\Diagnostics\BundleDoctorFindingFilter;
 use App\Modules\Product\Infrastructure\Diagnostics\Collector\AuditCollector;
 use App\Modules\Product\Infrastructure\Diagnostics\Collector\ConfigurationCollector;
 use App\Modules\Product\Infrastructure\Diagnostics\Collector\DoctorCollector;
@@ -122,6 +124,7 @@ use App\Modules\Product\Infrastructure\Diagnostics\Collector\PersonalDataCollect
 use App\Modules\Product\Infrastructure\Diagnostics\Collector\ServicesCollector;
 use App\Modules\Product\Infrastructure\Diagnostics\Collector\UpdatesCollector;
 use App\Modules\Product\Infrastructure\Diagnostics\ConnectionProbeFailureClassifier;
+use App\Modules\Product\Infrastructure\Diagnostics\DiagnosticsLocations;
 use App\Modules\Product\Infrastructure\Diagnostics\FilePendingDiagnosticsAudits;
 use App\Modules\Product\Infrastructure\Diagnostics\HorizonQueueSupervisors;
 use App\Modules\Product\Infrastructure\Diagnostics\JsonDiagnosticsBundleWriter;
@@ -2128,6 +2131,18 @@ final class ProductServiceProvider extends ServiceProvider
             ),
         );
 
+        // Lo que el informe de `doctor` puede llevar dentro del paquete: sin
+        // rutas del servidor ni el nombre de `APP_URL` (ADR-020, enmienda del
+        // 01-11-2026). Solo lo usa `DoctorCollector`; el `product:doctor` local
+        // no lo pasa.
+        $this->app->bind(
+            DoctorFindingFilter::class,
+            static fn (): BundleDoctorFindingFilter => new BundleDoctorFindingFilter(
+                DiagnosticsLocations::fromConfiguration(),
+                array_map(strval(...), array_keys(GeneratedFileAreas::configuredRoots())),
+            ),
+        );
+
         // El reconocedor de caidas de Redis y PostgreSQL, tambien para
         // decidir si el asiento de un paquete se puede aplazar (ADR-020).
         $this->app->bind(ProbeFailureClassifier::class, ConnectionProbeFailureClassifier::class);
@@ -2157,6 +2172,7 @@ final class ProductServiceProvider extends ServiceProvider
                     new ConfigurationCollector(
                         settings: $app->make(GetSettingsHandler::class),
                         environment: $_ENV,
+                        locations: DiagnosticsLocations::fromConfiguration(),
                     ),
                     $app->make(ServicesCollector::class),
                     $app->make(DoctorCollector::class),
@@ -2167,7 +2183,7 @@ final class ProductServiceProvider extends ServiceProvider
                         $app->make(Clock::class),
                     ),
                     $app->make(MetricsCollector::class),
-                    new UpdatesCollector(Config::string('backup.path')),
+                    new UpdatesCollector(Config::string('backup.path'), DiagnosticsLocations::fromConfiguration()),
                     $app->make(AuditCollector::class),
                     new PersonalDataCollector(DB::connection(), $app->make(Clock::class)),
                 ],

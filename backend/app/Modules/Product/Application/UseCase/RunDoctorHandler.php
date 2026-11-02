@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Product\Application\UseCase;
 
+use App\Modules\Product\Application\Port\DoctorFindingFilter;
 use App\Modules\Product\Application\Port\DoctorProbe;
 use App\Modules\Product\Application\Port\DoctorTranslator;
 use App\Modules\Product\Application\Port\ProbeFailureClassifier;
@@ -64,18 +65,25 @@ final readonly class RunDoctorHandler
         private ?ProbeFailureClassifier $failures = null,
     ) {}
 
-    public function handle(string $locale): DoctorReport
+    /**
+     * @param  DoctorFindingFilter|null  $filter  Solo el informe que viaja en el
+     *                                            paquete de diagnostico lo pasa (ADR-020, enmienda del
+     *                                            01-11-2026): el `doctor` local enseña las rutas reales.
+     */
+    public function handle(string $locale, ?DoctorFindingFilter $filter = null): DoctorReport
     {
-        return UseCaseInstrumentation::run('product.run_doctor', fn (): DoctorReport => $this->doHandle($locale));
+        return UseCaseInstrumentation::run('product.run_doctor', fn (): DoctorReport => $this->doHandle($locale, $filter));
     }
 
-    private function doHandle(string $locale): DoctorReport
+    private function doHandle(string $locale, ?DoctorFindingFilter $filter): DoctorReport
     {
         $checks = [];
 
         foreach ($this->probes as $probe) {
             foreach ($this->findingsOf($probe) as $finding) {
-                $checks[] = $this->resolve($finding, $locale);
+                // Antes de redactar: el texto sustituye los parametros, asi que
+                // una ruta que llegara aqui acabaria tambien en `summary` y `fix`.
+                $checks[] = $this->resolve($filter?->filter($finding) ?? $finding, $locale);
             }
         }
 
