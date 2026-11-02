@@ -12,7 +12,13 @@ resuelven dos preguntas distintas:
   personales es una casilla aparte, **desmarcada**, que al marcarla enseña un
   aviso (`role="alert"`) con lo que va a llevar el paquete y con que queda
   registrado en auditoria — nunca es el valor por defecto ni el efecto
-  secundario de otra opcion (RL-19).
+  secundario de otra opcion (RL-19). Con la casilla marcada el paquete sale
+  **cifrado** para el fabricante (`.sealed.json`, tipo
+  `application/vnd.kronoqr.diagnostics-sealed+json`) y el hotel no puede
+  abrirlo; el anonimizado (`.json`) si se puede revisar. Si la instalacion no
+  tiene la clave publica de soporte, el servidor responde `503`
+  `diagnostics-sealing-unavailable`: mensaje propio, sin reintento, y se envia
+  el anonimizado.
 - **«¿Como dejo entrar al fabricante si hace falta?»** — los accesos de
   soporte (`listSupportGrants`, `grantSupportAccess`, `revokeSupportAccess`).
   Cada concesion tiene motivo obligatorio, alcance y caducidad; el token que
@@ -30,7 +36,7 @@ fichero puede llevar, si se pide expresamente, la plantilla y los fichajes de
 la instalacion.
 
 **No decide el nombre del fichero.** Lo trae `Content-Disposition`
-(`kronoqr-diagnostics-<version>-<UTC>.json`); esta pantalla solo lo enseña de
+(`kronoqr-diagnostics-<version>-<UTC>.json` o `….sealed.json`); esta pantalla solo lo enseña de
 vuelta en el mensaje de exito para que se pueda contrastar con lo que se ha
 guardado.
 
