@@ -31,6 +31,11 @@ use Illuminate\Support\Facades\Schema;
  *   los privilegios del propietario de esta tabla, asi que el rol de la
  *   aplicacion no necesita `DELETE` aqui para purgar `error_events`
  *   (`ErrorEventResolutionsSchemaTest` lo demuestra con ese rol).
+ * - **Y por su propia fecha**, aunque el grupo siga vivo: un grupo que se
+ *   repite no vence nunca, y la cascada sola dejaba para siempre quien lo
+ *   resolvio cada vez. La misma pasada de 90 dias borra las resoluciones con
+ *   `resolved_at` anterior al corte por la funcion `SECURITY DEFINER` de
+ *   `2026_11_02_100000`, sin dar `DELETE` a la aplicacion.
  * - **`UNIQUE (error_event_id, resolved_at)`**: dos resoluciones del mismo
  *   grupo en el mismo instante son la misma. Es lo que hace idempotente la
  *   copia del historial al fusionar dos grupos.
@@ -52,9 +57,10 @@ use Illuminate\Support\Facades\Schema;
  * —para que uno resuelto antes de la actualizacion y reabierto despues siga
  * mostrando su resolucion anterior— y es un `INSERT … SELECT` que **solo lee**
  * `error_events`: no toma bloqueo de fila sobre ella ni la reescribe. La tabla
- * esta acotada por la purga de 90 dias. La version anterior no conoce esta
- * tabla y sigue funcionando: si resuelve durante la actualizacion, esa
- * resolucion solo falta en el historial.
+ * esta acotada por la purga de 90 dias, por grupo y por fecha de resolucion
+ * (`2026_11_02_100000`). La version anterior no conoce esta tabla y sigue
+ * funcionando: si resuelve durante la actualizacion, esa resolucion solo falta
+ * en el historial.
  *
  * ## `down()` verificado
  *

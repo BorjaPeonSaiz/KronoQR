@@ -137,6 +137,12 @@ interface ErrorEventRepository
      * error que ocurra mientras corre. El bucle acota cada sentencia y suelta
      * entre una y otra.
      *
+     * **Tambien las resoluciones vencidas de un grupo vivo** (2.3.0): las de
+     * `error_event_resolutions` con `resolved_at` anterior al mismo corte, para
+     * que un grupo que se repite no conserve para siempre quien lo resolvio
+     * cada vez (RL-11). La cifra que devuelve sigue siendo la de grupos, que es
+     * la que cuenta el ensayo.
+     *
      * @param  int  $batchSize  Filas por sentencia (`compliance.retention.batch_size`).
      */
     public function pruneOlderThan(DateTimeImmutable $cutoff, int $batchSize): int;

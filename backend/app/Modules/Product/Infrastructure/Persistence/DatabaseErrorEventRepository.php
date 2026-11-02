@@ -439,7 +439,44 @@ final readonly class DatabaseErrorEventRepository implements ErrorEventRepositor
             $removed += $batch;
         } while ($batch === $size);
 
+        $this->pruneResolutionsOlderThan($timestamp, $size);
+
         return $removed;
+    }
+
+    /**
+     * LAS RESOLUCIONES VENCIDAS DE UN GRUPO QUE SIGUE VIVO (RL-11, 2.3.0).
+     *
+     * La cascada solo se lleva el historial de un grupo que vence; uno que se
+     * repite conservaria para siempre quien lo resolvio cada vez. Con el mismo
+     * corte y por lotes, por `error_event_resolutions_purge_batch()`
+     * (`2026_11_02_100000`): la aplicacion no tiene `DELETE` sobre la tabla,
+     * que es solo-append, y la funcion del propietario solo sabe borrar por
+     * antiguedad.
+     *
+     * Solo si la funcion existe: el ciclo de retencion de `Compliance` corre
+     * tambien en una base a medio migrar, y ahi no hay nada que purgar todavia.
+     */
+    private function pruneResolutionsOlderThan(string $timestamp, int $size): void
+    {
+        /** @var object{installed: bool|string|int|null}|null $installed */
+        $installed = $this->reads->selectOne(
+            "SELECT to_regprocedure('public.error_event_resolutions_purge_batch(timestamptz, integer)') IS NOT NULL AS installed",
+        );
+
+        if ($installed === null || ! self::flag($installed->installed)) {
+            return;
+        }
+
+        do {
+            /** @var object{removed: int|string|null}|null $row */
+            $row = $this->reads->selectOne(
+                'SELECT public.error_event_resolutions_purge_batch(?::timestamptz, ?) AS removed',
+                [$timestamp, $size],
+            );
+
+            $batch = (int) ($row->removed ?? 0);
+        } while ($batch === $size);
     }
 
     public function summary(DateTimeImmutable $since): ErrorEventSummary

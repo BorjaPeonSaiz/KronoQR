@@ -24,8 +24,10 @@ use Tests\Support\Workforce\WorkforceFixtures;
  * Lo que se afirma es lo que el esquema promete y el codigo da por hecho:
  * solo-append para la aplicacion, una resolucion por grupo e instante, la
  * purga del grupo arrastrando su historial **sin que la aplicacion tenga
- * `DELETE` aqui**, la resolucion anterior intacta tras reabrir, la copia del
- * historial al fusionar grupos y un `down()` que existe de verdad.
+ * `DELETE` aqui**, la purga de las resoluciones vencidas de un grupo que sigue
+ * vivo por la funcion `SECURITY DEFINER` de `2026_11_02_100000`, la resolucion
+ * anterior intacta tras reabrir, la copia del historial al fusionar grupos y
+ * un `down()` que existe de verdad.
  */
 
 uses(RefreshDatabase::class);
@@ -242,3 +244,100 @@ it('la migracion se deshace y se reaplica dejando la tabla igual', function (): 
         ->and(sqlstateDelHistorial(static fn () => DB::table('error_event_resolutions')->delete()))->toBe('42501')
         ->and(sqlstateDelHistorial(static fn () => DB::table('error_event_resolutions')->update(['created_at' => '2026-09-09 09:00:00+00'])))->toBe('42501');
 })->group('RF-PD-15');
+
+it('la purga de 90 dias se lleva las resoluciones vencidas de un grupo vivo y conserva las recientes', function (): void {
+    // Revision de la 33.4: un grupo que se repite no vence nunca, y la cascada
+    // dejaba sus resoluciones —con quien resolvio— para siempre. Por las dos
+    // purgas, con el rol de la aplicacion y lotes de una fila, para que el
+    // bucle de lotes de verdad de vueltas.
+    $autor = ManagementUsers::withRole(UserRole::ADMIN);
+    $vivo = grupoConHistorial('2026-09-09 08:00:00+00');
+    $otroVivo = grupoConHistorial('2026-09-08 08:00:00+00');
+
+    resolucionDelHistorial($vivo, '2026-04-01 09:00:00+00', $autor->id);
+    resolucionDelHistorial($vivo, '2026-05-01 09:00:00+00', $autor->id);
+    resolucionDelHistorial($vivo, '2026-09-01 09:00:00+00', $autor->id);
+    resolucionDelHistorial($otroVivo, '2026-05-02 09:00:00+00', $autor->id);
+    resolucionDelHistorial($otroVivo, '2026-09-02 09:00:00+00', $autor->id);
+
+    /** @var object{rol: string}|null $sesion */
+    $sesion = DB::selectOne('SELECT current_user AS rol');
+
+    expect($sesion?->rol)->toBe(AuditLogSchema::applicationRole());
+
+    $corte = new DateTimeImmutable('2026-06-10 00:00:00+00');
+
+    // Ningun grupo vence: la cifra de grupos sigue siendo cero.
+    expect(app(ErrorEventRepository::class)->pruneOlderThan(new DateTimeImmutable('2026-04-15 00:00:00+00'), 1))->toBe(0)
+        ->and(DB::table('error_event_resolutions')->where('error_event_id', $vivo)->count())->toBe(2)
+        ->and(DB::table('error_event_resolutions')->where('error_event_id', $otroVivo)->count())->toBe(2);
+
+    // El ciclo de retencion, con su corte, se lleva la que quedaba vencida.
+    expect((new DatabaseErrorHistoryArchive(DB::connection()))->purge($corte, 1)->rows)->toBe(0);
+
+    $quedan = DB::table('error_event_resolutions')->orderBy('error_event_id')->pluck('error_event_id')->all();
+
+    expect($quedan)->toBe([$vivo, $otroVivo])
+        ->and(DB::table('error_events')->whereIn('id', [$vivo, $otroVivo])->count())->toBe(2)
+        // Y la aplicacion sigue sin poder borrar una resolucion por su cuenta.
+        ->and(sqlstateDelHistorial(static fn () => DB::table('error_event_resolutions')->delete()))->toBe('42501')
+        ->and(DB::table('error_event_resolutions')->count())->toBe(2);
+})->group('RF-PD-15', 'RL-11');
+
+it('la funcion de purga es SECURITY DEFINER con search_path, solo la ejecuta la aplicacion y rechaza un lote fuera de rango', function (): void {
+    $firma = 'public.error_event_resolutions_purge_batch(timestamptz, integer)';
+
+    /** @var object{definer: bool, search_path: bool, app: bool, publico: bool} $funcion */
+    $funcion = DB::selectOne(
+        <<<'SQL'
+            SELECT p.prosecdef AS definer,
+                   coalesce((SELECT bool_or(c LIKE 'search_path=%') FROM unnest(p.proconfig) AS c), false) AS search_path,
+                   has_function_privilege(?, p.oid, 'EXECUTE') AS app,
+                   EXISTS (SELECT 1 FROM aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+                            WHERE a.grantee = 0 AND a.privilege_type = 'EXECUTE') AS publico
+              FROM pg_proc p
+             WHERE p.oid = ?::regprocedure
+            SQL,
+        [AuditLogSchema::applicationRole(), $firma],
+    );
+
+    expect($funcion->definer)->toBeTrue()
+        ->and($funcion->search_path)->toBeTrue()
+        ->and($funcion->app)->toBeTrue()
+        ->and($funcion->publico)->toBeFalse()
+        ->and(sqlstateDelHistorial(static fn () => DB::select('SELECT public.error_event_resolutions_purge_batch(now(), 0)')))->toBe('22023')
+        ->and(sqlstateDelHistorial(static fn () => DB::select('SELECT public.error_event_resolutions_purge_batch(now(), 10001)')))->toBe('22023')
+        ->and(sqlstateDelHistorial(static fn () => DB::select('SELECT public.error_event_resolutions_purge_batch(NULL, 10)')))->toBe('22023');
+})->group('RF-PD-15', 'RL-11', 'RS-07');
+
+it('la migracion de la funcion de purga se deshace y se reaplica con sus permisos', function (): void {
+    $migracion = require database_path('migrations/2026_11_02_100000_purge_error_event_resolutions_by_age.php');
+    $existe = static function (): bool {
+        /** @var object{hay: bool}|null $fila */
+        $fila = DB::connection('pgsql_migrator')
+            ->selectOne("SELECT to_regprocedure('public.error_event_resolutions_purge_batch(timestamptz, integer)') IS NOT NULL AS hay");
+
+        return $fila?->hay === true;
+    };
+
+    DB::setDefaultConnection('pgsql_migrator');
+
+    try {
+        DB::connection('pgsql_migrator')->transaction(static fn () => $migracion->down());
+
+        expect($existe())->toBeFalse();
+
+        DB::connection('pgsql_migrator')->transaction(static fn () => $migracion->up());
+    } finally {
+        DB::setDefaultConnection('pgsql');
+    }
+
+    $grupo = grupoConHistorial();
+    resolucionDelHistorial($grupo, '2026-05-01 09:00:00+00');
+
+    /** @var object{borradas: int}|null $purga */
+    $purga = DB::selectOne("SELECT public.error_event_resolutions_purge_batch('2026-06-10 00:00:00+00', 10) AS borradas");
+
+    expect($existe())->toBeTrue()
+        ->and($purga?->borradas)->toBe(1);
+})->group('RF-PD-15', 'RL-11');
