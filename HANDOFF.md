@@ -297,7 +297,7 @@ Lo que conviene saber del bloque 5:
 - `package.sh` deja fuera del paquete los runbooks internos `fallo-de-ci.md` y `triaje-hallazgos-seguridad.md` (I10). Ningún documento que viaja puede enlazarlos: lo comprueban `ClientDocumentationTest` y `check-package-links.sh`.
 - La guía de RRHH §5.4 (es/en) explica «Este tramo terminó en pausa» y RN-05 (ADR-058).
 
-**Siguiente acción (01-11-2026):** bloque 33 parcial en `fix/riesgos-doc07-backend` (33.3, 33.4, 33.5 y 33.6; `backend-laravel`, con diseño y cierre de cada fila por `seguridad-cumplimiento`), después 33.8 y 33.11, 34.1, B35 y B32 con 33.12 (el cierre del doc 07 va al final porque recoge lo que resuelvan B33 a B35). El bloque final, solo con orden del propietario.
+**Siguiente acción (02-11-2026):** bloque 33 parcial en `fix/riesgos-doc07-backend`. Hechas en commits locales (subido hasta `592bc5b0`): 33.11 (sin migración, ADR-062 §1), 33.5, 33.6 (+ k6 `RS-03-RN-18` juzga solo mínimos, decisión del propietario del 02-11), 33.4 (backend + panel) y 33.3 (enmienda de ADR-020 aprobada el 01-11). En curso: 33.8 (`producto-licencia`; paquete con datos personales cifrado, anonimizado sin rutas ni host). Pendiente al acabar la 33.8: aplicar los textos de A-13 (doc 07) y de la fila `RS-03-RN-18` de `operacion.md` es/en, la parte de panel de la 33.8 (`frontend-panel`), CI manual completa, revisiones `revisor-codigo` y `seguridad-cumplimiento`, PR y merge. **El propietario tiene que generar el par de claves de diagnóstico antes de publicar la 2.3.0** (`release-gate` lo exige). Después: 34.1, B35 y B32 con 33.12. El bloque final, solo con orden del propietario.
 
 **B17 a B26 y B24 integrados** (orden del 15-10-2026: un PR por bloque en verde):
 - B17 (#161), B18 (#162), B19 (#167), B20 (#168) y B21 (#169).
