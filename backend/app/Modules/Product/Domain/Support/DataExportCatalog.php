@@ -136,6 +136,11 @@ final class DataExportCatalog
      * `cancelled_at`, cuando quien pidio un informe en diferido lo detuvo. Una
      * columna mas es un cambio de forma.
      *
+     * **`7` desde la 2.3.0** (RN-22, ADR-061 §1, A4 del bloque 17): el ZIP gana
+     * `scan_processing_failures.csv`, cada intento fallido de procesar un
+     * fichaje que el servidor apunto antes de descartarlo. Es dato
+     * seudonimizado del cliente, y un fichero nuevo es un cambio de forma.
+     *
      * **`8` desde la 2.3.0** (tarea 33.4): el ZIP gana
      * `error_event_resolutions.csv`, cada vez que un grupo del historico de
      * errores se dio por resuelto. Un fichero nuevo es un cambio de forma.

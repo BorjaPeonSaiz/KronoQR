@@ -380,14 +380,14 @@ final readonly class DatabaseErrorEventRepository implements ErrorEventRepositor
 
         $this->reads->affectingStatement(
             <<<'SQL'
-                WITH resuelto AS (
+                WITH resolved AS (
                     UPDATE error_events
                        SET resolved_at = ?, resolved_by_user_id = ?, updated_at = ?
                      WHERE id = ? AND resolved_at IS NULL
                     RETURNING id, resolved_at, resolved_by_user_id
                 )
                 INSERT INTO error_event_resolutions (error_event_id, resolved_at, resolved_by_user_id, created_at)
-                SELECT id, resolved_at, resolved_by_user_id, ? FROM resuelto
+                SELECT id, resolved_at, resolved_by_user_id, ? FROM resolved
                 ON CONFLICT (error_event_id, resolved_at) DO NOTHING
                 SQL,
             [$instant, $userId, $instant, $id, $instant],
