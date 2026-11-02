@@ -48,7 +48,9 @@ return [
      * RN-14/RN-27 y RN-18— se rellena en `UnprocessableScanGuard` hasta 2 x este
      * valor, el mismo suelo que el descarte de ADR-061. Por eso la cota: por
      * encima de 60, un lote de 50 rechazos pasa de 6 s y se acerca al corte de
-     * 8 s del quiosco (`docs/cliente/configuracion.md` §6.5).
+     * 8 s del quiosco (`docs/cliente/configuracion.md` §6.5). `product:doctor`
+     * hace la cuenta con el lote configurado y avisa por encima del 75 % del
+     * corte (`RejectionFloorBudgetProbe`, `kiosk.rejection_floor_budget`).
      */
     'rejection_floor_ms' => (int) env('IDENTITY_CREDENTIAL_REJECTION_FLOOR_MS', 25),
 

@@ -148,6 +148,7 @@ use App\Modules\Product\Infrastructure\Diagnostics\Probe\MailProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\PendingDiagnosticsAuditProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\PermissionsProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\QueueProbe;
+use App\Modules\Product\Infrastructure\Diagnostics\Probe\RejectionFloorBudgetProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\ScanDiscardBudgetProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\ScheduledOffboardingsProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\SchedulerProbe;
@@ -2121,6 +2122,14 @@ final class ProductServiceProvider extends ServiceProvider
                     new ScanDiscardBudgetProbe(
                         Config::get('attendance.scan_discard.daily_budget'),
                         Config::integer('attendance.scan_discard.budget_ceiling', 20),
+                    ),
+                    /*
+                     * El suelo de los rechazos del fichaje frente al corte de
+                     * 8 s del quiosco (RS-03, A-13). Aviso: el quiosco reintenta.
+                     */
+                    new RejectionFloorBudgetProbe(
+                        Config::integer('security.rejection_floor_ms', 25),
+                        Config::integer('kiosk.batch_max_size', 50),
                     ),
                     $app->make(LicenseProbe::class),
                 ],

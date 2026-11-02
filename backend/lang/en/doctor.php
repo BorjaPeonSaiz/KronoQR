@@ -566,6 +566,14 @@ return [
 
         'kiosk' => [
             'probe' => $probe,
+            'rejection_floor_budget' => [
+                'ok' => 'A kiosk batch of :batch_size rejections takes at most :worst_case_ms ms with the '
+                    .':floor_ms ms floor, well within the :timeout_ms ms cut-off of the tablet.',
+                'warning' => 'IDENTITY_CREDENTIAL_REJECTION_FLOOR_MS is :floor_ms: a kiosk batch of :batch_size '
+                    .'rejections would take :worst_case_ms ms, over 75 % of the :timeout_ms ms cut-off of the tablet. '
+                    .'Past it, the tablet treats the upload as failed and retries later: no clocking is lost, '
+                    .'but the offline queue takes longer to drain.',
+            ],
             'scan_discard_budget' => [
                 'ok' => 'The server discard budget is within its ceiling (:ceiling per kiosk and day).',
                 'warning' => 'SCAN_DISCARD_DAILY_BUDGET is :configured, above the ceiling of :ceiling '
@@ -1213,6 +1221,11 @@ return [
 
         'kiosk' => [
             'probe' => $probeFix,
+            'rejection_floor_budget' => [
+                'warning' => "Set IDENTITY_CREDENTIAL_REJECTION_FLOOR_MS to :max_floor_ms or less in the .env file and\n"
+                    ."restart the application (with the default batch of 50, the maximum is 60; see configuration.md §6.5).\n"
+                    .'In the meantime clocking keeps working: the tablets retry whatever they cannot upload.',
+            ],
             'scan_discard_budget' => [
                 'warning' => "Set SCAN_DISCARD_DAILY_BUDGET to :ceiling or less in the .env file and restart the\n"
                     .'application. Until then the server applies :ceiling, which is the maximum.',

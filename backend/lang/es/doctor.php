@@ -620,6 +620,14 @@ return [
 
         'kiosk' => [
             'probe' => $probe,
+            'rejection_floor_budget' => [
+                'ok' => 'Un lote de :batch_size rechazos del quiosco tarda como mucho :worst_case_ms ms con el '
+                    .'suelo de :floor_ms ms, holgado frente al corte de :timeout_ms ms de la tablet.',
+                'warning' => 'IDENTITY_CREDENTIAL_REJECTION_FLOOR_MS vale :floor_ms: un lote de :batch_size rechazos '
+                    .'del quiosco tardaria :worst_case_ms ms, mas del 75 % del corte de :timeout_ms ms de la tablet. '
+                    .'Si lo pasa, la tablet da el envio por fallido y lo reintenta mas tarde: no se pierde ningun '
+                    .'fichaje, pero la cola sin conexion tarda en vaciarse.',
+            ],
             'scan_discard_budget' => [
                 'ok' => 'El cupo de descartes del servidor esta dentro de su techo (:ceiling por quiosco y dia).',
                 'warning' => 'SCAN_DISCARD_DAILY_BUDGET vale :configured, por encima del techo de :ceiling '
@@ -1277,6 +1285,11 @@ return [
 
         'kiosk' => [
             'probe' => $probeFix,
+            'rejection_floor_budget' => [
+                'warning' => "Pon IDENTITY_CREDENTIAL_REJECTION_FLOOR_MS a :max_floor_ms o menos en el fichero .env y\n"
+                    ."reinicia la aplicacion (con el lote de serie de 50, el maximo es 60; ver configuracion.md §6.5).\n"
+                    .'Mientras tanto el fichaje sigue funcionando: las tablets reintentan lo que no llegan a enviar.',
+            ],
             'scan_discard_budget' => [
                 'warning' => "Pon SCAN_DISCARD_DAILY_BUDGET a :ceiling o menos en el fichero .env y reinicia la\n"
                     .'aplicacion. Hasta entonces el servidor aplica :ceiling, que es el maximo.',
