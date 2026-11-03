@@ -6,6 +6,14 @@ use App\Modules\Attendance\Application\Port\WorkDayRepository;
 use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
 use App\Modules\Attendance\Domain\ValueObject\WorkDate;
+use App\Modules\Compliance\Application\Port\LegalExportAudit;
+use App\Modules\Compliance\Domain\ValueObject\LegalExportManifest;
+use App\Modules\Compliance\Domain\ValueObject\LegalExportTally;
+use App\Modules\Product\Application\Command\ActivateLicenseCommand;
+use App\Modules\Product\Application\UseCase\ActivateLicenseHandler;
+use App\Modules\Product\Application\UseCase\GetLicenseStatusHandler;
+use App\Modules\Product\Domain\ValueObject\LicenseState;
+use App\Modules\Shared\Application\Port\FeatureGate;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -14,9 +22,11 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Factory\ClockingPolicyFactory;
 use Tests\Support\Identity\ConsoleSignature;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Shared\DeactivatedWhileSigning;
 use Tests\Support\Shared\GeneratedFilesSandbox;
 use Tests\Support\Shared\InteractiveConsole;
+use Tests\Support\Time\FrozenTime;
 use Tests\Support\Time\Instants;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -99,6 +109,64 @@ it('genera la exportacion con el asiento a nombre de la cuenta de --responsible,
     'admin por uuid' => [UserRole::ADMIN, true],
     'auditor por correo' => [UserRole::AUDITOR, false],
 ])->group('RF-IN-05', 'RL-04', 'RS-05');
+
+it('CON LA LICENCIA CADUCADA se exporta firmado y el asiento es de la cuenta', function (): void {
+    // Regla dura 15 y ADR-019: la firma no es una puerta que la licencia pueda
+    // cerrar. Una licencia real, vencida, y el reloj despues de su vigencia.
+    $claves = LicenseKeys::install();
+    FrozenTime::at('2026-06-15 09:00:00');
+    app(ActivateLicenseHandler::class)->handle(new ActivateLicenseCommand($claves->issue([
+        'valid_from' => '2026-01-01T00:00:00Z',
+        'valid_until' => '2026-12-31T23:59:59Z',
+    ])));
+    FrozenTime::at('2027-06-15 09:00:00');
+    app()->forgetInstance(FeatureGate::class);
+
+    expect(app(GetLicenseStatusHandler::class)->handle()->state)->toBe(LicenseState::Expired);
+
+    $rrhh = ManagementUsers::withRole(UserRole::RRHH);
+    $destino = exportacionLegalFirmadaDestino();
+
+    $orden = exportacionLegalFirmadaOrden($destino, ConsoleSignature::for($rrhh));
+
+    expect($orden['code'])->toBe(0, $orden['output'])
+        ->and(is_file($destino))->toBeTrue()
+        ->and(DB::table('audit_log')->where('action', 'legal_export.generated')->value('actor_id'))->toBe($rrhh->id);
+})->group('RF-IN-05', 'RF-PD-05', 'RL-04');
+
+it('si el asiento falla despues de escribir, no queda fichero: ni el parcial ni el final', function (): void {
+    $rrhh = ManagementUsers::withRole(UserRole::RRHH);
+    $destino = exportacionLegalFirmadaDestino();
+    // Lo que habia en la ruta no se trunca antes de saber si la nueva vale.
+    file_put_contents($destino, 'la entrega anterior');
+    app()->instance(LegalExportAudit::class, new class implements LegalExportAudit
+    {
+        public function recordGeneration(LegalExportManifest $manifest, LegalExportTally $tally, ?int $signedByUserId = null): void
+        {
+            throw new RuntimeException('audit_log no responde');
+        }
+    });
+
+    expect(fn () => exportacionLegalFirmadaOrden($destino, ConsoleSignature::for($rrhh)))
+        ->toThrow(RuntimeException::class, 'audit_log no responde');
+
+    expect(file_get_contents($destino))->toBe('la entrega anterior')
+        ->and(glob(dirname($destino).'/*.partial-*') ?: [])->toBe([])
+        ->and(DB::table('audit_log')->where('action', 'legal_export.generated')->count())->toBe(0);
+})->group('RF-IN-05', 'RL-04', 'RS-05');
+
+it('al terminar deja el fichero final y ningun parcial', function (): void {
+    $rrhh = ManagementUsers::withRole(UserRole::RRHH);
+    $destino = exportacionLegalFirmadaDestino();
+
+    $orden = exportacionLegalFirmadaOrden($destino, ConsoleSignature::for($rrhh));
+
+    expect($orden['code'])->toBe(0, $orden['output'])
+        ->and(is_file($destino))->toBeTrue()
+        ->and((string) file_get_contents($destino))->toContain('2026-03-14')
+        ->and(fileperms($destino) & 0o777)->toBe(0o600)
+        ->and(glob(dirname($destino).'/*.partial-*') ?: [])->toBe([]);
+})->group('RF-IN-05', 'RL-12');
 
 it('sale con 2 sin asiento ni fichero si la firma no vale', function (Closure $opciones, string $dice): void {
     $destino = exportacionLegalFirmadaDestino();

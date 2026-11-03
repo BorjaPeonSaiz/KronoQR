@@ -12,6 +12,7 @@ use App\Modules\Compliance\Application\Port\LegalExportSource;
 use App\Modules\Compliance\Application\Port\LegalExportWriter;
 use App\Modules\Compliance\Application\Support\LegalExporters;
 use App\Modules\Compliance\Domain\ValueObject\LegalExportManifest;
+use App\Modules\Compliance\Domain\ValueObject\LegalExportTally;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
@@ -26,9 +27,9 @@ use Illuminate\Database\ConnectionInterface;
  *
  * ```
  * 1. Abrir transaccion de solo lectura sobre el registro
- * 2. Recorrer el origen y escribir el fichero, fila a fila
+ * 2. Recorrer el origen y escribir un parcial junto al destino, fila a fila
  * 3. Escribir el asiento de audit_log con periodo, alcance y recuento
- * 4. Devolver el fichero ya cerrado
+ * 4. Confirmar y, solo entonces, publicar el parcial en el destino
  * ```
  *
  * ## Por que hay una transaccion en algo que solo lee
@@ -45,9 +46,11 @@ use Illuminate\Database\ConnectionInterface;
  *
  * El segundo: **el asiento entra en la misma unidad de trabajo**. Si la
  * escritura de `audit_log` fallara, la exportacion no se da por hecha (regla
- * dura 6, ADR-027). El fichero se habra escrito en disco, pero quien llamo
- * recibe el error y no lo entrega: una descarga del registro horario de la
- * plantilla que no deje traza es exactamente lo que RS-05 prohibe.
+ * dura 6, ADR-027): el parcial se borra y el destino no llega a existir, o
+ * conserva lo que tenia. Una copia del registro horario de la plantilla que no
+ * deje traza es exactamente lo que RS-05 prohibe. La unica excepcion es un
+ * destino que no se puede sustituir —un dispositivo o una tuberia—, donde lo
+ * escrito sale antes del asiento ({@see LegalExportWriter::stagingPathFor()}).
  *
  * ## Lo que NO hace
  *
@@ -91,7 +94,7 @@ final readonly class GenerateLegalExport
         // escribe ningun fichero. La comprobacion que cuenta es la de despues,
         // con la cadena tomada.
         if ($command->signedByUserId !== null && ! $this->canSign($command->signedByUserId)) {
-            throw LegalExportSignerNotAllowed::beforeWriting();
+            throw new LegalExportSignerNotAllowed;
         }
 
         $manifest = new LegalExportManifest(
@@ -100,23 +103,38 @@ final readonly class GenerateLegalExport
             scope: $command->scope,
         );
 
-        $export = $this->connection->transaction(
-            fn (): LegalExport => $this->generate($command, $manifest),
-        );
+        // Se escribe en un parcial y se publica en el destino solo cuando el
+        // asiento ya esta confirmado. Ante cualquier fallo —el asiento, la
+        // espera del candado, la conexion, una baja de quien firma— el parcial
+        // se borra: no queda nunca un registro horario nominal sin asiento, y
+        // una exportacion anterior en la misma ruta no se trunca antes de saber
+        // si esta vale.
+        $staging = $this->writer->stagingPathFor($command->destinationPath);
+
+        try {
+            /** @var LegalExportTally $tally */
+            $tally = $this->connection->transaction(
+                fn (): LegalExportTally => $this->generate($command, $manifest, $staging),
+            );
+
+            $this->writer->publish($staging, $command->destinationPath);
+        } finally {
+            $this->writer->discard($staging, $command->destinationPath);
+        }
 
         // Fuera de la transaccion a proposito: el fichero esta escrito y el
         // asiento confirmado, asi que un fallo de Redis no puede convertir una
         // exportacion valida en un error que invite a repetirla.
         $this->metrics->exportGenerated($manifest->scope->metricLabel());
 
-        return $export;
+        return new LegalExport($manifest, $command->destinationPath, $tally);
     }
 
-    private function generate(GenerateLegalExportCommand $command, LegalExportManifest $manifest): LegalExport
+    private function generate(GenerateLegalExportCommand $command, LegalExportManifest $manifest, string $staging): LegalExportTally
     {
         $tally = $this->writer->write(
             $manifest,
-            $command->destinationPath,
+            $staging,
             $this->source->records($command->period, $command->scope),
         );
 
@@ -125,7 +143,7 @@ final readonly class GenerateLegalExport
         if ($command->signedByUserId === null) {
             $this->audit->recordGeneration($manifest, $tally);
 
-            return new LegalExport($manifest, $command->destinationPath, $tally);
+            return $tally;
         }
 
         $signer = $command->signedByUserId;
@@ -137,16 +155,17 @@ final readonly class GenerateLegalExport
         // por quien ya no responde. La cadena se toma aqui y no al empezar: con
         // ella se para todo lo que audita, y la escritura recorre el periodo
         // entero (ADR-046). El candado dura hasta que confirma la transaccion
-        // de fuera, la misma que el asiento.
+        // de fuera, la misma que el asiento. El parcial ya esta escrito, pero
+        // si esto lanza no se publica.
         $this->serialized->withChainLock(function () use ($manifest, $tally, $signer): void {
             if (! $this->canSign($signer)) {
-                throw LegalExportSignerNotAllowed::afterWriting();
+                throw new LegalExportSignerNotAllowed;
             }
 
             $this->audit->recordGeneration($manifest, $tally, $signer);
         });
 
-        return new LegalExport($manifest, $command->destinationPath, $tally);
+        return $tally;
     }
 
     private function canSign(int $userId): bool

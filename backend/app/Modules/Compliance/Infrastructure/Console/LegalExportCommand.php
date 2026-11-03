@@ -61,18 +61,23 @@ use Illuminate\Support\Facades\Log;
  * usaria para no dejarla.
  *
  * El caso de uso vuelve a comprobar la cuenta antes de leer y con la cadena
- * tomada antes del asiento. Si la baja llega mientras se escribe el fichero,
- * no hay asiento y esta orden borra el fichero: un registro horario nominal
- * sin constancia no se entrega.
+ * tomada antes del asiento, y escribe en un parcial que solo publica en la ruta
+ * de destino cuando el asiento ya esta confirmado. Si algo falla —la baja de
+ * quien firma, el asiento, la conexion—, borra el parcial: un registro horario
+ * nominal sin constancia no se entrega, y lo que hubiera en esa ruta sigue
+ * intacto.
  *
  * ## Codigos de salida
  *
- * `0` si el fichero se escribio; `1` si el periodo no es valido o la persona
- * responde que no a la firma; `2` si falta `--responsible`, la cuenta no puede
- * firmar (al preguntar o al firmar) o falta o no cuadra `--responsible-confirm`.
- * Con `1` o `2` no hay asiento ni fichero. Un periodo sin jornadas registradas
- * es `0` y un fichero con su cabecera de criterios: «no hay nada» tambien es
- * una afirmacion que hay que poder entregar.
+ * `0` si el fichero se escribio; `1` si el periodo no es valido, la persona
+ * responde que no a la firma o la generacion falla; `2` si falta
+ * `--responsible`, la cuenta no puede firmar (al preguntar o al firmar) o falta
+ * o no cuadra `--responsible-confirm`. Con `1` o `2` no hay asiento ni fichero
+ * nuevo. La unica excepcion es un `--output` que no es un fichero normal
+ * (`/dev/stdout`, una tuberia): ahi lo escrito sale antes del asiento. Un
+ * periodo sin jornadas registradas es `0` y un fichero con su cabecera de
+ * criterios: «no hay nada» tambien es una afirmacion que hay que poder
+ * entregar.
  */
 final class LegalExportCommand extends Command
 {
@@ -112,25 +117,18 @@ final class LegalExportCommand extends Command
             return $responsible;
         }
 
-        $destination = $this->destinationPath($period->slug());
-
         try {
             $export = $generate->handle(new GenerateLegalExportCommand(
                 period: $period,
                 scope: $scope,
-                destinationPath: $destination,
+                destinationPath: $this->destinationPath($period->slug()),
                 // La cuenta que ha confirmado su firma: el asiento es suyo,
                 // como cuando se descarga desde el panel.
                 signedByUserId: $responsible->id,
             ));
-        } catch (LegalExportSignerNotAllowed $notAllowed) {
+        } catch (LegalExportSignerNotAllowed) {
             // La cuenta se dio de baja o perdio el rol entre la pregunta y la
-            // firma: no hay asiento, y el fichero que llego a escribirse no se
-            // entrega.
-            if ($notAllowed->fileWritten && is_file($destination)) {
-                unlink($destination);
-            }
-
+            // firma: no hay asiento, y el caso de uso no ha publicado nada.
             return ConsoleResponsible::noLongerAllowed($this);
         }
 
@@ -178,30 +176,13 @@ final class LegalExportCommand extends Command
      */
     private function signedBy(ResponsibleAccounts $accounts, LegalExportPeriod $period, LegalExportScope $scope): ResponsibleAccount|int
     {
-        $option = $this->stringOption('responsible');
-
-        if ($option === '') {
-            return ConsoleResponsible::missing($this);
-        }
-
         // Los roles que la descargan desde el panel (`LegalExportPolicy`): la
         // consola no es la via por la que alguien hace lo que el panel le niega.
-        $responsible = ConsoleResponsible::resolve($this, $accounts, $option, LegalExporters::ROLES);
-
-        if (\is_int($responsible)) {
-            return $responsible;
-        }
-
-        return ConsoleResponsible::confirm(
-            $this,
-            $responsible,
-            $this->text('confirm', [
-                'from' => $period->from,
-                'to' => $period->to,
-                'scope' => $scope->isEveryone() ? $this->text('whole_staff') : (string) $scope->employeeUuid,
-            ]),
-            $this->option('force') === true || ! $this->input->isInteractive(),
-        ) ?? $responsible;
+        return ConsoleResponsible::sign($this, $this->input, $accounts, LegalExporters::ROLES, $this->text('confirm', [
+            'from' => $period->from,
+            'to' => $period->to,
+            'scope' => $scope->isEveryone() ? $this->text('whole_staff') : (string) $scope->employeeUuid,
+        ]));
     }
 
     /**

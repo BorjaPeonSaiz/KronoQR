@@ -19,6 +19,7 @@ use App\Modules\Shared\Domain\Support\UtcInstant;
 use App\Modules\Shared\Domain\ValueObject\UtcPrecision;
 use App\Modules\Shared\Infrastructure\Export\CsvDialect;
 use Illuminate\Support\Facades\Lang;
+use Illuminate\Support\Str;
 use RuntimeException;
 use Throwable;
 
@@ -189,6 +190,47 @@ final readonly class CsvLegalExportWriter implements LegalExportWriter
         }
 
         return LegalExportTally::of($shiftEntries, $corrections, count($employees));
+    }
+
+    /**
+     * `<destino>.partial-<uuid v7>`, en el mismo directorio para que el
+     * `rename()` sea atomico y no cruce de sistema de ficheros. El patron lo
+     * conocen la purga de temporales y `product:doctor`
+     * (`GeneratedFileAreas::legalExportTemporaries()` y `legalExportConsole()`).
+     *
+     * Un destino que ya existe y no es un fichero normal (`/dev/stdout`, una
+     * FIFO) o un flujo con esquema (`php://`, `ftp://`) se escribe tal cual:
+     * sustituirlo con `rename()` borraria el dispositivo o no seria posible.
+     */
+    public function stagingPathFor(string $destinationPath): string
+    {
+        if (str_contains($destinationPath, '://') || (file_exists($destinationPath) && ! is_file($destinationPath))) {
+            return $destinationPath;
+        }
+
+        return $destinationPath.'.partial-'.Str::uuid7()->toString();
+    }
+
+    public function publish(string $stagingPath, string $destinationPath): void
+    {
+        if ($stagingPath === $destinationPath) {
+            return;
+        }
+
+        if (! @rename($stagingPath, $destinationPath)) {
+            throw new RuntimeException('No se ha podido publicar la exportacion legal en «'.$destinationPath.'».');
+        }
+    }
+
+    public function discard(string $stagingPath, string $destinationPath): void
+    {
+        if ($stagingPath === $destinationPath) {
+            return;
+        }
+
+        if (is_file($stagingPath)) {
+            @unlink($stagingPath);
+        }
     }
 
     /**

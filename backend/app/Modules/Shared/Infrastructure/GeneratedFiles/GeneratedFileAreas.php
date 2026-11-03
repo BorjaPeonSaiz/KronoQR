@@ -27,7 +27,11 @@ use Illuminate\Support\Facades\Config;
  * - Temporal de `ZipArchive`: el destino mas `.XXXXXX` (libzip lo crea con una
  *   plantilla de `mkstemp`).
  * - Informe en diferido: `FilesystemReportExportStorage`, `<uuid v7>/`.
- * - Exportacion legal: `registro-horario-<…>.csv`, por HTTP y por consola.
+ * - Exportacion legal: `registro-horario-<…>.csv`, por HTTP y por consola, y
+ *   su parcial `<…>.csv.partial-<uuid v7>` mientras se escribe
+ *   (`CsvLegalExportWriter::stagingPathFor()`): si el proceso muere antes de
+ *   publicarlo, la purga de temporales lo borra y `product:doctor` avisa del
+ *   que quede junto a las copias de consola.
  * - Diagnostico: `DiagnosticsManifest::fileName()`.
  *
  * ## Añadir una clase
@@ -99,7 +103,7 @@ final class GeneratedFileAreas
         return new GeneratedFileArea(
             GeneratedFileClass::LegalExportTemporary,
             $root,
-            '/^registro-horario-'.self::NAME_PART.'\.csv$/D',
+            '/^registro-horario-'.self::NAME_PART.'\.csv(\.partial-'.self::UUID_V7.')?$/D',
             GeneratedFileShape::File,
         );
     }
@@ -109,7 +113,7 @@ final class GeneratedFileAreas
         return new GeneratedFileArea(
             GeneratedFileClass::LegalExportConsole,
             $root,
-            '/^registro-horario-'.self::NAME_PART.'\.csv$/D',
+            '/^registro-horario-'.self::NAME_PART.'\.csv(\.partial-'.self::UUID_V7.')?$/D',
             GeneratedFileShape::File,
         );
     }
