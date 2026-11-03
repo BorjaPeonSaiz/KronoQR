@@ -22,6 +22,8 @@ const SCREEN_BY_DATASET: Readonly<Record<string, { file: string; marker: string 
   absence_register: { file: 'absences/AbsenceListView.vue', marker: '<AuditNotice' },
   // El detalle de una baja medica se abre desde la misma pantalla, que ya avisa.
   sick_leave_detail: { file: 'absences/AbsenceListView.vue', marker: '<AuditNotice' },
+  // Y la carga por fichero, cuyo dialogo se abre tambien desde ahi.
+  sick_leave_import_match: { file: 'absences/AbsenceListView.vue', marker: '<AuditNotice' },
   live_presence: { file: 'live/LivePresenceView.vue', marker: '<AuditNotice' },
   live_presence_stream: { file: 'live/LivePresenceView.vue', marker: '<AuditNotice' },
   incident_board: { file: 'incidents/IncidentsView.vue', marker: '<AuditNotice' },

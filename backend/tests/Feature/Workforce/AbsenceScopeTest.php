@@ -6,7 +6,6 @@ use App\Modules\Compliance\Domain\ValueObject\AuditAction;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use App\Modules\Workforce\Infrastructure\Persistence\Department;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Spectator\Spectator;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
@@ -40,32 +39,6 @@ beforeEach(function (): void {
     config()->set('identity.two_factor.required_roles', []);
 });
 
-/**
- * Una ausencia escrita con el constructor de consultas, para no depender del
- * endpoint de alta al probar la lectura.
- */
-function ausenciaDe(string $employeeUuid, string $type = 'vacation', ?string $note = null): string
-{
-    $uuid = Str::uuid7()->toString();
-
-    /** @var int|string|null $employeeId */
-    $employeeId = DB::table('employees')->where('uuid', $employeeUuid)->value('id');
-
-    DB::table('absences')->insert([
-        'uuid' => $uuid,
-        'employee_id' => \is_numeric($employeeId) ? (int) $employeeId : 0,
-        'type' => $type,
-        'starts_on' => '2026-03-02',
-        'ends_on' => '2026-03-06',
-        'note' => $note,
-        'status' => 'active',
-        'version' => 1,
-        'created_at' => '2026-03-01T08:00:00+00:00',
-    ]);
-
-    return $uuid;
-}
-
 it('el responsable solo ve las ausencias de su departamento, tambien en el recuento', function (): void {
     $site = WorkforceFixtures::site();
     $jefeDeCocina = ManagementUsers::withRole(UserRole::RESPONSABLE_DEPARTAMENTO);
@@ -75,8 +48,8 @@ it('el responsable solo ve las ausencias de su departamento, tambien en el recue
 
     $recepcion = WorkforceFixtures::department($site, 'Recepcion');
 
-    ausenciaDe(WorkforceFixtures::employee($site, $cocina), 'sick_leave');
-    ausenciaDe(WorkforceFixtures::employee($site, $recepcion));
+    WorkforceFixtures::absence(WorkforceFixtures::employee($site, $cocina), 'sick_leave');
+    WorkforceFixtures::absence(WorkforceFixtures::employee($site, $recepcion));
 
     Api::as(ManagementUsers::tokenFor($jefeDeCocina))
         ->get('/api/v1/absences?from=2026-03-01&to=2026-03-31')
@@ -107,7 +80,7 @@ it('no le manda la nota al responsable, y el campo no existe en lugar de venir v
     Department::query()->whereKey($cocina)->update(['manager_user_id' => $jefeDeCocina->id]);
 
     $empleado = WorkforceFixtures::employee($site, $cocina);
-    $uuid = ausenciaDe($empleado, 'sick_leave', 'Texto que no le corresponde al responsable.');
+    $uuid = WorkforceFixtures::absence($empleado, 'sick_leave', 'Texto que no le corresponde al responsable.');
 
     $respuesta = Api::as(ManagementUsers::tokenFor($jefeDeCocina))
         ->get('/api/v1/absences?from=2026-03-01&to=2026-03-31')
@@ -146,7 +119,7 @@ it('deniega al responsable el detalle de una ausencia de otro departamento y lo 
     Department::query()->whereKey($cocina)->update(['manager_user_id' => $jefeDeCocina->id]);
 
     $recepcion = WorkforceFixtures::department($site, 'Recepcion');
-    $ajena = ausenciaDe(WorkforceFixtures::employee($site, $recepcion), 'sick_leave', 'Diagnostico que nadie deberia ver.');
+    $ajena = WorkforceFixtures::absence(WorkforceFixtures::employee($site, $recepcion), 'sick_leave', 'Diagnostico que nadie deberia ver.');
 
     Api::as(ManagementUsers::tokenFor($jefeDeCocina))
         ->get('/api/v1/absences/'.$ajena)
@@ -174,7 +147,7 @@ it('deja en audit_log que alguien se llevo una pagina del cuadro de ausencias', 
     // describe el alcance y nunca lo divulgado.
     $site = WorkforceFixtures::site();
 
-    ausenciaDe(WorkforceFixtures::employee($site), 'sick_leave', 'No debe salir.');
+    WorkforceFixtures::absence(WorkforceFixtures::employee($site), 'sick_leave', 'No debe salir.');
 
     Api::as(ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH)))
         ->get('/api/v1/absences?from=2026-03-01&to=2026-03-31')

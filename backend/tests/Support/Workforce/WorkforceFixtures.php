@@ -160,6 +160,33 @@ final class WorkforceFixtures
     }
 
     /**
+     * Una ausencia vigente del 2 al 6 de marzo de 2026, escrita con el
+     * constructor de consultas para probar la lectura sin depender del
+     * endpoint de alta. Devuelve su `uuid`.
+     */
+    public static function absence(string $employeeUuid, string $type = 'vacation', ?string $note = null): string
+    {
+        $uuid = Str::uuid7()->toString();
+
+        /** @var int|string|null $employeeId */
+        $employeeId = DB::table('employees')->where('uuid', $employeeUuid)->value('id');
+
+        DB::table('absences')->insert([
+            'uuid' => $uuid,
+            'employee_id' => \is_numeric($employeeId) ? (int) $employeeId : 0,
+            'type' => $type,
+            'starts_on' => '2026-03-02',
+            'ends_on' => '2026-03-06',
+            'note' => $note,
+            'status' => 'active',
+            'version' => 1,
+            'created_at' => '2026-03-01T08:00:00+00:00',
+        ]);
+
+        return $uuid;
+    }
+
+    /**
      * El identificador del **unico** centro de la instalacion (ADR-040).
      *
      * Existe para que las pruebas que crearon el centro en un `beforeEach` no

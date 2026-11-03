@@ -129,8 +129,10 @@ it('los incluye tambien en la consulta que acota el alcance por bloque', functio
      *
      * `sick_leave_detail` (enmienda de ADR-037 del 03-11-2026) es el detalle de
      * una baja medica: una persona, siempre con su `employee_uuid`.
+     * `sick_leave_import_match`, de la misma enmienda, enumera siempre las
+     * personas cuya baja confirmo la comprobacion de una carga.
      */
-    $nominales = ['employee_workdays', 'incident_digest', 'incident', 'legal_export_employee_search', 'sick_leave_detail'];
+    $nominales = ['employee_workdays', 'incident_digest', 'incident', 'legal_export_employee_search', 'sick_leave_detail', 'sick_leave_import_match'];
 
     /*
      * Y los NOMINALES ACOTADOS, que son otra cosa y estan en las dos listas.

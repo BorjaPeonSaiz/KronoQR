@@ -7,7 +7,6 @@ use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use App\Modules\Workforce\Infrastructure\Persistence\Department;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Spectator\Spectator;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
@@ -31,32 +30,6 @@ beforeEach(function (): void {
 
     config()->set('identity.two_factor.required_roles', []);
 });
-
-/**
- * Una ausencia escrita con el constructor de consultas, para probar la lectura
- * sin depender del endpoint de alta.
- */
-function bajaMedicaDetalleAusencia(string $employeeUuid, string $type = 'sick_leave', ?string $note = null): string
-{
-    $uuid = Str::uuid7()->toString();
-
-    /** @var int|string|null $employeeId */
-    $employeeId = DB::table('employees')->where('uuid', $employeeUuid)->value('id');
-
-    DB::table('absences')->insert([
-        'uuid' => $uuid,
-        'employee_id' => \is_numeric($employeeId) ? (int) $employeeId : 0,
-        'type' => $type,
-        'starts_on' => '2026-03-02',
-        'ends_on' => '2026-03-06',
-        'note' => $note,
-        'status' => 'active',
-        'version' => 1,
-        'created_at' => '2026-03-01T08:00:00+00:00',
-    ]);
-
-    return $uuid;
-}
 
 /**
  * Los asientos de lectura del detalle de una baja medica, del mas antiguo al
@@ -87,7 +60,7 @@ function bajaMedicaDetalleAsientos(): array
 it('deja asiento al abrir una baja medica, con la ausencia y la persona y sin la nota', function (): void {
     $site = WorkforceFixtures::site();
     $persona = WorkforceFixtures::employee($site);
-    $baja = bajaMedicaDetalleAusencia($persona, 'sick_leave', 'Diagnostico que no entra en el trail.');
+    $baja = WorkforceFixtures::absence($persona, 'sick_leave', 'Diagnostico que no entra en el trail.');
 
     Api::as(ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH)))
         ->get('/api/v1/absences/'.$baja)
@@ -110,7 +83,7 @@ it('deja asiento al abrir una baja medica, con la ausencia y la persona y sin la
 
 it('no deja asiento al abrir unas vacaciones, como la ficha de un empleado', function (): void {
     $site = WorkforceFixtures::site();
-    $vacaciones = bajaMedicaDetalleAusencia(WorkforceFixtures::employee($site), 'vacation');
+    $vacaciones = WorkforceFixtures::absence(WorkforceFixtures::employee($site), 'vacation');
 
     Api::as(ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH)))
         ->get('/api/v1/absences/'.$vacaciones)
@@ -122,16 +95,17 @@ it('no deja asiento al abrir unas vacaciones, como la ficha de un empleado', fun
 
 it('deja asiento si la baja ya es otra cosa pero su historial dice que lo fue', function (): void {
     // Una baja corregida a vacaciones sigue enseñando en el historial que fue una
-    // baja medica: eso es lo que sale por la respuesta.
+    // baja medica, con su nota: eso es lo que sale por la respuesta.
     $site = WorkforceFixtures::site();
     $persona = WorkforceFixtures::employee($site);
-    $baja = bajaMedicaDetalleAusencia($persona);
+    $baja = WorkforceFixtures::absence($persona, 'sick_leave', 'Nota de la baja.');
     $rrhh = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::RRHH));
 
     /** @var string $vigente */
     $vigente = Api::as($rrhh)
         ->patch('/api/v1/absences/'.$baja, [
             'type' => 'vacation',
+            'note' => null,
             'reason' => 'Se registro como baja por error.',
         ])
         ->assertValidResponse(200)
@@ -141,14 +115,17 @@ it('deja asiento si la baja ya es otra cosa pero su historial dice que lo fue', 
         ->get('/api/v1/absences/'.$vigente)
         ->assertValidResponse(200)
         ->assertJsonPath('absence.type', 'vacation')
-        ->assertJsonPath('history.0.type', 'sick_leave');
+        ->assertJsonPath('absence.note', null)
+        ->assertJsonPath('history.0.type', 'sick_leave')
+        ->assertJsonPath('history.0.note', 'Nota de la baja.');
 
     $asientos = bajaMedicaDetalleAsientos();
 
     expect($asientos)->toHaveCount(1)
         ->and($asientos[0]['payload']['absence_uuid'] ?? null)->toBe($vigente)
         ->and($asientos[0]['payload']['versions'] ?? null)->toBe(2)
-        ->and($asientos[0]['payload']['has_note'] ?? null)->toBeFalse();
+        // La nota solo esta en la version anterior, y tambien sale.
+        ->and($asientos[0]['payload']['has_note'] ?? null)->toBeTrue();
 })->group('RS-05', 'RF-GP-04', 'RN-13');
 
 it('al responsable le deja asiento sin nota, porque la nota no le llega', function (): void {
@@ -158,7 +135,7 @@ it('al responsable le deja asiento sin nota, porque la nota no le llega', functi
     $cocina = WorkforceFixtures::department($site, 'Cocina');
     Department::query()->whereKey($cocina)->update(['manager_user_id' => $jefeDeCocina->id]);
 
-    $baja = bajaMedicaDetalleAusencia(WorkforceFixtures::employee($site, $cocina), 'sick_leave', 'Texto que no le llega.');
+    $baja = WorkforceFixtures::absence(WorkforceFixtures::employee($site, $cocina), 'sick_leave', 'Texto que no le llega.');
 
     Api::as(ManagementUsers::tokenFor($jefeDeCocina))
         ->get('/api/v1/absences/'.$baja)
@@ -179,7 +156,7 @@ it('una lectura fuera de alcance deja la denegacion y no el acceso', function ()
     Department::query()->whereKey($cocina)->update(['manager_user_id' => $jefeDeCocina->id]);
 
     $recepcion = WorkforceFixtures::department($site, 'Recepcion');
-    $ajena = bajaMedicaDetalleAusencia(WorkforceFixtures::employee($site, $recepcion));
+    $ajena = WorkforceFixtures::absence(WorkforceFixtures::employee($site, $recepcion), 'sick_leave');
 
     Api::as(ManagementUsers::tokenFor($jefeDeCocina))
         ->get('/api/v1/absences/'.$ajena)
@@ -191,7 +168,7 @@ it('una lectura fuera de alcance deja la denegacion y no el acceso', function ()
 
 it('si el asiento no se puede escribir, la baja no se enseña', function (): void {
     $site = WorkforceFixtures::site();
-    $baja = bajaMedicaDetalleAusencia(WorkforceFixtures::employee($site), 'sick_leave', 'No debe salir.');
+    $baja = WorkforceFixtures::absence(WorkforceFixtures::employee($site), 'sick_leave', 'No debe salir.');
 
     app()->instance(PersonalDataAccessLog::class, new class implements PersonalDataAccessLog
     {

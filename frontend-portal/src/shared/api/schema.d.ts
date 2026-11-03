@@ -6029,6 +6029,14 @@ export interface paths {
          *
          *     Cada linea aplicada deja su propio `absence.registered` en `audit_log`
          *     con `source: import` y la huella del fichero — nunca con nombres.
+         *
+         *     **Confirmar una baja medica guardada deja asiento**, tambien en
+         *     `validate` (RS-05, enmienda de ADR-037 del 03-11-2026). Una linea
+         *     `unchanged` o `overlapping_absence` frente a una baja medica ya
+         *     registrada dice cuando estuvo de baja esa persona. Antes de responder se
+         *     escribe `personal_data.accessed` con el conjunto
+         *     `sick_leave_import_match`, los `uuid` de esas personas y la huella del
+         *     fichero; si el asiento no se puede escribir, el informe no sale.
          */
         post: operations["importAbsences"];
         delete?: never;
