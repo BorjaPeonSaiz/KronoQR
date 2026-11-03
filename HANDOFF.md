@@ -374,6 +374,10 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
 
 ## Pendiente
 
+### Bloque 32 de la 2.3.0 (03-11-2026)
+
+- **El log técnico `workforce.employees_imported`** (`EmployeeImportController`) no cuenta las readmisiones (`rehire`): una importación de cuatro readmisiones registra `create: 0` y nada más. El asiento `employee.imported` sí lleva `rehired`. Una línea (`'rehire' => $report->countOf(ImportOutcome::REHIRE)`); lo vio `qa-testing` al escribir `PlanExcessSeatsOnRehireTest`.
+
 ### Bloque 35 de la 2.3.0 (03-11-2026)
 
 - **Sin prueba propia:** la exportación legal a un destino que no es un fichero normal (`--output=/dev/stdout`, una FIFO) se escribe sin parcial; la carrera real entre la petición del panel y la de consola tras el cambio de candados, y la baja concurrente con la cadena tomada en otro proceso (`UseCaseInOtherProcess`), solo se simulan con dobles. Candidatas para `qa-testing`.
