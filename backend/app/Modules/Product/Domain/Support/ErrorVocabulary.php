@@ -2507,6 +2507,7 @@ final readonly class ErrorVocabulary
         'self',
         'sella',
         'sellar',
+        'sellarlo',
         'semana',
         'semanal',
         'semanales',

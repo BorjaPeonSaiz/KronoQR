@@ -9,7 +9,7 @@ use App\Modules\Product\Domain\ValueObject\DoctorFinding;
 
 /**
  * **El suelo de tiempo de los rechazos, frente al corte del quiosco** (RS-03,
- * A-13, enmienda de ADR-005; revision de la 33.6 de la 2.3.0).
+ * A-13, enmienda de ADR-005).
  *
  * En el fichaje, cada rechazo —de credencial, fuera del periodo de alta o
  * irreconciliable— se rellena hasta el **doble** de
