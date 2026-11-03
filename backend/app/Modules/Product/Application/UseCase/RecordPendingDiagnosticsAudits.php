@@ -77,6 +77,9 @@ final readonly class RecordPendingDiagnosticsAudits
                     generatedBy: $entry->generatedBy,
                     occurredAt: $this->clock->now(),
                     deferred: true,
+                    // Solo se aplaza el anonimizado: el de datos personales no se
+                    // genera con la base caida (PendingDiagnosticsAudit).
+                    sealed: false,
                     generatedAt: $entry->generatedAt,
                 ));
 

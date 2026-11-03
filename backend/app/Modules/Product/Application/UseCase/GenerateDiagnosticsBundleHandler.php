@@ -312,8 +312,9 @@ final readonly class GenerateDiagnosticsBundleHandler
             sizeBytes: $sizeBytes,
             generatedBy: $actor->value,
             occurredAt: $now,
-            responsibleUserId: $responsibleUserId,
+            deferred: false,
             sealed: $sealed instanceof SealedDiagnosticsBundle,
+            responsibleUserId: $responsibleUserId,
             recipientKeyId: $sealed?->recipientKeyId,
             sealedSha256: $sealedSha256,
         )];
@@ -327,8 +328,8 @@ final readonly class GenerateDiagnosticsBundleHandler
                 sha256: $manifest->sha256,
                 generatedBy: $actor->value,
                 occurredAt: $now,
-                responsibleUserId: $responsibleUserId,
                 sealed: true,
+                responsibleUserId: $responsibleUserId,
                 recipientKeyId: $sealed->recipientKeyId,
                 sealedSha256: $sealedSha256,
             );

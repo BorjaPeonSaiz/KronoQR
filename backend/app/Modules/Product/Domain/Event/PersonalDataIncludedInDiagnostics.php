@@ -40,16 +40,17 @@ final readonly class PersonalDataIncludedInDiagnostics implements DomainEvent
         public string $generatedBy,
         private DateTimeImmutable $occurredAt,
         /**
+         * Si salio cifrado para la clave de soporte del fabricante (ADR-020,
+         * enmienda del 01-11-2026). Solo el que lleva datos personales. Sin
+         * valor por defecto: quien publica el asiento dice siempre si salio cifrado.
+         */
+        public bool $sealed,
+        /**
          * La cuenta `admin` que firma el paquete pedido por consola (2.3.0
          * bloque 3, PR17): el asiento es suyo y no de `system`. `null` por el
          * panel, donde firma la sesion.
          */
         public ?int $responsibleUserId = null,
-        /**
-         * Si salio cifrado para la clave de soporte del fabricante (ADR-020,
-         * enmienda del 01-11-2026). Solo el que lleva datos personales.
-         */
-        public bool $sealed = false,
         /** Los 16 hexadecimales de la clave para la que va cifrado; nulo en claro. */
         public ?string $recipientKeyId = null,
         /**

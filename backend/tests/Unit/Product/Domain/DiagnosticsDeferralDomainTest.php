@@ -22,6 +22,8 @@ it('el evento normal no esta aplazado ni lleva instante de generacion', function
         sizeBytes: 10,
         generatedBy: 'console',
         occurredAt: $now,
+        deferred: false,
+        sealed: false,
     );
 
     expect($event->deferred)->toBeFalse()
@@ -41,6 +43,7 @@ it('el evento aplazado lleva el instante de la generacion aparte del de la escri
         generatedBy: 'console',
         occurredAt: $written,
         deferred: true,
+        sealed: false,
         generatedAt: $generated,
     );
 

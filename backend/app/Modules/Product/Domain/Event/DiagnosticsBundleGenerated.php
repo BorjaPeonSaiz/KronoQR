@@ -60,7 +60,13 @@ final readonly class DiagnosticsBundleGenerated implements DomainEvent
         public int $sizeBytes,
         public string $generatedBy,
         private DateTimeImmutable $occurredAt,
-        public bool $deferred = false,
+        public bool $deferred,
+        /**
+         * Si salio cifrado para la clave de soporte del fabricante (ADR-020,
+         * enmienda del 01-11-2026). Solo el que lleva datos personales. Sin
+         * valor por defecto: quien publica el asiento dice siempre si salio cifrado.
+         */
+        public bool $sealed,
         public ?DateTimeImmutable $generatedAt = null,
         /**
          * La cuenta que firma el paquete pedido por consola (2.3.0 bloque 3):
@@ -68,11 +74,6 @@ final readonly class DiagnosticsBundleGenerated implements DomainEvent
          * firma la sesion, y en el anonimizado de consola.
          */
         public ?int $responsibleUserId = null,
-        /**
-         * Si salio cifrado para la clave de soporte del fabricante (ADR-020,
-         * enmienda del 01-11-2026). Solo el que lleva datos personales.
-         */
-        public bool $sealed = false,
         /** Los 16 hexadecimales de la clave para la que va cifrado; nulo en claro. */
         public ?string $recipientKeyId = null,
         /**
