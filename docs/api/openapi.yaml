@@ -12122,6 +12122,14 @@ paths:
         Se puede pedir por el `uuid` de **cualquier** version, no solo de la
         vigente: un enlace guardado hace tres meses tiene que seguir llevando a
         algun sitio. Lo que devuelve es esa version con su propio historial.
+
+        **Una baja medica deja asiento** (RS-05, RGPD art. 9, enmienda de
+        ADR-037 del 03-11-2026). Si la ausencia o alguna de sus versiones
+        anteriores es `sick_leave`, la lectura escribe `personal_data.accessed`
+        con el conjunto `sick_leave_detail`, el `uuid` de la ausencia y el de la
+        persona, **antes** de responder: si el asiento no se puede escribir, la
+        respuesta no sale. El resto de tipos no deja asiento propio, como la
+        ficha de un empleado.
       tags: [Workforce]
       security:
         - managementToken: ['employees:read']
