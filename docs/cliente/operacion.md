@@ -1632,7 +1632,9 @@ Sin `--responsible`, con el número de la cuenta o con una cuenta de otro rol o
 dada de baja, salen con `2` **sin exportar ni revocar nada**. Si tienes un
 `cron` que saca la exportación íntegra o la de la Inspección, añádele
 `--responsible=<correo> --responsible-confirm=<el mismo correo>` antes de
-actualizar. Los ejemplos están en §13.2 y en los procedimientos
+actualizar. **Ese `cron` empezará a salir con `2`, sin exportar, si la cuenta
+se da de baja o cambia de rol más adelante**: al dar de baja a quien firmaba,
+cámbialo por otra cuenta. Los ejemplos están en §13.2 y en los procedimientos
 [`requerimiento-inspeccion.md`](../runbooks/requerimiento-inspeccion.md) y
 [`solicitud-derechos-rgpd.md`](../runbooks/solicitud-derechos-rgpd.md).
 
@@ -2703,16 +2705,19 @@ el panel es el camino recomendado**: es el único que deja asiento de quién se
 llevó el fichero (§13.3).
 
 **Desde la consola**, en el acto y en primer plano, firmada por una cuenta
-**admin** (su correo o su uuid):
+**admin** (su correo o su uuid; cambia `admin@hotel.example` por el de la
+tuya):
 
 ```bash
-docker compose exec app php artisan product:export-all --responsible=<correo de la cuenta admin>
+docker compose exec app php artisan product:export-all --responsible=admin@hotel.example
 ```
 
 La orden enseña quién firma (`Firma: nombre <correo> · rol · uuid`) y lo
 pregunta. Sin terminal —un `cron`, `exec -T`— no hay a quién preguntar:
 añade `--responsible-confirm=<el mismo correo>`. La exportación queda a
-nombre de esa cuenta, como si la hubiera pedido desde el panel. Deja el fichero en `storage/app/exports/`, dentro del volumen de ficheros
+nombre de esa cuenta, como si la hubiera pedido desde el panel.
+
+Deja el fichero en `storage/app/exports/`, dentro del volumen de ficheros
 generados (§13.6), imprime la ruta, el tamaño, la huella y el número de filas
 de cada fichero, y registra la exportación igual que si la hubieras pedido
 desde el panel: aparece en la misma lista y **se descarga desde allí**. Si

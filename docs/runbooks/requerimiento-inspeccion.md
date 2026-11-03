@@ -43,7 +43,10 @@ panel esté desplegado. **Sí necesita una cuenta de gestión que la firme**
 por su correo o su uuid en `--responsible`. El asiento de `audit_log` queda a
 su nombre. Con `exec -T` no hay terminal a la que preguntar, así que la firma
 se confirma con `--responsible-confirm` y el mismo correo; sin `-T`, la orden
-enseña quién firma y lo pregunta.
+enseña quién firma y lo pregunta. **Si no queda ninguna cuenta activa que pueda
+firmar**, da de alta una con `identity:create-user --role=rrhh` antes de
+exportar ([`../cliente/operacion.md`](../cliente/operacion.md) §9, «Las cuentas
+del panel»).
 
 ```bash
 # En el servidor del cliente, desde el directorio de la instalación
@@ -243,9 +246,12 @@ lleva: la lista de personas exportadas ni el contenido del fichero. `audit_log`
 se conserva cuatro años y no puede acabar siendo una segunda copia del registro
 horario (regla dura 21, minimización del RGPD).
 
-Desde consola el actor es `system`: no hay sesión detrás. Es la verdad —lo lanzó
-alguien con acceso al servidor— y se cruza con el registro de acceso de la
-máquina. Desde el panel el actor es la cuenta que descargó.
+Desde el panel el actor es la cuenta que descargó. Desde consola, desde la 2.3.0,
+es la cuenta de `--responsible`: la orden la enseñó y quien la lanzó confirmó
+que era ella (o la confirmó con `--responsible-confirm`), y se volvió a
+comprobar justo antes del asiento. Hasta la 2.2.1 era `system`. Lo que la consola
+no puede probar es que quien tecleó sea de verdad esa persona: eso se cruza con
+el registro de acceso a la máquina.
 
 La métrica `legal_exports_total{scope}` sube en los dos casos
 (`BACKUP_PATH/metrics/kronoqr_legal_exports.prom`). Una instalación que empieza a
@@ -341,8 +347,9 @@ abortada a medias — nunca toca la copia de este apartado.
 | `El campo «from» … no es una fecha en forma YYYY-MM-DD` | Fecha en formato español o con hora | `2026-01-01`, sin hora. El periodo es por fecha de jornada |
 | `El periodo … termina antes de empezar` | `--from` y `--to` cambiados | Corrígelos. **El sistema no los da la vuelta solo**: el fichero llevaría escrito un periodo que nadie pidió |
 | El comando termina sin fichero y con un error de escritura | Ruta de `--output` inexistente o sin permisos | Usa la ruta por defecto y saca el fichero con `docker compose cp` |
-| El comando falla en el asiento de auditoría | `audit_log` sin partición del año, o permisos | La exportación **no se da por hecha**: es lo correcto. Ve a [`rotura-cadena-auditoria.md`](rotura-cadena-auditoria.md) §5 |
+| El comando falla en el asiento de auditoría | `audit_log` sin partición del año, o permisos | La exportación **no se da por hecha** y no deja fichero: es lo correcto. Ve a [`rotura-cadena-auditoria.md`](rotura-cadena-auditoria.md) §5 |
 | El panel devuelve 403 | El rol no es `rrhh`, `auditor` ni `admin`, o el token no tiene ámbito | Usa una cuenta de RRHH, o la vía de consola de la §1 |
+| La consola sale con `2` y dice que la cuenta no existe, está dada de baja o no tiene el rol | No queda ninguna cuenta activa `admin`, `rrhh` o `auditor` con ese correo | `docker compose exec app php artisan identity:list-users` para ver las que hay; si no queda ninguna que pueda firmar, `identity:create-user --role=rrhh` ([`../cliente/operacion.md`](../cliente/operacion.md) §9) y vuelve a lanzar la §1 con su correo |
 | Tarda más de unos minutos | Periodo muy largo sobre una instalación grande | Déjalo terminar: escribe en streaming y no carga el periodo en memoria. Si hay plazo, parte el periodo por meses |
 
 **Escalado:** si a los 30 minutos no hay fichero, avisa al responsable de la

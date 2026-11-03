@@ -1651,7 +1651,9 @@ role or deactivated, they exit with `2` **without exporting or revoking
 anything**. If you have a `cron` job that takes the full export or the one for
 the Labour Inspectorate, add
 `--responsible=<e-mail> --responsible-confirm=<the same e-mail>` to it before
-updating. The examples are in §13.2 and in the procedures
+updating. **That `cron` job will start exiting with `2`, without exporting, if
+the account is deactivated or changes role later on**: when you deactivate
+whoever signed it, switch it to another account. The examples are in §13.2 and in the procedures
 [`requerimiento-inspeccion.md`](../../runbooks/requerimiento-inspeccion.md) and
 [`solicitud-derechos-rgpd.md`](../../runbooks/solicitud-derechos-rgpd.md) (in
 Spanish).
@@ -2743,16 +2745,19 @@ another. **Downloading from the panel is the recommended route**: it is the
 only one that records who took the file (§13.3).
 
 **From the console**, on the spot and in the foreground, signed by an
-**admin** account (its e-mail or its uuid):
+**admin** account (its e-mail or its uuid; replace `admin@hotel.example` with
+yours):
 
 ```bash
-docker compose exec app php artisan product:export-all --responsible=<correo de la cuenta admin>
+docker compose exec app php artisan product:export-all --responsible=admin@hotel.example
 ```
 
 The command shows who signs (`Signed by: name <e-mail> · role · uuid`) and asks.
 Without a terminal —a `cron` job, `exec -T`— there is nobody to ask: add
 `--responsible-confirm=<the same e-mail>`. The export is recorded in the name
-of that account, as if it had requested it from the panel. It leaves the file in `storage/app/exports/`, inside the generated-files volume
+of that account, as if it had requested it from the panel.
+
+It leaves the file in `storage/app/exports/`, inside the generated-files volume
 (§13.6), prints the path, the size, the fingerprint and the row count of each
 file, and records the export just as if you had requested it from the panel: it
 appears in the same list and **is downloaded from there**. If you would rather
