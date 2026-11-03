@@ -297,7 +297,7 @@ Lo que conviene saber del bloque 5:
 - `package.sh` deja fuera del paquete los runbooks internos `fallo-de-ci.md` y `triaje-hallazgos-seguridad.md` (I10). Ningún documento que viaja puede enlazarlos: lo comprueban `ClientDocumentationTest` y `check-package-links.sh`.
 - La guía de RRHH §5.4 (es/en) explica «Este tramo terminó en pausa» y RN-05 (ADR-058).
 
-**Siguiente acción (03-11-2026):** bloques 33 parcial (#228, `main` `d91d991c`), 34 (#229, `main` `095c195e`) y **35 (#230, `main` `6bf0da3a`) integrados**. **B32 con la 33.12 en la rama `docs/doc07-cierre-2.3.0`**: dictamen de `seguridad-cumplimiento` aplicado al doc 07 (§6 sin «pendiente» ni destino 2.3.0 abierto; Gestión de defectos sube a 2 con condición; total 1,87) y al plan (32.1, 32.2, 32.3 y 33.12 en ✅; 33.2 sin objeto). Los títulos de los bloques 32 y 33 siguen en ⬜. Falta CI, PR y merge. La prueba de la readmisión por encima del plan (un solo `license.plan_exceeded` por lote o importación) la escribe `qa-testing` aparte. **El propietario tiene que generar el par de claves de diagnóstico antes de publicar la 2.3.0** (`php tools/diagnostics-opener/generate-keypair.php --keyring=$HOME/.kronoqr/diagnostics`; `release-gate` lo exige). Después, el bloque final, solo con orden del propietario.
+**Siguiente acción (03-11-2026):** bloques 33 parcial (#228, `main` `d91d991c`), 34 (#229, `main` `095c195e`) y **35 (#230, `main` `6bf0da3a`) integrados**. **B32 con la 33.12 en la rama `docs/doc07-cierre-2.3.0`**: dictamen de `seguridad-cumplimiento` aplicado al doc 07 (§6 sin «pendiente» ni destino 2.3.0 abierto; Gestión de defectos sube a 2 con condición; total 1,87) y al plan (32.1, 32.2, 32.3 y 33.12 en ✅; 33.2 sin objeto). Los títulos de los bloques 32 y 33 siguen en ⬜. Falta CI, PR y merge. La prueba de la readmisión por encima del plan ya está en la rama (`PlanExcessSeatsOnRehireTest`). **El propietario tiene que generar el par de claves de diagnóstico antes de publicar la 2.3.0** (`php tools/diagnostics-opener/generate-keypair.php --keyring=$HOME/.kronoqr/diagnostics`; `release-gate` lo exige). Después, el bloque final, solo con orden del propietario.
 
 **B17 a B26 y B24 integrados** (orden del 15-10-2026: un PR por bloque en verde):
 - B17 (#161), B18 (#162), B19 (#167), B20 (#168) y B21 (#169).
@@ -575,8 +575,8 @@ verificación final que no entraron (lista «¿Se pasó algo por alto?» de `2.2
   entregada»), solo recuento. Hoy el aviso vive en el listado filtrado, la ficha, el asistente y el diálogo de entrega del tablero.
 - Hardware: tarjeta impresa y plastificada escaneada en quiosco real; resistencia 12 h en tablet;
   recalibración de estimación R16.
-- Plazo de purga de `employment_contracts` **y de `absences`** con la asesoría laboral (hasta entonces se conservan; `absences`
-  contiene dato de salud y `RetentionScope` es lista cerrada: doc 07 §6 **A-17**, runbook de derechos §1, `obligaciones-legales.md` §4).
+- Plazo propio y configurable de `absences` (2.4.0, resto de 33.11) y validación del plazo de la ficha con la asesoría laboral; de serie
+  contratos y ausencias se borran con la ficha (ADR-060; doc 07 §6 **A-17**, runbook de derechos §1, `obligaciones-legales.md` §4).
 - Techo del formato PDF (`docs/verificacion-manual.md`).
 - **Engram (09-09-2026):** en funcionamiento (binario 1.20.0 en `~/.local/bin`, plugin `engram@engram` y MCP `engram` en ámbito
   usuario, protocolo `slim`, proyecto detectado `kronoqr`, nueve memorias sembradas: trampas del entorno, 5.12 y receta de
