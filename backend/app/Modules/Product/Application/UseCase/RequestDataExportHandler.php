@@ -20,7 +20,6 @@ use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Application\Port\UuidGenerator;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
-use Illuminate\Database\ConnectionInterface;
 use Throwable;
 
 /**
@@ -42,7 +41,8 @@ use Throwable;
  * de accesos masivos a datos personales (RS-05).
  *
  * Sincrono y dentro de la transaccion, como el resto de asientos de `Product`:
- * si el asiento no se puede escribir, la fila no se crea (regla dura 6).
+ * si el asiento no se puede escribir, la fila no se crea (regla dura 6). La
+ * transaccion la abre `SerializedLedgerWrite` con la cadena ya tomada.
  *
  * ## Se encola DESPUES de confirmar, y solo desde el panel
  *
@@ -73,7 +73,6 @@ final readonly class RequestDataExportHandler
         private DataExportQueue $queue,
         private ProductEventPublisher $events,
         private Clock $clock,
-        private ConnectionInterface $connection,
         private ResponsibleAccounts $accounts,
         private SerializedLedgerWrite $serialized,
         /**
@@ -166,12 +165,13 @@ final readonly class RequestDataExportHandler
         };
 
         try {
-            // Por consola, la cadena primero (ADR-046 §1.2): con ella tomada se
-            // vuelve a comprobar la cuenta y se escribe el asiento.
-            /** @var DataExport $export */
-            $export = $signedAtConsole
-                ? $this->serialized->withChainLock($create)
-                : $this->connection->transaction($create);
+            // La cadena primero y despues la fila (ADR-046 §1.2), por los dos
+            // caminos: el asiento la pide igual, y si el panel insertara antes
+            // de tomarla, una peticion por consola —que la toma antes de
+            // insertar— y otra por el panel podrian esperarse la una a la otra
+            // en el indice unico parcial. Por consola, con la cadena tomada se
+            // vuelve a comprobar ademas la cuenta que firma.
+            $export = $this->serialized->withChainLock($create);
         } catch (DataExportAlreadyInProgress) {
             /*
              * **La que ocupa el turno se relee AQUI y no en el repositorio.**
@@ -179,7 +179,7 @@ final readonly class RequestDataExportHandler
              * El choque contra el indice unico deja la transaccion abortada, asi
              * que un `SELECT` dentro de ella fallaria con `25P02` y el cliente
              * recibiria un `500` en vez del `409` que le dice que espere. Al
-             * salir de `transaction()` el motor ya ha deshecho, y aqui se puede
+             * salir de `withChainLock()` el motor ya ha deshecho, y aqui se puede
              * consultar con normalidad.
              *
              * Puede volver nula si esa exportacion termino entre el choque y

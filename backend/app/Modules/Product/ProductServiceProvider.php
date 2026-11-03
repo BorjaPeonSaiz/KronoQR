@@ -1002,7 +1002,6 @@ final class ProductServiceProvider extends ServiceProvider
                 queue: $app->make(DataExportQueue::class),
                 events: $app->make(ProductEventPublisher::class),
                 clock: $app->make(Clock::class),
-                connection: DB::connection(),
                 accounts: $app->make(ResponsibleAccounts::class),
                 serialized: $app->make(SerializedLedgerWrite::class),
                 staleAfterSeconds: max(1, Config::integer('product.data_export_stale_after_seconds', 3600)),
