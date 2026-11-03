@@ -2507,7 +2507,7 @@ sobre.
 **Comprobar que es el que generaste:**
 
 ```bash
-docker compose exec app php artisan product:diagnostics --verify=<ruta del .sealed.json>
+docker compose exec app php artisan product:diagnostics --verify=<ruta>
 ```
 
 Te enseña para qué clave va, la huella declarada y la del fichero, y las

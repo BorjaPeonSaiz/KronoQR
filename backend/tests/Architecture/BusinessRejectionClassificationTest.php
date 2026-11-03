@@ -51,6 +51,7 @@ const BUSINESS_REJECTION_FAILURES = [
     'Modules\Attendance\Domain\Exception\InvalidSkewTolerance' => 'tolerancia mal configurada',
     'Modules\Compliance\Domain\Exception\InvalidRetentionPolicy' => 'plazo de retencion imposible en el perfil',
     'Modules\Identity\Domain\Exception\InvalidSigningKey' => 'clave HMAC configurada que no sirve',
+    'Modules\Product\Application\Exception\DiagnosticsSealingUnavailable' => 'sin clave publica de soporte valida: esperar no lo arregla (503)',
 
     // --- Entrada y salida: disco, correo, base, capacidad.
     'Modules\Compliance\Application\Exception\AuditPartitionCreationUnavailable' => 'la base no deja crear la particion',

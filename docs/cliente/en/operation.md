@@ -2539,7 +2539,7 @@ the envelope.
 **Checking it is the one you generated:**
 
 ```bash
-docker compose exec app php artisan product:diagnostics --verify=<path of the .sealed.json>
+docker compose exec app php artisan product:diagnostics --verify=<ruta>
 ```
 
 It shows you which key it is for, the declared fingerprint and the file's

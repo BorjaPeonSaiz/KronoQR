@@ -37,6 +37,8 @@
     "Motor de PDF ocupado": "PDF engine busy",
     "El servicio no esta disponible en este momento. Reintenta pasados unos segundos.": "The service is not available right now. Try again in a few seconds.",
     "La instancia todavia no esta lista para recibir trafico.": "The instance is not ready to receive traffic yet.",
+    "Cifrado del paquete no disponible": "Package encryption unavailable",
+    "Esta instalacion no tiene la clave publica de soporte, asi que el paquete con datos personales no se puede cifrar y no se genera. Genera el paquete anonimizado, que no la necesita.": "This installation does not have the support public key, so the package with personal data cannot be encrypted and is not generated. Generate the anonymised package, which does not need it.",
     "Peticion mal formada": "Malformed request",
     "La peticion no se ha podido interpretar.": "The request could not be interpreted.",
     "Metodo no permitido": "Method not allowed",

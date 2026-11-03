@@ -92,6 +92,16 @@ const GENERATED_FILES_INVENTORY = [
     'app/Modules/Compliance/Infrastructure/Retention/FilesystemTechnicalLogArchive.php' => [
         'storage_path:logs' => 'disposable',
     ],
+    // RL-19: el paquete de diagnostico nombra estas ubicaciones por su papel;
+    // las lee para etiquetar rutas, no escribe en ellas.
+    'app/Modules/Product/Infrastructure/Diagnostics/DiagnosticsLocations.php' => [
+        'storage_path:' => 'probe',
+        'storage_path:app/diagnostics' => 'probe',
+        'storage_path:app/exports' => 'probe',
+        'storage_path:app/legal-exports' => 'probe',
+        'storage_path:logs' => 'probe',
+        'storage_path:app/branding' => 'probe',
+    ],
     'app/Modules/Product/ProductServiceProvider.php' => [
         'storage_path:' => 'probe',
         'storage_path:app' => 'probe',
