@@ -165,26 +165,9 @@ final class ProductExportAllCommand extends Command
      */
     private function signedBy(ResponsibleAccounts $accounts): ResponsibleAccount|int
     {
-        $option = $this->option('responsible');
-
-        if (! \is_string($option) || trim($option) === '') {
-            return ConsoleResponsible::missing($this);
-        }
-
         // Los roles que la piden desde el panel (`DataExportPolicy`): la
         // consola no es la via por la que alguien hace lo que el panel le niega.
-        $responsible = ConsoleResponsible::resolve($this, $accounts, $option, DataExportSigners::ROLES);
-
-        if (\is_int($responsible)) {
-            return $responsible;
-        }
-
-        return ConsoleResponsible::confirm(
-            $this,
-            $responsible,
-            $this->text('confirm'),
-            $this->option('force') === true || ! $this->input->isInteractive(),
-        ) ?? $responsible;
+        return ConsoleResponsible::sign($this, $this->input, $accounts, DataExportSigners::ROLES, $this->text('confirm'));
     }
 
     private function report(DataExport $export): int

@@ -119,26 +119,15 @@ final class RevokeCredentialCommand extends Command
      */
     private function signedBy(ResponsibleAccounts $accounts, string $credentialUuid): ResponsibleAccount|int
     {
-        $option = $this->option('responsible');
-
-        if (! \is_string($option) || trim($option) === '') {
-            return ConsoleResponsible::missing($this);
-        }
-
         // Los roles que revocan desde el panel (`CredentialPolicy::revoke`):
         // la consola no es la via por la que alguien hace lo que el panel le
         // niega.
-        $responsible = ConsoleResponsible::resolve($this, $accounts, $option, CredentialManagers::ROLES);
-
-        if (\is_int($responsible)) {
-            return $responsible;
-        }
-
-        return ConsoleResponsible::confirm(
+        return ConsoleResponsible::sign(
             $this,
-            $responsible,
+            $this->input,
+            $accounts,
+            CredentialManagers::ROLES,
             $this->text('revoke.confirm', ['uuid' => $credentialUuid]),
-            $this->option('force') === true || ! $this->input->isInteractive(),
-        ) ?? $responsible;
+        );
     }
 }
