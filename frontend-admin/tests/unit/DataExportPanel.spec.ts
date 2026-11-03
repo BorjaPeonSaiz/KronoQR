@@ -187,6 +187,12 @@ describe('DataExportPanel', () => {
               row_counts: {},
               expires_at: null,
             }),
+            dataExportRow({
+              uuid: `${EXPORT_UUID}-5`,
+              status: 'purged',
+              purged_at: '2026-11-03T00:00:00.000000Z',
+              requested_via: 'console',
+            }),
           ],
         }),
     })
@@ -218,6 +224,15 @@ describe('DataExportPanel', () => {
     const row4 = wrapper.find(`[data-test="status-${EXPORT_UUID}-4"]`).element.closest('tr')
 
     expect(row4?.textContent).toContain(es.dataExport.requestedByConsole)
+
+    // Firmada por consola desde la 2.3.0: el nombre y el canal, no solo el nombre,
+    // para que no se confunda con una pedida desde el panel.
+    const row5 = wrapper.find(`[data-test="status-${EXPORT_UUID}-5"]`).element.closest('tr')
+
+    expect(row5?.textContent).toContain('Dirección del hotel · consola')
+    expect(
+      wrapper.find(`[data-test="status-${EXPORT_UUID}-1"]`).element.closest('tr')?.textContent,
+    ).not.toContain('consola')
   })
 
   it.each([

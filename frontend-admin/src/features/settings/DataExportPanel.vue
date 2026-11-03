@@ -100,8 +100,17 @@ function instantLabel(value: string | null): string {
     : formatInstantWithZone(value, timezone.value, locale.value)
 }
 
+// Desde la 2.3.0 la consola firma con una cuenta: el canal se sigue enseñando
+// junto al nombre, porque es lo primero que pregunta la revision de un acceso
+// masivo. Las filas anteriores no tienen cuenta y dicen solo «Consola».
 function requestedByLabel(row: DataExport): string {
-  return row.requested_by?.name ?? t('dataExport.requestedByConsole')
+  if (row.requested_by === null) {
+    return t('dataExport.requestedByConsole')
+  }
+
+  return row.requested_via === 'console'
+    ? t('dataExport.requestedByAtConsole', { name: row.requested_by.name })
+    : row.requested_by.name
 }
 
 /**
