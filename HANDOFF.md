@@ -297,7 +297,7 @@ Lo que conviene saber del bloque 5:
 - `package.sh` deja fuera del paquete los runbooks internos `fallo-de-ci.md` y `triaje-hallazgos-seguridad.md` (I10). Ningún documento que viaja puede enlazarlos: lo comprueban `ClientDocumentationTest` y `check-package-links.sh`.
 - La guía de RRHH §5.4 (es/en) explica «Este tramo terminó en pausa» y RN-05 (ADR-058).
 
-**Siguiente acción (03-11-2026):** bloques 33 parcial (#228, `main` `d91d991c`) y 34 (#229, `main` `095c195e`) **integrados**; la 33.12 va con el B32, así que el título del 33 sigue en ⬜. **Bloque 35 en `fix/firma-exportaciones-y-revocacion`**: `product:export-all`, `compliance:legal-export` y `credentials:revoke` firman con `--responsible` (una sola implementación, `ConsoleResponsible::sign`); la exportación legal escribe un parcial y lo publica tras el commit del asiento; el panel pide la íntegra con la cadena primero y enseña «nombre · consola». Revisiones de `revisor-codigo` y `seguridad-cumplimiento` (apto con correcciones) corregidas. Pendiente: CI manual sobre las correcciones, PR y merge. **El propietario tiene que generar el par de claves de diagnóstico antes de publicar la 2.3.0** (`php tools/diagnostics-opener/generate-keypair.php --keyring=$HOME/.kronoqr/diagnostics`; `release-gate` lo exige). Después: B32 con la 33.12. El bloque final, solo con orden del propietario.
+**Siguiente acción (03-11-2026):** bloques 33 parcial (#228, `main` `d91d991c`), 34 (#229, `main` `095c195e`) y **35 (#230, `main` `6bf0da3a`) integrados**. **B32 con la 33.12 en la rama `docs/doc07-cierre-2.3.0`**: dictamen de `seguridad-cumplimiento` aplicado al doc 07 (§6 sin «pendiente» ni destino 2.3.0 abierto; Gestión de defectos sube a 2 con condición; total 1,87) y al plan (32.1, 32.2, 32.3 y 33.12 en ✅; 33.2 sin objeto). Los títulos de los bloques 32 y 33 siguen en ⬜. Falta CI, PR y merge. La prueba de la readmisión por encima del plan (un solo `license.plan_exceeded` por lote o importación) la escribe `qa-testing` aparte. **El propietario tiene que generar el par de claves de diagnóstico antes de publicar la 2.3.0** (`php tools/diagnostics-opener/generate-keypair.php --keyring=$HOME/.kronoqr/diagnostics`; `release-gate` lo exige). Después, el bloque final, solo con orden del propietario.
 
 **B17 a B26 y B24 integrados** (orden del 15-10-2026: un PR por bloque en verde):
 - B17 (#161), B18 (#162), B19 (#167), B20 (#168) y B21 (#169).
@@ -381,7 +381,6 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
 
 ### Bloque 34 de la 2.3.0 (03-11-2026, revisión de seguridad de la 34.1)
 
-- **Fila A-17 del doc 07 desactualizada** (anterior a la 34.1): dice que `absences` se conserva «sin purga automática», pero desde ADR-060 (21-10-2026) la minimización de la ficha borra contratos y ausencias (`DatabasePersonnelRecordArchive`). Reescribirla en la revisión del doc 07 del B32 (33.12).
 - **El listado de ausencias sigue enseñando tipo y nota con asiento por bloque** (ADR-037): si el propietario quisiera «quién vio mi baja» exacto también ahí, haría falta otra enmienda (nota fuera del listado o asiento nominal por fila `sick_leave`). Escrito en «Lo que no cubre» de la enmienda del 03-11-2026 y en la fila V21-7-SC-2.
 
 ### Bloque 25 de la 2.3.0: 25.6 y 25.7 hechas (01-11-2026)
