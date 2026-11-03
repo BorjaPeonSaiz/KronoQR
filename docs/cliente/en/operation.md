@@ -1782,10 +1782,11 @@ None of this stops clock-in:
   their staff.
 - **Opening live presence and the list of management accounts leaves an
   entry** in the audit trail, as the presence view already did.
-- **Opening the detail of a sick leave leaves an entry** with the person and
-  the absence (dataset `sick_leave_detail`). Looking at the list already did;
-  opening a holiday or time off does not. The HR guide explains it in its
-  §5 bis.6.
+- **Opening the history of a sick leave leaves an entry** with the person and
+  the absence (dataset `sick_leave_detail`), and so does an absence file load
+  whose check matches or overlaps a sick leave already registered
+  (`sick_leave_import_match`). Looking at the list already did; opening a
+  holiday or time off does not. The HR guide explains it in its §5 bis.6.
 - **The diagnostics bundle moves to version 2 of the format** (§12.2): an
   earlier bundle is checked with the rule of its own version. **The checksum of
   the portal's own-record PDF also changes version**: do not compare a

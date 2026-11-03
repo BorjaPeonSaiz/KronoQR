@@ -297,7 +297,7 @@ Lo que conviene saber del bloque 5:
 - `package.sh` deja fuera del paquete los runbooks internos `fallo-de-ci.md` y `triaje-hallazgos-seguridad.md` (I10). Ningún documento que viaja puede enlazarlos: lo comprueban `ClientDocumentationTest` y `check-package-links.sh`.
 - La guía de RRHH §5.4 (es/en) explica «Este tramo terminó en pausa» y RN-05 (ADR-058).
 
-**Siguiente acción (02-11-2026):** bloque 33 parcial en `fix/riesgos-doc07-backend`. Hechas en commits locales (subido hasta `592bc5b0`): 33.11 (sin migración, ADR-062 §1), 33.5, 33.6 (+ k6 `RS-03-RN-18` juzga solo mínimos, decisión del propietario del 02-11), 33.4 (backend + panel) y 33.3 (enmienda de ADR-020 aprobada el 01-11). En curso: 33.8 (`producto-licencia`; paquete con datos personales cifrado, anonimizado sin rutas ni host). Pendiente al acabar la 33.8: aplicar los textos de A-13 (doc 07) y de la fila `RS-03-RN-18` de `operacion.md` es/en, la parte de panel de la 33.8 (`frontend-panel`), CI manual completa, revisiones `revisor-codigo` y `seguridad-cumplimiento`, PR y merge. **El propietario tiene que generar el par de claves de diagnóstico antes de publicar la 2.3.0** (`release-gate` lo exige). Después: 34.1, B35 y B32 con 33.12. El bloque final, solo con orden del propietario.
+**Siguiente acción (03-11-2026):** **bloque 33 parcial integrado** (#228, `main` `d91d991c`): 33.3, 33.4, 33.5, 33.6, 33.8 y 33.11; la 33.12 va con el B32, así que el título del bloque sigue en ⬜. **Bloque 34 en `fix/baja-medica-y-franja`**: 34.1 hecha (asiento `sick_leave_detail` al abrir el detalle de una baja médica, enmienda de ADR-037 del 03-11-2026, V21-7-SC-2 cerrado en el doc 07; la 34.2 pasó a la 2.4.0). Pendiente: CI manual, revisiones de `revisor-codigo` y `seguridad-cumplimiento`, PR y merge. **El propietario tiene que generar el par de claves de diagnóstico antes de publicar la 2.3.0** (`php tools/diagnostics-opener/generate-keypair.php --keyring=$HOME/.kronoqr/diagnostics`; `release-gate` lo exige). Después: B35 (`--responsible` en `product:export-all`, `compliance:legal-export` y `credentials:revoke`) y B32 con la 33.12. El bloque final, solo con orden del propietario.
 
 **B17 a B26 y B24 integrados** (orden del 15-10-2026: un PR por bloque en verde):
 - B17 (#161), B18 (#162), B19 (#167), B20 (#168) y B21 (#169).
@@ -373,6 +373,11 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
 > lo que siga vigente debería pasar al plan o a «Fuera de la 2.2.0, con motivo».
 
 ## Pendiente
+
+### Bloque 34 de la 2.3.0 (03-11-2026, revisión de seguridad de la 34.1)
+
+- **Fila A-17 del doc 07 desactualizada** (anterior a la 34.1): dice que `absences` se conserva «sin purga automática», pero desde ADR-060 (21-10-2026) la minimización de la ficha borra contratos y ausencias (`DatabasePersonnelRecordArchive`). Reescribirla en la revisión del doc 07 del B32 (33.12).
+- **El listado de ausencias sigue enseñando tipo y nota con asiento por bloque** (ADR-037): si el propietario quisiera «quién vio mi baja» exacto también ahí, haría falta otra enmienda (nota fuera del listado o asiento nominal por fila `sick_leave`). Escrito en «Lo que no cubre» de la enmienda del 03-11-2026 y en la fila V21-7-SC-2.
 
 ### Bloque 25 de la 2.3.0: 25.6 y 25.7 hechas (01-11-2026)
 

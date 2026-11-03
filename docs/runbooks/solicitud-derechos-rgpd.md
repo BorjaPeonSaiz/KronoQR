@@ -152,6 +152,11 @@ acceso completo —y el art. 15 lo es—, hay que sacarlas aparte:
 - **No uses una cuenta de `responsable_departamento` para esto.** A ese rol el
   campo de la nota no le llega, y la respuesta saldría incompleta sin que nada
   lo advierta.
+- **Si pregunta quién ha visto su baja médica**, la respuesta sale de
+  `audit_log` con la consulta (a) del §4.1 de
+  [`brecha-de-seguridad.md`](brecha-de-seguridad.md), que explica también qué
+  no es exacto (los listados). Si se le comunican las identidades de quienes
+  la vieron lo decide su DPO, no es una cuestión técnica.
 
 **Las incidencias tampoco salen en esa exportación, y también hay que añadirlas
 a mano.** La bandeja guarda sobre cada persona lo que la detección encontró y

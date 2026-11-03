@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| **Estado** | Aceptada. Enmiendas del 18-10-2026 (búsqueda de la exportación legal), del 21-10-2026 (presencia por Reverb, cuentas de gestión e informes diferidos; [ver al final](#enmienda-del-21-de-octubre-de-2026-bloque-11-de-la-230)), del 27-10-2026 (contratos) y del 03-11-2026 (detalle de una baja médica) |
+| **Estado** | Aceptada. Enmiendas del 18-10-2026 (búsqueda de la exportación legal), del 21-10-2026 (presencia por Reverb, cuentas de gestión e informes diferidos; [ver al final](#enmienda-del-21-de-octubre-de-2026-bloque-11-de-la-230)), del 27-10-2026 (contratos) y del 03-11-2026 (detalle de una baja médica y comprobación de una carga de ausencias) |
 | **Fecha** | 27 de agosto de 2026 |
 | **Decide** | `arquitecto-dominio` |
 | **Afecta a** | `Shared/Application/Port/PersonalDataAccessLog` y sus llamantes · `Identity/Application/UseCase/CredentialStatusBoard` · `Workforce/Application/Query/EmployeeQueries` · `Workforce/Application/Query/AbsenceQueries` · `Compliance/Infrastructure/Persistence/DatabaseAuditTrail` |
@@ -218,7 +218,7 @@ es justo lo que el trail tiene que poder enseñar.
 
 **Tarea 34.1; hallazgos V21-7-SC-2 y R4-QA-05.** El propietario activó la corrección el 18-10-2026 («hazlo como consideres mejor»). Sustituye a la aceptación anterior, que dejaba el detalle sin asiento a la espera de que el DPO del cliente lo pidiera.
 
-**El problema.** `GET /absences/{uuid}` entrega la ausencia, su historial y, a `rrhh` y `admin`, la nota. Si es una baja médica, todo eso es dato de salud del art. 9 RGPD. El asiento del índice (`absence_register`) dice «miró el cuadro de marzo», pero no «abrió la baja de esta persona». Además, el detalle se puede pedir directamente por su `uuid` sin pasar por el índice. Ante la queja de un empleado no se podía contestar quién abrió su baja.
+**El problema.** `GET /absences/{uuid}` entrega la ausencia, su historial y, a `rrhh` y `admin`, la nota. Si es una baja médica, todo eso es dato de salud del art. 9 RGPD. El asiento del índice (`absence_register`) dice «miró el cuadro de marzo», pero no «abrió la baja de esta persona». Además, el detalle se puede pedir directamente por su `uuid` sin pasar por el índice. Ante la queja de un empleado no se podía contestar quién abrió su baja. Había además una vía sin ningún asiento: la comprobación de una carga de ausencias (`POST /absences/import` en modo `validate`) confirma, línea a línea, el tipo y las fechas de una baja ya guardada (revisión de seguridad de la 34.1).
 
 **El argumento de la ficha no vale aquí.** La Decisión deja la ficha sin asiento porque quien la abre puede listar el índice, que ya lo deja. Con una baja médica, el índice no responde la pregunta que importa (art. 9 y 32 RGPD): de quién y qué. Una categoría especial pide saber quién la vio, no solo quién tuvo el conjunto delante.
 
@@ -228,6 +228,7 @@ es justo lo que el trail tiene que poder enseñar.
 | `GET /absences/{uuid}` de cualquier otro tipo, sin bajas en su historial | No | Como la ficha: falla la condición 3 y el índice ya deja asiento |
 | La relectura que sigue a un alta, una corrección o una anulación | No | Como el `find()` tras un `POST` de la enmienda del 21-10: ese hecho ya tiene su asiento (`absence.registered`, `absence.corrected`, `absence.voided`), que lleva el tipo |
 | Una lectura denegada por el alcance | No | Deja `access.denied`, como hasta ahora |
+| `POST /absences/import` (`validate` o `apply`) con alguna línea `unchanged` u `overlapping_absence` frente a una baja médica guardada | **Sí (nuevo)** | `personal_data.accessed` con dataset `sick_leave_import_match`, `record_count` = personas y contexto `{employee_uuids, file_sha256}`: los `uuid` ordenados y separados por comas, como `legal_export_employee_search`. Una línea igual a una baja confirma su tipo y sus fechas, y una que la pisa confirma que hay algo en esas fechas: probar combinaciones contestaría «cuándo estuvo de baja» sin rastro |
 
 **El contenido del asiento.**
 
@@ -238,16 +239,20 @@ es justo lo que el trail tiene que poder enseñar.
 
 **Sin agrupación.** No entra en `compliance.disclosure_grouping`. Abrir una baja es un acto deliberado y poco frecuente, no un sondeo, y cada apertura es la respuesta que se busca. Por la misma razón el candado global de la cadena no preocupa: son lecturas de RRHH contadas por día.
 
-**Dónde vive.** `AbsenceQueries::historyForDetail()` lee el historial y escribe el asiento antes de devolver: si `audit_log` falla, la baja no se enseña (regla dura 6). El controlador la llama **después** de comprobar el alcance, así que una denegación nunca deja `personal_data.accessed`.
+**Dónde vive.** `AbsenceQueries::historyForDetail()` lee el historial y escribe el asiento antes de devolver: si `audit_log` falla, la baja no se enseña (regla dura 6). El controlador la llama **después** de comprobar el alcance, así que una denegación nunca deja `personal_data.accessed`. El de la carga lo escribe `PlanAbsenceImport` al terminar de planificar, antes de devolver el informe; nunca lleva las fechas.
 
-**Lo que no cubre.** La nota de una ausencia que nunca fue `sick_leave` (un permiso `other` con texto libre) no dispara el asiento. El tipo es el marcador objetivo de la categoría especial. Una nota que cuente un dato de salud fuera de una baja es un uso del campo que la guía de RRHH ya desaconseja. Un asiento por contenido obligaría a leer la nota, que es justo lo que el asiento no debe hacer.
+**Lo que no cubre.**
 
-**Verificación** (RS-05, RL-15): `tests/Feature/Workforce/SickLeaveDetailDisclosureTest.php`.
+- **El listado.** `GET /absences` también enseña el tipo de cada fila y, a `rrhh` y `admin`, la nota. Esta enmienda no lo cambia: su asiento (`absence_register`) es por bloque y solo nombra a la persona si se filtró por ella. La respuesta completa a «quién vio mi baja» es, por tanto, `sick_leave_detail`, `sick_leave_import_match` y los asientos `absence.*` de quien la escribió (exactos, consulta (a) del §4.1 del runbook de brecha), más los `absence_register` cuya ventana y alcance la contenían (consulta (b)). Si el propietario quisiera la garantía completa por persona, la decisión sería otra (la nota fuera del listado, o un asiento nominal por cada fila `sick_leave` entregada) y pediría otra enmienda.
+- **La nota de una ausencia que nunca fue `sick_leave`** (un permiso `other` con texto libre) no dispara el asiento. El tipo es el marcador objetivo de la categoría especial. Una nota que cuente un dato de salud fuera de una baja es un uso del campo que la guía de RRHH ya desaconseja. Un asiento por contenido obligaría a leer la nota, que es justo lo que el asiento no debe hacer.
+
+**Verificación** (RS-05, RL-15): `tests/Feature/Workforce/SickLeaveDetailDisclosureTest.php` y `SickLeaveImportMatchDisclosureTest.php`.
 
 - La baja abierta por `rrhh` deja un asiento con la ausencia, la persona, `versions = 1` y `has_note = true`, y sin el texto de la nota.
 - Unas vacaciones no dejan ninguno.
-- Una ausencia que hoy es otro tipo pero fue una baja deja asiento con `versions = 2`.
+- Una ausencia que hoy es otro tipo pero fue una baja deja asiento con `versions = 2`, y con `has_note = true` si la nota solo estaba en la versión anterior.
 - El responsable deja asiento con `has_note = false`.
 - La lectura fuera de alcance deja `access.denied` y ningún `sick_leave_detail`.
 - Con `audit_log` averiado, la baja no sale.
+- La comprobación de una carga que confirma una baja, o que la pisa, deja `sick_leave_import_match` con la persona y la huella, sin fechas; si confirma unas vacaciones, no deja ninguno; con `audit_log` averiado, el informe no sale.
 - `DisclosureDatasetsInventoryTest` obliga a tener la fila en el runbook de brecha, y `auditNotice.spec.ts` obliga a que la pantalla avise.

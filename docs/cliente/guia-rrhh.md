@@ -1199,11 +1199,17 @@ Una carga por fichero deja **un asiento por cada ausencia registrada**, no uno
 de resumen: cien ausencias importadas son cien anotaciones.
 
 **Abrir una baja médica también queda anotado.** Mirar el listado deja una
-anotación con el mes y los filtros. Abrir el detalle de una baja médica deja
-otra propia, con la persona y la ausencia, aunque hoy sea de otro tipo pero
-alguna de sus versiones fuera una baja. Así se puede contestar a quien pregunte
-quién ha visto su baja. La anotación dice si salió la nota, nunca lo que decía.
-Abrir unas vacaciones o un permiso no deja anotación propia.
+anotación con el mes y los filtros. Abrir el **Historial** de una baja médica
+deja otra propia, con la persona y la ausencia, aunque hoy sea de otro tipo
+pero alguna de sus versiones fuera una baja. La anotación dice si salió la
+nota, nunca lo que decía. Lo mismo pasa al comprobar o aplicar una carga por
+fichero en la que una línea coincide con una baja ya registrada o la pisa:
+queda anotado de quién era. Abrir el historial de unas vacaciones o de un
+permiso no deja anotación propia.
+
+Con eso se puede contestar a quien pregunte quién ha abierto su baja. El
+listado también enseña el tipo y la nota, y su anotación es la del mes: esas
+consultas se acotan por fechas, no por persona.
 
 **La nota nunca entra en el asiento.** Puede llevar información sobre la salud
 de una persona, y la anotación no la necesita para explicar qué pasó: le basta
