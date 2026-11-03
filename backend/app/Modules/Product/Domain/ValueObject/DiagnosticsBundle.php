@@ -6,17 +6,24 @@ namespace App\Modules\Product\Domain\ValueObject;
 
 use App\Modules\Product\Domain\Support\CanonicalJson;
 use DateTimeImmutable;
+use LogicException;
 
 /**
  * El paquete de diagnostico (contrato `DiagnosticsBundle`, **RF-PD-09**,
  * doc 02 §11.6.6, ADR-020).
  *
- * ## Un solo fichero JSON, legible y sin cifrar
+ * ## El anonimizado, un JSON legible; el que lleva datos personales, nunca en claro
  *
- * Sin cifrar **a proposito**: la ficha 5.9 exige que el cliente inspeccione el
- * paquete antes de enviarlo, y un fichero cifrado se lo impediria. El canal de
- * envio es el del contrato de soporte del cliente y vive fuera del producto. La
- * integridad la da la huella del manifiesto, no un sobre.
+ * El anonimizado sale sin cifrar **a proposito**: la ficha 5.9 exige que el
+ * cliente lo inspeccione antes de enviarlo, y la integridad la da la huella del
+ * manifiesto, no un sobre.
+ *
+ * El que lleva `personal_data` sale **siempre** dentro de un
+ * {@see SealedDiagnosticsBundle}, cifrado para la clave de soporte del
+ * fabricante (ADR-020, enmienda del 01-11-2026). Por eso {@see self::toJson()}
+ * se niega a darlo: el texto en claro de ese paquete solo lo pide el sellador,
+ * con {@see self::toPlaintextJson()}. Un escritor o un controlador que se
+ * olvidara de sellarlo lanza en lugar de entregar la plantilla en claro.
  *
  * ## El tope de tamaño y a que se renuncia primero
  *
@@ -167,6 +174,22 @@ final readonly class DiagnosticsBundle
      * unico detalle del formato de lectura que no es cosmetico.
      */
     public function toJson(): string
+    {
+        if (! $this->manifest->anonymized) {
+            throw new LogicException('Un paquete con datos personales no se entrega sin cifrar: hay que sellarlo antes.');
+        }
+
+        return $this->toPlaintextJson();
+    }
+
+    /**
+     * El documento como fichero, **tambien el que lleva datos personales**.
+     *
+     * Solo para cifrarlo: es lo que va dentro del sobre, byte a byte el mismo
+     * texto que se escribiria en claro. Lo llama el sellador y nadie mas
+     * (`DiagnosticsSealingTest`, Architecture).
+     */
+    public function toPlaintextJson(): string
     {
         return json_encode(
             $this->toArray(),

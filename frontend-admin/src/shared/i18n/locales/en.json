@@ -2632,15 +2632,21 @@
     "intro": "Generate the package the manufacturer needs to diagnose an incident and, if needed, grant it a temporary and revocable access to this installation.",
     "diagnostics": {
       "heading": "Diagnostics package",
-      "intro": "A single JSON file with the version, configuration without secrets, service health and the \"doctor\" result, which you can send to support through your contract's channel. It leaves anonymised by default: no names, no emails and no attendance records.",
+      "intro": "A single JSON file with the version, configuration without secrets, service health and the \"doctor\" result, which you can send to support through your contract's channel. It leaves anonymised by default: no names, no emails, no attendance records and no server paths, and you can open and review it before sending it.",
       "generate": "Generate and download",
       "generating": "Generating…",
       "includePersonalData": "Include personal data",
-      "personalDataWarning": "If you tick this box, the package will stop being anonymised: it will add the workforce roster (each person's name and code), the clock-ins and shifts of the chosen period, and open incidents. It is logged in the audit trail, visible to any installation administrator.",
+      "personalDataWarning": "If you tick this box, the package will stop being anonymised: it will add the workforce roster (each person's name and code), the clock-ins and shifts of the chosen period, and open incidents. It leaves encrypted for the manufacturer's support: your hotel will not be able to open or review it. To check the content before sending it, download the anonymised package. It is logged in the audit trail, visible to any installation administrator.",
       "periodDays": "Days",
       "periodDaysHint": "How many days back to include in the package's clock-ins and shifts. Without ticking \"Include personal data\" it has no effect.",
-      "success": "Downloaded {filename}; review it before sending it.",
-      "announceDownloaded": "The diagnostics package {filename} has been downloaded."
+      "success": "Downloaded {filename}; open it and review it before sending it.",
+      "announceDownloaded": "The diagnostics package {filename} has been downloaded.",
+      "announceDownloadedSealed": "The encrypted diagnostics package {filename} has been downloaded.",
+      "successSealed": "Downloaded {filename}. It is encrypted for the manufacturer's support: it cannot be opened from here. Send it as it is.",
+      "sealingUnavailable": {
+        "title": "This installation cannot generate the package with personal data",
+        "advice": "The support encryption key is missing, so that package is never generated. Untick \"Include personal data\" and download the anonymised package: that is the one to send to support."
+      }
     },
     "grant": {
       "heading": "Support access grants",
@@ -2785,7 +2791,10 @@
       "actions": "Actions",
       "expand": "Show detail",
       "collapse": "Hide detail",
-      "resolved": "Resolved"
+      "resolvedBy": "Resolved by {name} on {date}",
+      "resolvedAnonymous": "Resolved on {date}",
+      "previousResolution": "Previously resolved by {name} on {date}",
+      "previousResolutionAnonymous": "Previously resolved on {date}"
     },
     "detail": {
       "exceptionClass": "Exception class",

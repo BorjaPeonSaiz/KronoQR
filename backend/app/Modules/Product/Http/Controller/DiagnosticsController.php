@@ -7,9 +7,11 @@ namespace App\Modules\Product\Http\Controller;
 use App\Http\Controllers\Controller;
 use App\Modules\Product\Application\UseCase\GenerateDiagnosticsBundleHandler;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsActor;
+use App\Modules\Product\Domain\ValueObject\SealedDiagnosticsBundle;
 use App\Modules\Product\Http\Request\GenerateDiagnosticsBundleRequest;
 use App\Modules\Shared\Application\Port\ManagementActor;
 use Illuminate\Http\JsonResponse;
+use LogicException;
 
 /**
  * `POST /api/v1/diagnostics/bundle` (Anexo B, **RF-PD-09**, ADR-020).
@@ -30,6 +32,13 @@ use Illuminate\Http\JsonResponse;
  * Para que el navegador lo guarde sin que el panel tenga que inventarse un
  * nombre. El nombre lleva version e instante porque el caso normal es que un
  * cliente envie varios paquetes de la misma incidencia.
+ *
+ * ## Dos tipos de respuesta (ADR-020, enmienda del 01-11-2026)
+ *
+ * El anonimizado, `application/json` legible; el que lleva datos personales,
+ * `application/vnd.kronoqr.diagnostics-sealed+json`, cifrado para la clave de
+ * soporte del fabricante. Sin esa clave el caso de uso lanza antes de recoger
+ * nada y la respuesta es `503` `diagnostics-sealing-unavailable`.
  *
  * ## No degrada con la licencia caducada (regla dura 15)
  *
@@ -65,10 +74,26 @@ final class DiagnosticsController extends Controller
          * que escribe el comando**: mismo indentado, mismo orden, misma huella.
          * Un runbook escrito contra uno vale para el otro.
          */
+        if ($bundle instanceof SealedDiagnosticsBundle) {
+            // ADR-020, enmienda del 01-11-2026: el que lleva datos personales
+            // sale cifrado, con su propio tipo y `.sealed.json`.
+            return JsonResponse::fromJsonString($bundle->toJson(), 200, [
+                'Content-Type' => SealedDiagnosticsBundle::MEDIA_TYPE,
+                'Content-Disposition' => 'attachment; filename="'.$bundle->fileName().'"',
+                'Cache-Control' => 'no-store',
+            ]);
+        }
+
+        // Nunca en claro con datos personales: `toJson()` tambien se niega,
+        // pero esto lo dice aqui, donde se entregaria.
+        if (! $bundle->manifest->anonymized) {
+            throw new LogicException('Un paquete con datos personales no se entrega sin cifrar.');
+        }
+
         return JsonResponse::fromJsonString($bundle->toJson(), 200, [
             'Content-Disposition' => 'attachment; filename="'.$bundle->manifest->fileName().'"',
             // El paquete no se cachea en ningun sitio: es una foto de un
-            // instante y puede llevar datos personales.
+            // instante.
             'Cache-Control' => 'no-store',
         ]);
     }

@@ -233,8 +233,25 @@ it('si deja salir los umbrales operativos, que es para lo que existe la seccion'
     'MAIL_PORT',
     'TELEMETRY_ENABLED',
     'TLS_ALLOW_SELF_SIGNED',
-    'BRANDING_LOGO_ROOT',
 ])->group('RF-PD-09');
+
+it('no deja salir ninguna ruta del servidor: ni la raiz de la marca ni un valor con barra que entra por prefijo', function (): void {
+    // ADR-020, enmienda del 01-11-2026: una ruta dice donde y como esta montado
+    // el servidor del cliente, y a veces su nombre. Lo que soporte necesita de
+    // esas ubicaciones va en `configuration.locations`, por papel y sin valor.
+    $filtered = DiagnosticsConfigurationAllowlist::apply([
+        'BRANDING_LOGO_ROOT' => '/srv/hotel-ejemplo/marca',
+        'PRODUCT_DIAGNOSTICS_PATH' => '/srv/hotel-ejemplo/paquetes',
+        'COMPLIANCE_RETENTION_REPORT_PATH' => 'D:\hotel-ejemplo\informes',
+        'PRODUCT_DIAGNOSTICS_MAX_BYTES' => '8388608',
+        // La lista exacta no pasa por la regla de la barra: sus valores son del
+        // producto, y una zona horaria lleva una.
+        'APP_TIMEZONE' => 'Europe/Madrid',
+    ]);
+
+    expect(DiagnosticsConfigurationAllowlist::allows('BRANDING_LOGO_ROOT'))->toBeFalse()
+        ->and($filtered)->toBe(['APP_TIMEZONE' => 'Europe/Madrid', 'PRODUCT_DIAGNOSTICS_MAX_BYTES' => '8388608']);
+})->group('RF-PD-09', 'RL-19');
 
 it('ordena la salida para que dos paquetes se puedan comparar con diff', function (): void {
     $filtered = DiagnosticsConfigurationAllowlist::apply([

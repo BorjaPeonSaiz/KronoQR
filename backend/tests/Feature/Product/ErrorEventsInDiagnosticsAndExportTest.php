@@ -9,6 +9,7 @@ use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Product\DataExports;
+use Tests\Support\Product\DiagnosticsRecipient;
 use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -150,16 +151,20 @@ it('el paquete anonimizado no lleva employee_uuid y el que tiene datos personale
     grupoParaElPaquete();
 
     $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN));
+    // El que lleva datos personales sale cifrado (ADR-020, enmienda del
+    // 01-11-2026): se abre con la privada del par de la prueba.
+    $recipient = DiagnosticsRecipient::install();
 
     $anonimo = Api::as($token)->post('/api/v1/diagnostics/bundle')->assertOk();
-    $completo = Api::as($token)
+    $completo = $recipient->openedDocument((string) Api::as($token)
         ->post('/api/v1/diagnostics/bundle', ['include_personal_data' => true, 'period_days' => 7])
-        ->assertOk();
+        ->assertOk()
+        ->getContent());
 
     /** @var array<string, mixed> $grupoAnonimo */
     $grupoAnonimo = $anonimo->json('error_events.groups.0');
     /** @var array<string, mixed> $grupoCompleto */
-    $grupoCompleto = $completo->json('error_events.groups.0');
+    $grupoCompleto = data_get($completo, 'error_events.groups.0');
 
     expect($grupoAnonimo)->not->toHaveKey('employee_uuid')
         ->and((string) json_encode($anonimo->json('error_events')))->not->toContain('0199f0aa-2222-7000-8000-0123456789ab')
@@ -208,4 +213,47 @@ it('la exportacion integra escribe error_events.csv con la tabla entera', functi
         // Ni un identificador interno (doc 01 §5.5): la referencia a `users` va
         // por uuid, como en el resto de la exportacion.
         ->and($csv)->not->toContain('resolved_by_user_id');
+})->group('RF-PD-15', 'RF-PD-14', 'RL-20');
+
+it('la exportacion integra lleva el historial de resoluciones y el paquete de diagnostico no', function (): void {
+    // Tarea 33.4. El historial se queda con el cliente (RL-20), con el autor por
+    // su uuid y el grupo por su huella; hacia el fabricante no viaja, ni como
+    // conjunto ni dentro de los grupos (ADR-020).
+    DataExports::useTemporaryPath();
+
+    $usuario = ManagementUsers::withRole(UserRole::ADMIN);
+    $id = grupoParaElPaquete();
+
+    Api::as(ManagementUsers::tokenFor($usuario))->post('/api/v1/diagnostics/errors/'.$id.'/resolve')->assertOk();
+    DB::table('error_events')->where('id', $id)->update(['resolved_at' => null, 'resolved_by_user_id' => null]);
+
+    $paquete = Api::as(ManagementUsers::tokenFor($usuario))->post('/api/v1/diagnostics/bundle')->assertOk();
+
+    expect((string) $paquete->getContent())->not->toContain('previous_resolution')
+        ->and((string) $paquete->getContent())->not->toContain('error_event_resolutions')
+        ->and((string) $paquete->getContent())->not->toContain($usuario->name);
+
+    [$codigo, $salida] = Commands::run('product:export-all');
+
+    expect($codigo)->toBe(0, $salida);
+
+    $fila = DB::table('data_exports')->latest('id')->first();
+
+    /** @var array<string, int> $recuentos */
+    $recuentos = json_decode((string) $fila?->row_counts, true, 512, JSON_THROW_ON_ERROR);
+
+    expect($recuentos['error_event_resolutions'] ?? null)->toBe(1);
+
+    $zip = new ZipArchive;
+
+    expect($zip->open((string) $fila?->file_path))->toBeTrue();
+
+    $csv = (string) $zip->getFromName('error_event_resolutions.csv');
+
+    $zip->close();
+
+    expect($csv)->toContain('fingerprint;resolved_at;resolved_by_user_uuid')
+        ->and($csv)->toContain(DB::table('error_events')->where('id', $id)->value('fingerprint'))
+        ->and($csv)->toContain((string) $usuario->uuid)
+        ->and($csv)->not->toContain('error_event_id');
 })->group('RF-PD-15', 'RF-PD-14', 'RL-20');

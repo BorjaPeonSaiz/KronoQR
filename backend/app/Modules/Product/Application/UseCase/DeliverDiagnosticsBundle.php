@@ -11,6 +11,7 @@ use App\Modules\Product\Application\Port\StagedDiagnosticsBundle;
 use App\Modules\Product\Domain\Exception\DiagnosticsAuditNotDeferred;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsBundle;
 use App\Modules\Product\Domain\ValueObject\PendingDiagnosticsAudit;
+use App\Modules\Product\Domain\ValueObject\SealedDiagnosticsBundle;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Throwable;
 
@@ -55,7 +56,7 @@ final readonly class DeliverDiagnosticsBundle
      *
      * @throws DiagnosticsAuditNotDeferred Si el pendiente no se pudo guardar.
      */
-    public function handle(DiagnosticsBundle $bundle, ?string $path = null): string
+    public function handle(DiagnosticsBundle|SealedDiagnosticsBundle $bundle, ?string $path = null): string
     {
         return UseCaseInstrumentation::run('product.deliver_diagnostics_bundle', fn (): string => $this->doHandle($bundle, $path));
     }
@@ -65,10 +66,14 @@ final readonly class DeliverDiagnosticsBundle
      *                             directorio de serie.
      * @return string La ruta absoluta donde quedo el paquete.
      */
-    private function doHandle(DiagnosticsBundle $bundle, ?string $path = null): string
+    private function doHandle(DiagnosticsBundle|SealedDiagnosticsBundle $bundle, ?string $path = null): string
     {
         $staged = $this->writer->stage($bundle, $path);
-        $receipt = $bundle->generationEntryPending() ? $this->deferAudit($bundle, $staged) : null;
+        // Solo el anonimizado puede llegar con el asiento pendiente: el sellado
+        // nunca se aplaza (ADR-020, enmiendas del 14-10 y del 01-11-2026).
+        $receipt = $bundle instanceof DiagnosticsBundle && $bundle->generationEntryPending()
+            ? $this->deferAudit($bundle, $staged)
+            : null;
 
         try {
             return $this->writer->publish($staged, $receipt);

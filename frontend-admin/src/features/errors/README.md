@@ -7,13 +7,13 @@ Carpeta por _feature_, no por tipo de fichero (doc 02 §3.5).
 
 ## Que hay aqui
 
-| Fichero                | Que hace                                                                                                                                                |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `errors.api.ts`        | Cliente tipado de `GET /diagnostics/errors` y `POST /diagnostics/errors/{id}/resolve`, con los filtros en camelCase que usa el panel.                   |
-| `errors.store.ts`      | Pinia: la pagina, los filtros, el reloj del servidor para la antiguedad de `last_seen_at`, y la sustitucion/retirada de fila al resolver.               |
-| `errorPresentation.ts` | Presentacion pura (sin Vue): el color del badge de nivel, la clave de «que hacer» por origen y nivel, la antiguedad y los limites de cada periodo.      |
-| `ErrorsView.vue`       | La pantalla: cabecera con recuentos abiertos, filtros (origen, nivel, estado, periodo), paginacion, estados vacio/carga/error y el dialogo de resolver. |
-| `ErrorTable.vue`       | Las filas, con expansion por fila (clase, `file:line`, contexto, «que hacer») y el `trace_id` copiable.                                                 |
+| Fichero                | Que hace                                                                                                                                                                            |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `errors.api.ts`        | Cliente tipado de `GET /diagnostics/errors` y `POST /diagnostics/errors/{id}/resolve`, con los filtros en camelCase que usa el panel.                                               |
+| `errors.store.ts`      | Pinia: la pagina, los filtros, el reloj del servidor para la antiguedad de `last_seen_at`, y la sustitucion/retirada de fila al resolver.                                           |
+| `errorPresentation.ts` | Presentacion pura (sin Vue): el color del badge de nivel, la clave de «que hacer» por origen y nivel, la antiguedad y los limites de cada periodo.                                  |
+| `ErrorsView.vue`       | La pantalla: cabecera con recuentos abiertos, filtros (origen, nivel, estado, periodo), paginacion, estados vacio/carga/error y el dialogo de resolver.                             |
+| `ErrorTable.vue`       | Las filas, con expansion por fila (clase, `file:line`, contexto, «que hacer») y el `trace_id` copiable, mas la linea «Resuelto antes por …» si el grupo trae `previous_resolution`. |
 
 ## Por que es un store de Pinia y no una consulta de TanStack Query
 

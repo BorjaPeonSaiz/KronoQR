@@ -2,9 +2,15 @@
 
 declare(strict_types=1);
 
+use App\Modules\Attendance\Domain\Event\DailyTotalsRecalculated;
 use App\Modules\Attendance\Domain\ValueObject\ScanOrigin;
+use App\Modules\Attendance\Domain\ValueObject\ShiftEntryTimes;
+use App\Modules\Shared\Domain\Event\DomainEvent;
 use Tests\Support\Domain\RecordedEvents;
 use Tests\Support\Factory\ClockingPolicyFactory;
+use Tests\Support\Factory\ContinuationCeilingFactory;
+use Tests\Support\Factory\CorrectionFactory;
+use Tests\Support\Factory\ManualEntryHorizonFactory;
 use Tests\Support\Factory\WorkDayFactory;
 use Tests\Support\Time\Instants;
 
@@ -150,3 +156,73 @@ it('marca la jornada para revision cuando algun tramo quedo anomalo', function (
         // marca para revision humana, no deshace lo que el empleado ficho.
         ->and($proyeccion->total->minutes)->toBe(780);
 })->group('RN-06', 'RN-08');
+
+/*
+ * El orden de los eventos de cada mutacion **es un candado** (RN-06, RF-PR-02,
+ * A-12 del doc 07). El caso de uso los publica en el orden en que el agregado
+ * los registra, y los listeners son sincronos: el hecho auditado sella su
+ * asiento —y toma el candado global de la cadena de `audit_log`— antes de que
+ * `DailyTotalsRecalculated` haga el `UPSERT` de la proyeccion. Es lo que
+ * serializa el fichaje con la reconciliacion nocturna tambien cuando la fila de
+ * `daily_totals` todavia no existe, sin candado propio en el camino del
+ * fichaje. Si una mutacion emitiera el recalculo antes, o sin hecho auditado
+ * delante, ese `UPSERT` quedaria fuera del candado.
+ */
+dataset('mutaciones de la jornada', [
+    'entrada' => [static function (): array {
+        $jornada = WorkDayFactory::new()->onWorkDate('2026-03-14')->build();
+        $jornada->clockIn('entrada', Instants::utc('2026-03-14 06:00'), ScanOrigin::QR_KIOSK);
+
+        return [$jornada->releaseEvents(), 'attendance.employee_clocked_in'];
+    }],
+    'salida' => [static function (): array {
+        $jornada = WorkDayFactory::new()->onWorkDate('2026-03-14')->withOpenShiftSince('2026-03-14 06:00')->build();
+        $jornada->clockOut(Instants::utc('2026-03-14 14:00'), ScanOrigin::QR_KIOSK, ClockingPolicyFactory::standard());
+
+        return [$jornada->releaseEvents(), 'attendance.employee_clocked_out'];
+    }],
+    'alta manual' => [static function (): array {
+        $jornada = WorkDayFactory::new()->onWorkDate('2026-03-14')->build();
+        $jornada->addEntry(
+            'alta',
+            ShiftEntryTimes::closed(Instants::utc('2026-03-14 07:00'), Instants::utc('2026-03-14 15:00')),
+            ScanOrigin::MANUAL_ADMIN,
+            CorrectionFactory::standard(),
+            ClockingPolicyFactory::standard(),
+            ContinuationCeilingFactory::standard(),
+            ManualEntryHorizonFactory::standard(),
+        );
+
+        return [$jornada->releaseEvents(), 'attendance.shift_corrected'];
+    }],
+    'correccion' => [static function (): array {
+        $jornada = WorkDayFactory::new()->onWorkDate('2026-03-14')->withClosedShift('2026-03-14 07:00', '2026-03-14 15:00')->build();
+        $jornada->correctEntry(
+            'shift-entry-1',
+            'shift-entry-1-v2',
+            $jornada->entry('shift-entry-1')->times()->withClockOut(Instants::utc('2026-03-14 14:30')),
+            ScanOrigin::MANUAL_ADMIN,
+            CorrectionFactory::standard(),
+            ClockingPolicyFactory::standard(),
+            ContinuationCeilingFactory::standard(),
+            ManualEntryHorizonFactory::standard(),
+        );
+
+        return [$jornada->releaseEvents(), 'attendance.shift_corrected'];
+    }],
+    'anulacion' => [static function (): array {
+        $jornada = WorkDayFactory::new()->onWorkDate('2026-03-14')->withClosedShift('2026-03-14 07:00', '2026-03-14 15:00')->build();
+        $jornada->voidEntry('shift-entry-1', CorrectionFactory::standard(), ContinuationCeilingFactory::standard());
+
+        return [$jornada->releaseEvents(), 'attendance.shift_corrected'];
+    }],
+]);
+
+it('emite el recalculo el ultimo y detras de su hecho auditado', function (Closure $mutacion): void {
+    /** @var array{0: list<DomainEvent>, 1: string} $resultado */
+    $resultado = $mutacion();
+    [$eventos, $hechoAuditado] = $resultado;
+
+    expect(RecordedEvents::names($eventos))->toBe([$hechoAuditado, 'attendance.daily_totals_recalculated'])
+        ->and(end($eventos))->toBeInstanceOf(DailyTotalsRecalculated::class);
+})->with('mutaciones de la jornada')->group('RN-06', 'RF-PR-02');

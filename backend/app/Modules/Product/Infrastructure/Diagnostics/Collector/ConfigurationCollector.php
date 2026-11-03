@@ -11,6 +11,7 @@ use App\Modules\Product\Domain\ValueObject\InvalidSetting;
 use App\Modules\Product\Domain\ValueObject\ResolvedSettings;
 use App\Modules\Product\Domain\ValueObject\SettingsDrift;
 use App\Modules\Product\Infrastructure\Diagnostics\DiagnosticsConfigurationAllowlist;
+use App\Modules\Product\Infrastructure\Diagnostics\DiagnosticsLocations;
 use App\Modules\Product\Infrastructure\Diagnostics\DiagnosticsSettingsAllowlist;
 
 /**
@@ -33,6 +34,12 @@ use App\Modules\Product\Infrastructure\Diagnostics\DiagnosticsSettingsAllowlist;
  * seccion se convertiria en una puerta trasera para sacar del `.env` cualquier
  * variable que ademas fuera una clave de configuracion, esquivando la lista de
  * permitidos de arriba. Con la clave basta para decirle al cliente donde mirar.
+ *
+ * ## Las ubicaciones, por papel y sin la ruta (ADR-020, enmienda del 01-11-2026)
+ *
+ * `locations` dice de cada una si es la de serie, si existe y si se puede
+ * escribir; el `.env` filtrado no lleva ningun valor con una ruta. La ruta real
+ * la ve quien ejecuta `product:doctor` en el servidor.
  */
 final readonly class ConfigurationCollector implements DiagnosticsCollector
 {
@@ -45,6 +52,11 @@ final readonly class ConfigurationCollector implements DiagnosticsCollector
     public function __construct(
         private GetSettingsHandler $settings,
         private array $environment,
+        /**
+         * Las ubicaciones por papel, sin su valor (ADR-020, enmienda del
+         * 01-11-2026). Nula en las pruebas que solo miran el `.env`.
+         */
+        private ?DiagnosticsLocations $locations = null,
     ) {}
 
     public function section(): string
@@ -67,6 +79,7 @@ final readonly class ConfigurationCollector implements DiagnosticsCollector
                 'invalid_keys' => $resolved,
                 'unknown_keys' => $resolved,
                 'env_differs_from_database' => $resolved,
+                ...$this->locations(),
             ];
         }
 
@@ -85,6 +98,19 @@ final readonly class ConfigurationCollector implements DiagnosticsCollector
             ),
             'unknown_keys' => $resolved->unknownKeys,
             'env_differs_from_database' => SettingsDrift::between($this->environment, $resolved)->toArray(),
+            ...$this->locations(),
         ];
+    }
+
+    /**
+     * `locations`: por papel, `customized`, `exists` y `writable`, nunca la
+     * ruta. Es lo que soporte necesita saber de una ubicacion sin que el
+     * paquete diga donde esta ni como se llama el servidor del cliente.
+     *
+     * @return array<string, array<string, array{customized: bool, exists: bool, writable: bool}>>
+     */
+    private function locations(): array
+    {
+        return $this->locations instanceof DiagnosticsLocations ? ['locations' => $this->locations->describe()] : [];
     }
 }

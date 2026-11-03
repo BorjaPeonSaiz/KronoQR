@@ -77,7 +77,17 @@ namespace App\Modules\Product\Infrastructure\Diagnostics;
  *
  * **No lo añadas por simetria.** Que dos variables compartan prefijo no las hace
  * igual de inocuas; es el mismo criterio por el que `BACKUP_` no es prefijo y
- * por el que viaja `BRANDING_LOGO_ROOT` y no la ruta del logotipo.
+ * por el que no viaja la ruta del logotipo.
+ *
+ * ## Ningun valor con una ruta (ADR-020, enmienda del 01-11-2026)
+ *
+ * Una ruta dice donde y como esta montado el servidor del cliente, y a veces su
+ * nombre. `BRANDING_LOGO_ROOT` salio de la lista exacta, y lo que entra por
+ * prefijo (`COMPLIANCE_RETENTION_REPORT_PATH`, `PRODUCT_DIAGNOSTICS_PATH`…) **no
+ * se emite si su valor lleva una barra, normal o invertida**. Lo que soporte necesita saber de esas
+ * ubicaciones va en `configuration.locations`, por papel y sin el valor. La
+ * lista exacta no pasa por esa regla porque sus valores son del producto
+ * (`APP_TIMEZONE=Europe/Madrid` lleva una barra y no es una ruta).
  */
 final class DiagnosticsConfigurationAllowlist
 {
@@ -122,9 +132,6 @@ final class DiagnosticsConfigurationAllowlist
         // Si el certificado es autofirmado y el producto lo tolera: la mitad del
         // diagnostico de «el quiosco no sincroniza».
         'TLS_ALLOW_SELF_SIGNED',
-        // La RAIZ del directorio de marca, no la ruta del logotipo: la primera
-        // es del despliegue y la segunda podria llevar el nombre del hotel.
-        'BRANDING_LOGO_ROOT',
         // En que fraccion de su vida se renueva el token del quiosco
         // (ADR-044). Junto con `IDENTITY_DEVICE_TOKEN_DAYS` y `_OVERLAP_HOURS`
         // —que ya entran por sufijo— y el `token_expires_on` de cada quiosco,
@@ -204,7 +211,7 @@ final class DiagnosticsConfigurationAllowlist
         $allowed = [];
 
         foreach ($environment as $key => $value) {
-            if (self::allows($key) && (is_scalar($value) || $value === null)) {
+            if (self::allows($key) && (is_scalar($value) || $value === null) && ! self::isPathByPrefix($key, $value)) {
                 $allowed[$key] = match (true) {
                     $value === null => '',
                     is_bool($value) => $value ? 'true' : 'false',
@@ -216,5 +223,17 @@ final class DiagnosticsConfigurationAllowlist
         ksort($allowed, SORT_STRING);
 
         return $allowed;
+    }
+
+    /**
+     * Un valor con una barra de cualquiera de los dos tipos, de una clave que
+     * no esta en la lista exacta: una ruta, y no sale. Ver el docblock de la
+     * clase.
+     */
+    private static function isPathByPrefix(string $key, mixed $value): bool
+    {
+        return ! in_array($key, self::EXACT, true)
+            && is_string($value)
+            && (str_contains($value, '/') || str_contains($value, '\\'));
     }
 }

@@ -80,7 +80,15 @@ final readonly class DatabaseErrorHistoryArchive implements ErrorHistoryArchive
     {
         $pending = $this->inspect($cutoff);
 
-        if (! $pending->available || $pending->isEmpty()) {
+        if (! $pending->available) {
+            return $pending;
+        }
+
+        // Las resoluciones vencidas se purgan aunque no venza ningun grupo: las
+        // de un grupo que se repite no se iban nunca con la cascada.
+        if ($pending->isEmpty()) {
+            $this->purgeResolutions($cutoff, $batchSize);
+
             return $pending;
         }
 
@@ -100,6 +108,8 @@ final readonly class DatabaseErrorHistoryArchive implements ErrorHistoryArchive
             $deleted += $affected;
         } while ($affected > 0);
 
+        $this->purgeResolutions($cutoff, $batchSize);
+
         return new RetentionTally(
             scope: RetentionScope::ErrorHistory,
             dataset: self::TABLE,
@@ -107,6 +117,38 @@ final readonly class DatabaseErrorHistoryArchive implements ErrorHistoryArchive
             oldest: $pending->oldest,
             newest: $pending->newest,
         );
+    }
+
+    /**
+     * Las resoluciones con `resolved_at` anterior al corte, aunque su grupo siga
+     * vivo (RL-11, 2.3.0): la cascada solo se lleva las de un grupo que vence.
+     * Por `error_event_resolutions_purge_batch()` y no con un `DELETE`: la
+     * tabla es solo-append para la aplicacion (`2026_11_02_100000`). El mismo
+     * paso que da `product:errors:prune`; la cifra del informe sigue siendo la
+     * de grupos. Sin la funcion —base a medio migrar— no hace nada.
+     */
+    private function purgeResolutions(DateTimeImmutable $cutoff, int $batchSize): void
+    {
+        /** @var object{present: string|null}|null $installed */
+        $installed = $this->connection->selectOne(
+            "SELECT to_regprocedure('public.error_event_resolutions_purge_batch(timestamptz, integer)')::text AS present",
+        );
+
+        if (($installed->present ?? null) === null) {
+            return;
+        }
+
+        $size = max(1, $batchSize);
+
+        do {
+            /** @var object{removed: int|string|null}|null $row */
+            $row = $this->connection->selectOne(
+                'SELECT public.error_event_resolutions_purge_batch(?::timestamptz, ?) AS removed',
+                [$cutoff->format(DateTimeImmutable::ATOM), $size],
+            );
+
+            $removed = (int) ($row->removed ?? 0);
+        } while ($removed === $size);
     }
 
     /**

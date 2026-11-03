@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\DB;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\DiagnosticsRecipient;
 use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -100,12 +101,17 @@ it('genera el paquete con la licencia caducada', function (): void {
 
 it('genera el paquete con datos personales tambien con la licencia caducada', function (): void {
     // Que la licencia no bloquee **nada** del registro legal incluye lo que el
-    // cliente decide sacar de su propia instalacion (ADR-019).
+    // cliente decide sacar de su propia instalacion (ADR-019). Sale cifrado
+    // (ADR-020, enmienda del 01-11-2026), y la clave de soporte no tiene nada
+    // que ver con la licencia.
     diagnosticoConLicenciaCaducada();
+    DiagnosticsRecipient::install();
 
-    Api::as(tokenDeDiagnosticoSinLicencia())
+    $response = Api::as(tokenDeDiagnosticoSinLicencia())
         ->post('/api/v1/diagnostics/bundle', ['include_personal_data' => true])
         ->assertStatus(200);
+
+    expect($response->headers->get('Content-Type'))->toStartWith('application/vnd.kronoqr.diagnostics-sealed+json');
 })->group('RF-PD-05', 'RL-19');
 
 it('doctor termina con aviso, nunca con fallo, por el estado de la licencia', function (): void {

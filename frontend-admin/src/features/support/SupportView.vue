@@ -34,6 +34,7 @@ import ConfirmDialog from '@/shared/ui/ConfirmDialog.vue'
 import SupportGrantUsesDialog from './SupportGrantUsesDialog.vue'
 import {
   generateDiagnosticsBundle,
+  isDiagnosticsSealingUnavailable,
   grantSupportAccess,
   listSupportGrants,
   revokeSupportAccess,
@@ -87,25 +88,47 @@ const periodDays = ref(7)
 const generating = ref(false)
 const generateError = ref<unknown>(null)
 const downloadedFilename = ref<string | null>(null)
+/** El paquete descargado salio cifrado para el fabricante: el hotel no puede abrirlo. */
+const downloadedSealed = ref(false)
 
 const periodDaysOptions = Array.from({ length: 31 }, (_unused, index) => index + 1)
+
+/**
+ * El `503` de sellado tiene mensaje propio y NO reintento: la instalacion no
+ * tiene la clave publica de soporte, esperar no lo arregla.
+ */
+const sealingUnavailable = computed(() => isDiagnosticsSealingUnavailable(generateError.value))
 
 async function generateBundle(): Promise<void> {
   generating.value = true
   generateError.value = null
   downloadedFilename.value = null
 
+  const sealed = includePersonalData.value
+
   try {
     const document_ = await generateDiagnosticsBundle({
-      include_personal_data: includePersonalData.value,
+      include_personal_data: sealed,
       period_days: periodDays.value,
     })
 
     downloadDocument(document_)
+    downloadedSealed.value = sealed
     downloadedFilename.value = document_.filename
-    announce(t('support.diagnostics.announceDownloaded', { filename: document_.filename }))
+    announce(
+      t(
+        sealed
+          ? 'support.diagnostics.announceDownloadedSealed'
+          : 'support.diagnostics.announceDownloaded',
+        { filename: document_.filename },
+      ),
+    )
   } catch (failure) {
     generateError.value = failure
+
+    if (isDiagnosticsSealingUnavailable(failure)) {
+      announce(t('support.diagnostics.sealingUnavailable.title'))
+    }
   } finally {
     generating.value = false
   }
@@ -333,7 +356,16 @@ const buttonClass =
         <p class="mt-1 text-kq-text-muted">{{ t('support.diagnostics.intro') }}</p>
       </div>
 
-      <ErrorNotice v-if="generateError !== null" :error="generateError" />
+      <div
+        v-if="sealingUnavailable"
+        role="alert"
+        class="rounded-kq border border-kq-danger bg-kq-danger-soft p-4 text-kq-danger"
+        data-test="sealing-unavailable"
+      >
+        <p class="font-semibold">{{ t('support.diagnostics.sealingUnavailable.title') }}</p>
+        <p class="mt-1">{{ t('support.diagnostics.sealingUnavailable.advice') }}</p>
+      </div>
+      <ErrorNotice v-else-if="generateError !== null" :error="generateError" />
 
       <p
         v-if="downloadedFilename !== null"
@@ -341,7 +373,12 @@ const buttonClass =
         class="rounded-kq border border-kq-success bg-kq-success-soft p-4 text-kq-success"
         data-test="diagnostics-success"
       >
-        {{ t('support.diagnostics.success', { filename: downloadedFilename }) }}
+        {{
+          t(
+            downloadedSealed ? 'support.diagnostics.successSealed' : 'support.diagnostics.success',
+            { filename: downloadedFilename },
+          )
+        }}
       </p>
 
       <div class="flex flex-col gap-2">

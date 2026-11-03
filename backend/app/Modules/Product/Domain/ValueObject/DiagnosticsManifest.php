@@ -87,8 +87,27 @@ final readonly class DiagnosticsManifest
      */
     public function fileName(): string
     {
+        return $this->baseName().'.json';
+    }
+
+    /**
+     * Nombre del paquete con datos personales, que sale cifrado (ADR-020,
+     * enmienda del 01-11-2026): `kronoqr-diagnostics-<version>-<UTC>.sealed.json`.
+     *
+     * El `.sealed` delante de la extension y no en otro sitio: casa con el
+     * patron de los paquetes que barre la purga por antiguedad (ADR-045 §g), y
+     * quien ve el fichero en una carpeta sabe sin abrirlo que no se lee con
+     * `less`.
+     */
+    public function sealedFileName(): string
+    {
+        return $this->baseName().'.sealed.json';
+    }
+
+    private function baseName(): string
+    {
         return 'kronoqr-diagnostics-'
             .(string) preg_replace('/[^A-Za-z0-9._-]/', '_', $this->productVersion)
-            .'-'.UtcInstant::compact($this->generatedAt).'.json';
+            .'-'.UtcInstant::compact($this->generatedAt);
     }
 }

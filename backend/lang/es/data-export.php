@@ -554,8 +554,17 @@ return [
                 'occurrences' => 'Cuantas veces ha ocurrido este mismo fallo desde `first_seen_at`.',
                 'first_seen_at' => 'La primera vez que se vio.',
                 'last_seen_at' => 'La ultima. Es la fecha por la que se purga a los 90 dias: un fallo que sigue ocurriendo no caduca.',
-                'resolved_at' => 'Cuando alguien lo marco como resuelto desde el panel. **Si el fallo vuelve a ocurrir, se vacia y la linea se reabre**, conservando el recuento.',
+                'resolved_at' => 'Cuando alguien lo marco como resuelto desde el panel. **Si el fallo vuelve a ocurrir, se vacia y la linea se reabre**, conservando el recuento; la resolucion sigue en `error_event_resolutions.csv`.',
                 'resolved_by_user_uuid' => 'Quien lo marco como resuelto.',
+            ],
+        ],
+
+        'error_event_resolutions' => [
+            'summary' => 'Cada vez que alguien marco como resuelto un fallo de `error_events.csv`, **tambien las veces anteriores a una reapertura**: cuando un fallo resuelto vuelve a ocurrir, su linea de `error_events.csv` se reabre y pierde quien lo resolvio, pero aqui sigue constando. Se borra con su fallo a los 90 dias.',
+            'columns' => [
+                'fingerprint' => 'Huella del fallo: la misma columna de `error_events.csv`, para encontrar su linea.',
+                'resolved_at' => 'Cuando se marco como resuelto.',
+                'resolved_by_user_uuid' => 'Quien lo marco. Vacio si esa cuenta se borro despues.',
             ],
         ],
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Product\Infrastructure\Diagnostics\Collector;
 
 use App\Modules\Product\Application\Port\DiagnosticsCollector;
+use App\Modules\Product\Application\Port\DoctorFindingFilter;
 use App\Modules\Product\Application\UseCase\RunDoctorHandler;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsOptions;
 
@@ -19,6 +20,14 @@ use App\Modules\Product\Domain\ValueObject\DiagnosticsOptions;
  * incidencia, y un resumen obliga a la segunda ronda de preguntas que ADR-020
  * existe para evitar.
  *
+ * ## Sin rutas del servidor ni el nombre de `APP_URL` (ADR-020, enmienda del
+ * 01-11-2026)
+ *
+ * Cada hallazgo pasa por {@see DoctorFindingFilter} antes de redactarse: las
+ * ubicaciones salen como la etiqueta de su papel (`<backup_path>`) o `[path]`,
+ * y el host como `[app_host]`. Es lo unico en lo que este informe difiere del
+ * `--json` local, que enseña las rutas reales a quien las tiene que arreglar.
+ *
  * ## Siempre en el idioma del producto por defecto, no en el del cliente
  *
  * `es`. El paquete lo lee soporte, no el cliente: que llegara en el idioma que
@@ -31,7 +40,10 @@ final readonly class DoctorCollector implements DiagnosticsCollector
     /** Idioma del informe que viaja al fabricante. */
     public const string SUPPORT_LOCALE = 'es';
 
-    public function __construct(private RunDoctorHandler $doctor) {}
+    public function __construct(
+        private RunDoctorHandler $doctor,
+        private DoctorFindingFilter $filter,
+    ) {}
 
     public function section(): string
     {
@@ -40,6 +52,6 @@ final readonly class DoctorCollector implements DiagnosticsCollector
 
     public function collect(DiagnosticsOptions $options): array
     {
-        return $this->doctor->handle(self::SUPPORT_LOCALE)->toArray();
+        return $this->doctor->handle(self::SUPPORT_LOCALE, $this->filter)->toArray();
     }
 }

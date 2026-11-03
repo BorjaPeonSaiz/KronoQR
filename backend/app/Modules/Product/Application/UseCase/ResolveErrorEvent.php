@@ -25,12 +25,13 @@ use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
  * diagnostico.
  *
  * Quien y cuando quedan en la propia fila (`resolved_at`,
- * `resolved_by_user_id`), que es donde los mira quien los necesita — **pero son
- * el ESTADO actual, no un historial**: si el grupo vuelve a ocurrir, la
- * escritura los vacia y con ellos se va el rastro de esta resolucion. Es
- * deliberado y el contrato lo declara asi (un grupo abierto lleva `resolved_by`
- * nulo): lo que importa de un fallo que reaparece es que esta abierto otra vez,
- * no quien creyo haberlo arreglado.
+ * `resolved_by_user_id`), que es el **estado actual**: si el grupo vuelve a
+ * ocurrir, la escritura los vacia, porque lo que importa de un fallo que
+ * reaparece es que esta abierto otra vez. **Y quedan ademas en el historial**
+ * (`error_event_resolutions`, solo-append, 2.3.0), en la misma sentencia que
+ * la resolucion: la reapertura no lo toca, y el panel enseña la resolucion
+ * anterior (`previous_resolution`) para que IT sepa que ese fallo ya lo cerro
+ * alguien.
  *
  * ## Idempotente
  *

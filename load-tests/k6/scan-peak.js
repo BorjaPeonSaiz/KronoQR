@@ -44,12 +44,13 @@
 //                      ENTRE SI (RS-03).
 //   reject-out-of-order
 //               0,5/s  el CUARTO rechazo, el de RN-18: un fichaje que no se
-//                      puede reconciliar con el registro. Tarda mas que los
-//                      tres de credencial porque llega por otro camino —tarjeta
-//                      ya resuelta, ajustes leidos, jornada cargada— y A-13
-//                      (doc 07 §6) acepto esa diferencia SIN suelo de tiempo.
-//                      Lo que faltaba era la cifra: este escenario la produce y
-//                      `aggregate.js` la publica como INFORMATIVA (H-08).
+//                      puede reconciliar con el registro. Llega por otro
+//                      camino —tarjeta ya resuelta, ajustes leidos, jornada
+//                      cargada— y desde la 2.3.0 se rellena hasta el mismo
+//                      suelo que los otros tres (enmienda de ADR-005, 33.6):
+//                      `aggregate.js` juzga sus MINIMOS con el presupuesto de
+//                      RS-03 frente a las tres clases (`RS-03-RN-18`); la
+//                      mediana se publica sin juzgar (decision del 02-11-2026).
 //   batch       1 lote de 50 por minuto: 25 pares entrada/salida del MISMO
 //                      empleado, enviados en orden inverso a su `occurred_at`,
 //                      con UN elemento imposible de reconciliar (RN-18).
@@ -228,11 +229,12 @@ const SCENARIOS = {
    * POR QUE ES UN ESCENARIO APARTE Y NO UNA CLASE MAS DE `reject`. Las tres
    * clases de `reject` son rechazos de CREDENCIAL y se cortan antes de tocar el
    * registro; `ConstantTimeFloor` las iguala entre si a proposito. El `422` de
-   * RN-18 comparte el cuerpo generico pero **no el reloj**: llega con la tarjeta
-   * ya resuelta, los ajustes leidos y la jornada del empleado cargada. Meterlo
-   * en `REJECT_CLASSES` pondria en rojo el veredicto de RS-03 por una diferencia
-   * que A-13 acepto con argumento; medirlo aparte publica la cifra que esa
-   * aceptacion prometia y no tenia.
+   * RN-18 comparte el cuerpo generico pero **no el camino**: llega con la
+   * tarjeta ya resuelta, los ajustes leidos y la jornada del empleado cargada.
+   * Desde la 2.3.0 el guardian comun lo rellena hasta el mismo suelo, y
+   * `RS-03-RN-18` juzga sus minimos contra las tres clases con el presupuesto de
+   * RS-03 (la mediana, solo informativa, decision del 02-11-2026);
+   * va aparte para que un rojo diga cual de los dos caminos se separo.
    *
    * MEDIO r/s Y NO UNO: el presupuesto por origen sale del cubo con fuga del
    * borde (arriba) y ya iba al 80 %. Con 0,5/s una pasada de 120 s deja 60
@@ -683,10 +685,11 @@ export function idempotentResend() {
  * —escribe tramo, proyeccion y asiento—, asi que exigirle el mismo tiempo seria
  * exigir un suelo que se notaria en el cambio de turno.
  *
- * SON TRES Y NO CUATRO: el rechazo de RN-18 tiene su propio escenario. Meterlo
- * aqui pondria en rojo el veredicto de RS-03 por una diferencia que doc 07 §6
- * acepto con argumento (A-13), y el veredicto dejaria de significar «los
- * rechazos de credencial son indistinguibles».
+ * SON TRES Y NO CUATRO: el rechazo de RN-18 tiene su propio escenario y su
+ * propio veredicto, `RS-03-RN-18`, con el mismo presupuesto sobre los minimos.
+ * Meterlo aqui haria
+ * que el veredicto de RS-03 dejara de significar «los rechazos de credencial son
+ * indistinguibles» y no diria cual de los dos caminos se separo.
  */
 const REJECT_CLASSES = ['signature', 'unknown', 'revoked']
 
@@ -739,10 +742,11 @@ export function genericRejection() {
  * Un fichaje que NO se puede reconciliar con el registro.
  *
  * QUE SE MIDE Y QUE NO. No se juzga aqui ninguna separacion de tiempos: eso lo
- * hace `aggregate.js`, y lo hace de forma INFORMATIVA porque A-13 (doc 07 §6)
- * acepto que este camino tarde mas que los tres rechazos de credencial, con
- * argumento y sin suelo de tiempo. Lo que este escenario aporta es la cifra que
- * aquella aceptacion prometia «revisar con la medicion real» y nunca tuvo.
+ * hace `aggregate.js` en `RS-03-RN-18`, con el presupuesto de RS-03 sobre los
+ * MINIMOS frente a los tres rechazos de credencial; la mediana, con carga, queda
+ * por encima del suelo y se publica sin juzgar (decision del 02-11-2026; enmienda de ADR-005, tarea 33.6: el guardian
+ * comun rellena todo rechazo hasta el mismo suelo). Hasta la 2.3.0 era una cifra
+ * informativa, porque A-13 (doc 07 §6) aceptaba que este camino tardara mas.
  *
  * LO QUE SI SE AFIRMA, Y ES BLOQUEANTE: que el rechazo es `422` —y no el `503`
  * que dejaba a la cola del quiosco reintentando para siempre— y que su cuerpo es

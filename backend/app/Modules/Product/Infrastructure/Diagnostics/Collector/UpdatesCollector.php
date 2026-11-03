@@ -6,6 +6,7 @@ namespace App\Modules\Product\Infrastructure\Diagnostics\Collector;
 
 use App\Modules\Product\Application\Port\DiagnosticsCollector;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsOptions;
+use App\Modules\Product\Infrastructure\Diagnostics\DiagnosticsLocations;
 use App\Modules\Product\Infrastructure\Diagnostics\UpdateReportAllowlist;
 
 /**
@@ -49,7 +50,16 @@ final readonly class UpdatesCollector implements DiagnosticsCollector
     /** Informes listados. Mas alla, la lista deja de aportar. */
     private const int MAX_LISTED = 20;
 
-    public function __construct(private string $backupPath) {}
+    /**
+     * Donde estan los informes, dicho sin la ruta (ADR-020, enmienda del
+     * 01-11-2026). Siempre el mismo: `update.sh` los deja ahi.
+     */
+    public const string LOCATION = '<backup_path>/reports';
+
+    public function __construct(
+        private string $backupPath,
+        private DiagnosticsLocations $locations,
+    ) {}
 
     public function section(): string
     {
@@ -64,7 +74,7 @@ final readonly class UpdatesCollector implements DiagnosticsCollector
             return [
                 'status' => 'unavailable',
                 'reason' => 'reports_directory_unreadable',
-                'path' => $directory,
+                'location' => self::LOCATION,
             ];
         }
 
@@ -73,13 +83,13 @@ final readonly class UpdatesCollector implements DiagnosticsCollector
         if ($reports === []) {
             // No es un fallo: una instalacion recien montada no se ha
             // actualizado nunca, y decir «no hay informes» es informacion.
-            return ['status' => 'no_reports', 'path' => $directory];
+            return ['status' => 'no_reports', 'location' => self::LOCATION];
         }
 
         $latest = $reports[0];
 
         return [
-            'path' => $directory,
+            'location' => self::LOCATION,
             'reports' => array_map(
                 static fn (string $file): array => [
                     'file' => basename($file),
@@ -91,9 +101,24 @@ final readonly class UpdatesCollector implements DiagnosticsCollector
             'latest' => [
                 'file' => basename($latest),
                 'truncated' => (int) filesize($latest) > self::MAX_REPORT_BYTES,
-                ...UpdateReportAllowlist::apply($this->read($latest)),
+                ...$this->withoutPaths(UpdateReportAllowlist::apply($this->read($latest))),
             ],
         ];
+    }
+
+    /**
+     * Las lineas conservadas, con cada ruta absoluta cambiada por la etiqueta
+     * de su papel o `[path]` (ADR-020, enmienda del 01-11-2026). `update.sh`
+     * escribe el directorio de la instalacion y la ruta de la copia previa en
+     * lineas que la lista de permitidos admite, y las dos dicen donde y como
+     * esta montado el servidor del cliente.
+     *
+     * @param  array{content: string, omitted_lines: int}  $filtered
+     * @return array{content: string, omitted_lines: int}
+     */
+    private function withoutPaths(array $filtered): array
+    {
+        return [...$filtered, 'content' => $this->locations->redact($filtered['content'])];
     }
 
     /**

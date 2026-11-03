@@ -16,7 +16,9 @@
 # que exigen que la duracion de un tramo sea la de sus marcas) y la 2026_10_27_100100 (RN-19:
 # la funcion de incidents_guard_transition que admite la reapertura, y UPDATE (context)) y
 # la 2026_10_30_100000 con las 2026_10_30_110100 y 110200 (RN-27: los periodos de alta, su
-# matriz de privilegios completa, la guarda de la ficha minimizada y la de la correccion).
+# matriz de privilegios completa, la guarda de la ficha minimizada y la de la correccion) y
+# la 2026_11_02_100000 (RL-11: las resoluciones del historico de errores, solo-append para el
+# rol y purgadas por su funcion `SECURITY DEFINER`).
 # La provision (`2026_08_19_099000`, `GRANT ... ON ALL TABLES`) lo devuelve todo si
 # alguien la vuelve a ejecutar, y ninguna migracion posterior lo notaria.
 
@@ -89,6 +91,14 @@ readonly KQ_EMPLOYMENT_PERIODS_MINIMISED_TRIGGERS="employment_periods:employment
 readonly KQ_EMPLOYMENT_PERIODS_CORRECTED_MIGRATION="'2026_10_30_110200_require_correction_for_effective_termination_change'"
 readonly KQ_EMPLOYMENT_PERIODS_CORRECTED_FUNCTIONS="employment_periods_assert_termination_corrected"
 readonly KQ_EMPLOYMENT_PERIODS_CORRECTED_TRIGGERS="employment_periods:employment_periods_termination_corrected"
+# Las resoluciones del historico de errores vencen por su fecha (RL-11, RF-PD-15, 2.3.0): la
+# tabla es solo-append para el rol (sin UPDATE, DELETE ni TRUNCATE) y se purga solo por la
+# funcion SECURITY DEFINER de 2026_11_02_100000. No es registro horario, pero es el mismo
+# patron que la minimizacion: una funcion borrada o sin DEFINER es manipulacion; un DELETE
+# devuelto al rol o un EXECUTE para PUBLIC, deriva que se repara. Solo con su migracion.
+readonly KQ_ERROR_RESOLUTIONS_MIGRATION="'2026_11_02_100000_purge_error_event_resolutions_by_age'"
+readonly KQ_ERROR_RESOLUTIONS_PURGE_FUNCTION="error_event_resolutions_purge_batch"
+readonly KQ_ERROR_RESOLUTIONS_TABLE="error_event_resolutions"
 
 # Triggers del registro (ADR-057 par.2, tarea 7.5), tabla:nombre. Se exige que existan estos y
 # que TODOS los no internos de las dos tablas esten activos (`tgenabled = 'O'`), de modo que
@@ -317,6 +327,22 @@ SQL
   done
 }
 
+# Las resoluciones del historico de errores (2026_11_02_100000): la funcion de purga con
+# EXECUTE solo para el rol, y la tabla sin UPDATE, DELETE ni TRUNCATE para el rol.
+error_resolutions_sql() {
+  local role="$1"
+  local applied="EXISTS (SELECT 1 FROM migrations WHERE migration = ${KQ_ERROR_RESOLUTIONS_MIGRATION})"
+
+  work_record_definer_function_sql "${role}" "${KQ_ERROR_RESOLUTIONS_PURGE_FUNCTION}" "${applied}"
+  cat <<SQL
+  UNION ALL
+  SELECT '${KQ_ERROR_RESOLUTIONS_TABLE}:' || p.priv
+    FROM (VALUES ('UPDATE'), ('DELETE'), ('TRUNCATE')) AS p(priv)
+   WHERE (${applied}) AND to_regclass('public.${KQ_ERROR_RESOLUTIONS_TABLE}') IS NOT NULL
+     AND has_table_privilege('${role}', to_regclass('public.${KQ_ERROR_RESOLUTIONS_TABLE}'), p.priv)
+SQL
+}
+
 # SQL de un trigger de los periodos (tabla:nombre), ausente o desactivado, con `to_regclass`:
 # sin la migracion la tabla no existe, y el cast de un literal se resuelve al planificar
 # aunque el WHERE sea falso. `$2` es la condicion de su migracion.
@@ -492,6 +518,8 @@ $(site_timezone_readonly_table_sql "${role}" "${KQ_SITE_TIMEZONE_BASELINE}" "${s
 $(minimise_retention_sql "${role}")"
     purge_sql="${purge_sql}
 $(employment_periods_sql "${role}")"
+    purge_sql="${purge_sql}
+$(error_resolutions_sql "${role}")"
 
   fi
 
@@ -566,6 +594,9 @@ work_record_privileges_repair_sql() {
       no_delete="${no_delete:+${no_delete}, }'${tbl}'"
     done
     printf '%s\n' "DO \$kq\$ DECLARE t text; BEGIN IF EXISTS (SELECT 1 FROM migrations WHERE migration = ${KQ_MINIMISE_MIGRATION_PERSONNEL}) THEN FOREACH t IN ARRAY ARRAY[${no_delete}] LOOP EXECUTE format('REVOKE DELETE ON TABLE public.%I FROM %I', t, '${CFG_DB_USERNAME}'); END LOOP; END IF; END \$kq\$;"
+    # Las resoluciones del historico de errores: solo-append para el rol y la funcion de
+    # purga con EXECUTE solo para el rol. Solo con su migracion aplicada.
+    printf '%s\n' "DO \$kq\$ DECLARE f regprocedure; BEGIN IF EXISTS (SELECT 1 FROM migrations WHERE migration = ${KQ_ERROR_RESOLUTIONS_MIGRATION}) THEN IF to_regclass('public.${KQ_ERROR_RESOLUTIONS_TABLE}') IS NOT NULL THEN EXECUTE format('REVOKE UPDATE, DELETE, TRUNCATE ON TABLE public.%I FROM %I', '${KQ_ERROR_RESOLUTIONS_TABLE}', '${CFG_DB_USERNAME}'); END IF; FOR f IN SELECT oid::regprocedure FROM pg_proc WHERE proname = '${KQ_ERROR_RESOLUTIONS_PURGE_FUNCTION}' AND pronamespace = 'public'::regnamespace LOOP EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC', f); EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO %I', f, '${CFG_DB_USERNAME}'); END LOOP; END IF; END \$kq\$;"
     # Los periodos de alta (ADR-062 §2): la misma matriz que vigila employment_periods_sql,
     # de la misma lista. REVOKE ALL por tabla (retira tambien lo de columna) y despues
     # SELECT, INSERT y el UPDATE de columna de los periodos. La secuencia no se toca.

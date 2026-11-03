@@ -13,6 +13,7 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\DiagnosticsRecipient;
 use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -38,6 +39,9 @@ beforeEach(function (): void {
     WorkforceFixtures::site();
     LicenseKeys::install();
     FrozenTime::at('2026-06-15 09:00:00');
+    // El paquete con datos personales sale cifrado (ADR-020, enmienda del
+    // 01-11-2026): sin clave de soporte no se generaria.
+    DiagnosticsRecipient::install();
 });
 
 function generarPaquete(DiagnosticsOptions $options): void

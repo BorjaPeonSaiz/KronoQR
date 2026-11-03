@@ -2632,15 +2632,21 @@
     "intro": "Genera el paquete que necesita el fabricante para diagnosticar una incidencia y, si hace falta, concédele un acceso temporal y revocable a esta instalación.",
     "diagnostics": {
       "heading": "Paquete de diagnóstico",
-      "intro": "Un único fichero JSON con la versión, la configuración sin secretos, la salud de los servicios y el resultado de «doctor», que puedes enviar a soporte por el canal de tu contrato. Va anonimizado por defecto: sin nombres, sin correos y sin registros de jornada.",
+      "intro": "Un único fichero JSON con la versión, la configuración sin secretos, la salud de los servicios y el resultado de «doctor», que puedes enviar a soporte por el canal de tu contrato. Va anonimizado por defecto: sin nombres, sin correos, sin registros de jornada y sin rutas del servidor, y puedes abrirlo y revisarlo antes de enviarlo.",
       "generate": "Generar y descargar",
       "generating": "Generando…",
       "includePersonalData": "Incluir datos personales",
-      "personalDataWarning": "Si marcas esta casilla, el paquete dejará de ir anonimizado: añadirá la plantilla (nombre y código de cada persona), los fichajes y tramos del periodo elegido, y las incidencias abiertas. Queda registrado en el histórico de auditoría, visible para cualquier administrador de la instalación.",
+      "personalDataWarning": "Si marcas esta casilla, el paquete dejará de ir anonimizado: añadirá la plantilla (nombre y código de cada persona), los fichajes y tramos del periodo elegido, y las incidencias abiertas. Saldrá cifrado para el soporte del fabricante: tu hotel no podrá abrirlo ni revisarlo. Si quieres comprobar el contenido antes de enviarlo, descarga el paquete anonimizado. Queda registrado en el histórico de auditoría, visible para cualquier administrador de la instalación.",
       "periodDays": "Días",
       "periodDaysHint": "Cuántos días hacia atrás incluir en los fichajes y tramos del paquete. Sin marcar «Incluir datos personales» no tiene efecto.",
-      "success": "Descargado {filename}; revísalo antes de enviarlo.",
-      "announceDownloaded": "Se ha descargado el paquete de diagnóstico {filename}."
+      "success": "Descargado {filename}; ábrelo y revísalo antes de enviarlo.",
+      "announceDownloaded": "Se ha descargado el paquete de diagnóstico {filename}.",
+      "announceDownloadedSealed": "Se ha descargado el paquete de diagnóstico cifrado {filename}.",
+      "successSealed": "Descargado {filename}. Va cifrado para el soporte del fabricante: no se puede abrir desde aquí. Envíalo tal cual.",
+      "sealingUnavailable": {
+        "title": "Esta instalación no puede generar el paquete con datos personales",
+        "advice": "Falta la clave de cifrado de soporte, así que ese paquete no se genera nunca. Desmarca «Incluir datos personales» y descarga el paquete anonimizado: es el que hay que enviar a soporte."
+      }
     },
     "grant": {
       "heading": "Accesos de soporte",
@@ -2785,7 +2791,10 @@
       "actions": "Acciones",
       "expand": "Ver detalle",
       "collapse": "Ocultar detalle",
-      "resolved": "Resuelto"
+      "resolvedBy": "Resuelto por {name} el {date}",
+      "resolvedAnonymous": "Resuelto el {date}",
+      "previousResolution": "Resuelto antes por {name} el {date}",
+      "previousResolutionAnonymous": "Resuelto antes el {date}"
     },
     "detail": {
       "exceptionClass": "Clase de la excepción",

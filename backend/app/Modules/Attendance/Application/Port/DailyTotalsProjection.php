@@ -57,9 +57,10 @@ interface DailyTotalsProjection
      * El candado sirve porque el fichaje escribe el tramo y esta fila en la
      * **misma** transaccion (ADR-007): quien tenga la fila tomada obliga al
      * `UPSERT` del fichaje a esperar, y quien llegue despues reescribe con sus
-     * propios valores, que son los buenos. Lo unico que el candado no cubre es
-     * la fila que **todavia no existe**, porque no hay nada que bloquear; ese
-     * residuo esta escrito en el caso de uso.
+     * propios valores, que son los buenos. La fila que **todavia no existe** no
+     * se puede bloquear, y no hace falta: la serializa el candado global de la
+     * cadena, que el caso de uso toma antes de llamar aqui y el fichaje antes de
+     * su `UPSERT` (A-12, ver `ReconcileDailyTotals::correct()`).
      *
      * Devolver `null` es significativo —no hay fila, no hay candado— y no
      * equivale a una fila a cero: la diferencia entre las dos cosas es

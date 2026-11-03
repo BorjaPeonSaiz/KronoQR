@@ -179,6 +179,7 @@ final readonly class ResanitizeErrorHistory
             resolvedAt: $group->resolvedAt,
             resolvedByUuid: $group->resolvedByUuid,
             resolvedByName: $group->resolvedByName,
+            previousResolution: $group->previousResolution,
         );
     }
 

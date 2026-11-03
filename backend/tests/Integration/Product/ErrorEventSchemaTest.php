@@ -95,6 +95,9 @@ it('el rol de la aplicacion puede borrar aqui, al contrario que en audit_log', f
 it('la migracion se deshace y se reaplica dejando la tabla igual', function (): void {
     // «Una migracion cuyo `down()` no se ha probado no tiene `down()`».
     $migracion = require database_path('migrations/2026_09_13_100000_create_error_events_table.php');
+    // El historial de resoluciones (2.3.0) cuelga de esta tabla: se deshace
+    // antes y se rehace despues, como haria `migrate:rollback` en orden.
+    $historial = require database_path('migrations/2026_11_01_100000_create_error_event_resolutions_table.php');
 
     $antes = Schema::connection('pgsql_migrator')->getColumnListing('error_events');
 
@@ -105,11 +108,13 @@ it('la migracion se deshace y se reaplica dejando la tabla igual', function (): 
     try {
         // En una transaccion, como lo ejecuta `Migrator::runMigration()`: desde la
         // 2.2.0 `limitLockWait()` usa `SET LOCAL` y se niega a correr sin ella.
+        DB::connection('pgsql_migrator')->transaction(static fn () => $historial->down());
         DB::connection('pgsql_migrator')->transaction(static fn () => $migracion->down());
 
         expect(Schema::connection('pgsql_migrator')->hasTable('error_events'))->toBeFalse();
 
         DB::connection('pgsql_migrator')->transaction(static fn () => $migracion->up());
+        DB::connection('pgsql_migrator')->transaction(static fn () => $historial->up());
     } finally {
         DB::setDefaultConnection('pgsql');
     }

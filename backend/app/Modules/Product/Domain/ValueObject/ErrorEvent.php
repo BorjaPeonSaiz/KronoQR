@@ -54,6 +54,10 @@ final readonly class ErrorEvent
      * @param  array<string, scalar>  $context  Ya filtrado por {@see ErrorContextAllowlist}.
      * @param  string|null  $resolvedByUuid  UUID publico de la cuenta que lo resolvio.
      * @param  string|null  $resolvedByName  Nombre de esa cuenta de gestion. Ver el docblock.
+     * @param  ErrorResolution|null  $previousResolution  La ultima resolucion anterior al ciclo
+     *                                                    actual (2.3.0): con el grupo resuelto, la de antes de
+     *                                                    esta; abierto, la ultima que tuvo. Solo lectura: la
+     *                                                    escritura no la usa, y la reapertura no la borra.
      */
     public function __construct(
         public int $id,
@@ -77,6 +81,7 @@ final readonly class ErrorEvent
         public ?DateTimeImmutable $resolvedAt,
         public ?string $resolvedByUuid,
         public ?string $resolvedByName,
+        public ?ErrorResolution $previousResolution = null,
     ) {}
 
     /**
@@ -132,6 +137,9 @@ final readonly class ErrorEvent
             resolvedAt: $resolution?->resolvedAt,
             resolvedByUuid: $resolution?->resolvedByUuid,
             resolvedByName: $resolution?->resolvedByName,
+            // El historial no se fusiona aqui: lo copia el repositorio al
+            // superviviente (ADR-048 decision 9) y se vuelve a leer de alli.
+            previousResolution: $this->previousResolution,
         );
     }
 }

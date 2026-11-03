@@ -90,6 +90,28 @@ use Throwable;
  * debe decir si la tarjeta era de alguien: todo `scan-discarded` se rellena
  * hasta el mismo suelo que el aviso del quiosco (el doble del de RS-03, lo fija
  * `AttendanceServiceProvider`).
+ *
+ * **Y todo rechazo, con el mismo suelo y desde el mismo instante** (A-13,
+ * enmienda de ADR-005 en la 2.3.0). Los que se deciden despues de resolver la
+ * credencial —fuera del periodo de alta (RN-14, RN-27) o irreconciliable
+ * (RN-18)— cargan la jornada y tardaban mas que uno de credencial, con el mismo
+ * `422` generico. Rellenarlos aqui, en el unico sitio por el que pasan las tres
+ * puertas, los iguala sin tocar el caso de uso, y medido desde la entrada del
+ * escaneo: el suelo sencillo del resolutor queda dentro. **Iguala lo que tarda
+ * menos que el suelo**, que es el minimo y lo que filtra a quien mide tiempos;
+ * con carga, el camino de RN-18 tarda mas que el suelo y su mediana queda por
+ * encima, diferencia que acepta A-13 (k6 `RS-03-RN-18` juzga los minimos y
+ * publica la mediana, decision del propietario del 02-11-2026). Tres limites:
+ *
+ * - **Solo `isRejected()`.** El aceptado no espera, y el anti-rebote tampoco:
+ *   es un desenlace aceptado y viaja en su `200` (ADR-031).
+ * - **Fuera de la transaccion y de cualquier candado.** `$register()` ya ha
+ *   confirmado o revertido: la espera no retiene nada a nadie (regla dura 19).
+ * - **Por elemento en el lote.** `RegisterScanBatchHandler` llama a esta puerta
+ *   una vez por elemento, asi que un lote de rechazos dura, como minimo, el
+ *   suelo por el numero de rechazos. Con el suelo de serie son 50 ms por
+ *   rechazo; la cota frente al tope del quiosco esta en
+ *   `docs/cliente/configuracion.md` §6.5.
  */
 final readonly class UnprocessableScanGuard
 {
@@ -132,7 +154,7 @@ final readonly class UnprocessableScanGuard
         $startedAt = $this->floor->startedAt();
 
         try {
-            return $register();
+            $result = $register();
         } catch (Throwable $failure) {
             $discarded = $this->settle($scan, $failure);
 
@@ -144,6 +166,16 @@ final readonly class UnprocessableScanGuard
 
             return $discarded;
         }
+
+        // RS-03 (enmienda de ADR-005, 33.6): todo rechazo de las tres puertas
+        // —credencial, RN-14/RN-27 y RN-18, tambien su repeticion por `scan_id`—
+        // espera hasta el mismo suelo que el descarte. Aqui la transaccion del
+        // caso de uso ya termino y no queda ningun candado tomado.
+        if ($result->isRejected()) {
+            $this->floor->padTo($startedAt);
+        }
+
+        return $result;
     }
 
     /**

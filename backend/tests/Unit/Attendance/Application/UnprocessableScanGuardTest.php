@@ -161,13 +161,17 @@ final class EventosDelGuardian implements EventPublisher
 }
 
 /**
- * @param  array{clasifica?: bool, libro?: LibroDeFallosDePrueba, escaneos?: RegistroDeEscaneosDelGuardian, umbral?: ScanDiscardThreshold, resolutor?: CredentialResolver, metricas?: RecordingScanMetrics, avisos?: AvisosDelGuardian, eventos?: EventosDelGuardian, huella?: string|null}  $piezas
+ * @param  array{clasifica?: bool, libro?: LibroDeFallosDePrueba, escaneos?: RegistroDeEscaneosDelGuardian, umbral?: ScanDiscardThreshold, resolutor?: CredentialResolver, metricas?: RecordingScanMetrics, avisos?: AvisosDelGuardian, eventos?: EventosDelGuardian, huella?: string|null, suelo?: int}  $piezas
  */
 function guardianDePrueba(array $piezas = []): UnprocessableScanGuard
 {
     /** @var ConnectionInterface&MockInterface $conexion */
     $conexion = Mockery::mock(ConnectionInterface::class);
     $conexion->shouldReceive('transaction')->andReturnUsing(static fn (Closure $cuerpo): mixed => $cuerpo());
+
+    // Por defecto sin suelo: lo que estas pruebas miran no es el tiempo. Con `+=`
+    // y no con `??`, que sumaria una rama mas a esta funcion (doc 02 §3.5).
+    $piezas += ['suelo' => 0];
 
     $clasifica = $piezas['clasifica'] ?? true;
     $umbral = $piezas['umbral'] ?? new ScanDiscardThreshold(10, 60, 3);
@@ -223,7 +227,7 @@ function guardianDePrueba(array $piezas = []): UnprocessableScanGuard
         clock: FixedClock::at('2026-08-14 09:00:00'),
         connection: $conexion,
         logger: new NullLogger,
-        floor: new ConstantTimeFloor(0),
+        floor: new ConstantTimeFloor($piezas['suelo']),
         fingerprints: new class($piezas['huella'] ?? null) implements CardFingerprintOwners
         {
             public function __construct(private readonly ?string $dueno) {}
@@ -608,3 +612,103 @@ it('calcula la misma huella que el registro del fichaje, de una sola fuente', fu
         ->and(PayloadFingerprint::ofQrPayload(GUARDIAN_PAYLOAD))->toBe(hash('sha256', GUARDIAN_PAYLOAD))
         ->and($delRegistro)->toBe(escaneoGuardado()->contentFingerprint);
 })->group('RN-22', 'RS-03');
+
+/*
+ * RS-03, A-13 (enmienda de ADR-005, 33.6): **todo rechazo** que pasa por el
+ * guardian dura al menos su suelo —el mismo que el descarte—, medido desde la
+ * entrada del escaneo. El aceptado y el anti-rebote no esperan (ADR-031). Con
+ * un `ConstantTimeFloor` real: lo que se mide es la espera de verdad, no una
+ * llamada a un doble.
+ *
+ * **Las cotas son suelos, o techos con un orden de magnitud de margen** (D4,
+ * `WallClockAssertionsTest`): lo que se afirma es que el guardian espera o no
+ * espera, y una maquina cargada no convierte un «no espera» de microsegundos en
+ * uno de dos segundos.
+ */
+const GUARDIAN_FLOOR_MS = 30;
+
+/** El suelo de las pruebas de «no espera»: si el guardian rellenara, se veria. */
+const GUARDIAN_LARGE_FLOOR_MS = 2_000;
+
+/** Lo que tarda el guardian en devolver ese resultado, en milisegundos. */
+function guardianDuracionDe(RegisterScanResult $resultado, int $suelo = GUARDIAN_FLOOR_MS): float
+{
+    $guardian = guardianDePrueba(['suelo' => $suelo]);
+    $inicio = hrtime(true);
+
+    expect($guardian->register(escaneoGuardado(), static fn (): RegisterScanResult => $resultado))->toBe($resultado);
+
+    return (hrtime(true) - $inicio) / 1_000_000;
+}
+
+function guardianInstante(): DateTimeImmutable
+{
+    return new DateTimeImmutable('2026-08-14T07:00:00Z');
+}
+
+dataset('rechazos del guardian', [
+    'tarjeta desconocida' => [static fn (): RegisterScanResult => RegisterScanResult::rejected(GUARDIAN_SCAN_ID, ScanResult::REJECTED_UNKNOWN, guardianInstante(), guardianInstante())],
+    'firma incorrecta' => [static fn (): RegisterScanResult => RegisterScanResult::rejected(GUARDIAN_SCAN_ID, ScanResult::REJECTED_SIGNATURE, guardianInstante(), guardianInstante())],
+    'tarjeta revocada' => [static fn (): RegisterScanResult => RegisterScanResult::rejected(GUARDIAN_SCAN_ID, ScanResult::REJECTED_REVOKED, guardianInstante(), guardianInstante())],
+    'persona suspendida' => [static fn (): RegisterScanResult => RegisterScanResult::rejected(GUARDIAN_SCAN_ID, ScanResult::REJECTED_SUSPENDED, guardianInstante(), guardianInstante())],
+    // RN-14 y RN-27 se rechazan como tarjeta desconocida, pero con titular.
+    'fuera del periodo de alta' => [static fn (): RegisterScanResult => RegisterScanResult::rejected(GUARDIAN_SCAN_ID, ScanResult::REJECTED_UNKNOWN, guardianInstante(), guardianInstante(), GUARDIAN_EMPLOYEE)],
+    'irreconciliable (RN-18)' => [static fn (): RegisterScanResult => RegisterScanResult::rejected(GUARDIAN_SCAN_ID, ScanResult::REJECTED_OUT_OF_ORDER, guardianInstante(), guardianInstante(), GUARDIAN_EMPLOYEE)],
+    'repeticion de RN-18 por scan_id' => [static fn (): RegisterScanResult => RegisterScanResult::rejected(GUARDIAN_SCAN_ID, ScanResult::REJECTED_OUT_OF_ORDER, guardianInstante(), guardianInstante(), GUARDIAN_EMPLOYEE, isReplay: true)],
+]);
+
+it('rellena todo rechazo hasta el suelo del guardian', function (Closure $rechazo): void {
+    /** @var RegisterScanResult $resultado */
+    $resultado = $rechazo();
+
+    expect(guardianDuracionDe($resultado))->toBeGreaterThanOrEqual((float) GUARDIAN_FLOOR_MS);
+})->with('rechazos del guardian')->group('RS-03', 'RN-18', 'RN-14', 'RN-27');
+
+it('no hace esperar al fichaje aceptado ni al anti-rebote', function (Closure $desenlace): void {
+    /** @var RegisterScanResult $resultado */
+    $resultado = $desenlace();
+
+    // Con un suelo de dos segundos, rellenar se ve sin ambiguedad: devolver un
+    // resultado sin esperar cuesta microsegundos, y la mitad del suelo es el
+    // margen para cualquier maquina.
+    expect(guardianDuracionDe($resultado, GUARDIAN_LARGE_FLOOR_MS))->toBeLessThan(GUARDIAN_LARGE_FLOOR_MS / 2);
+})->with([
+    'entrada' => [static fn (): RegisterScanResult => RegisterScanResult::accepted(
+        scanId: GUARDIAN_SCAN_ID,
+        result: ScanResult::CLOCK_IN,
+        occurredAt: guardianInstante(),
+        recordedAt: guardianInstante(),
+        employeeUuid: GUARDIAN_EMPLOYEE,
+        employeeDisplayName: 'Maria G.',
+        workDate: '2026-08-14',
+        workedMinutes: 0,
+    )],
+    'anti-rebote' => [static fn (): RegisterScanResult => RegisterScanResult::debounced(
+        scanId: GUARDIAN_SCAN_ID,
+        occurredAt: guardianInstante(),
+        recordedAt: guardianInstante(),
+        employeeUuid: GUARDIAN_EMPLOYEE,
+        employeeDisplayName: 'Maria G.',
+        workedMinutes: 0,
+        lastAcceptedAt: guardianInstante(),
+    )],
+])->group('RS-03', 'RF-AT-06', 'RNF-P-01');
+
+it('cuenta el suelo desde la entrada del escaneo, no desde que el caso de uso devuelve', function (): void {
+    // Un rechazo que ya tardo 250 ms en el caso de uso espera solo lo que falta
+    // hasta 300: el suelo iguala por abajo, no se suma. Sumado, serian 550.
+    $guardian = guardianDePrueba(['suelo' => 300]);
+    $rechazo = RegisterScanResult::rejected(GUARDIAN_SCAN_ID, ScanResult::REJECTED_OUT_OF_ORDER, guardianInstante(), guardianInstante(), GUARDIAN_EMPLOYEE);
+    $inicio = hrtime(true);
+
+    $guardian->register(escaneoGuardado(), static function () use ($rechazo): RegisterScanResult {
+        usleep(250_000);
+
+        return $rechazo;
+    });
+
+    $duracion = (hrtime(true) - $inicio) / 1_000_000;
+
+    expect($duracion)->toBeGreaterThanOrEqual(300.0)
+        ->and($duracion)->toBeLessThan(500.0);
+})->group('RS-03', 'RN-18');

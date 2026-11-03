@@ -51,6 +51,7 @@ use App\Modules\Identity\Domain\ValueObject\TokenAbility;
 use App\Modules\Identity\Http\Middleware\RejectPasswordChangeSession;
 use App\Modules\Identity\Http\Middleware\RejectPendingTwoFactorSession;
 use App\Modules\Identity\Http\Support\PasswordChangeSession;
+use App\Modules\Product\Application\Exception\DiagnosticsSealingUnavailable;
 use App\Modules\Product\Domain\Exception\InvalidComplianceProfileValue;
 use App\Modules\Product\Domain\Exception\InvalidLicenseKey;
 use App\Modules\Product\Domain\Exception\InvalidSettingValue;
@@ -1373,6 +1374,19 @@ return Application::configure(basePath: dirname(__DIR__))
                 $exception->getMessage(),
             )],
         ]));
+
+        /*
+         * El paquete de diagnostico con datos personales sin clave publica de
+         * soporte con la que cifrarlo (ADR-020, enmienda del 01-11-2026): `503`
+         * con tipo propio y sin `Retry-After`. No se reporta como error: es
+         * configuracion del despliegue, la avisa `product:doctor`
+         * (`diagnostics.recipient_key`) y el anonimizado sigue funcionando.
+         */
+        $exceptions->dontReport(DiagnosticsSealingUnavailable::class);
+
+        $exceptions->render(
+            static fn (DiagnosticsSealingUnavailable $exception): mixed => ProblemDetails::diagnosticsSealingUnavailable(),
+        );
 
         /*
          * Y la degradacion honesta de una funcionalidad ACCESORIA (ADR-019,

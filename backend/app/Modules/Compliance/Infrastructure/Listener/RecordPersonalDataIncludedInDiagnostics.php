@@ -62,6 +62,13 @@ final readonly class RecordPersonalDataIncludedInDiagnostics
                 'collections' => $event->collections,
                 'sha256' => $event->sha256,
                 'generated_by' => $event->generatedBy,
+                // Las mismas huellas que el asiento de generacion: el sobre
+                // que salio es el de los dos (ADR-020, enmienda del 01-11-2026).
+                ...RecordDiagnosticsBundleGenerated::sealing(
+                    $event->sealed,
+                    $event->recipientKeyId,
+                    $event->sealedSha256,
+                ),
             ]),
         ));
     }

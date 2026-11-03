@@ -197,7 +197,8 @@ bastan, y se pide con:
 
 - **Motivo**: el número de incidencia y lo que se va a mirar.
 - **Alcance mínimo** (RF-PD-11): `diagnostics` casi siempre (generar paquetes
-  y leer errores); `read_only` si hay que ver jornadas o auditoría;
+  y leer errores); `read_only` si hay que ver jornadas o plantilla (nunca la
+  auditoría: ningún alcance la lee, enmienda de ADR-020 de la 2.3.0);
   `configuration` solo si el cliente prefiere que soporte haga el cambio en
   lugar de hacerlo él (ajustes operativos y quioscos; nunca el perfil de
   cumplimiento, la licencia ni el asistente).

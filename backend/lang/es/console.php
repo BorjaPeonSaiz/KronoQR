@@ -218,6 +218,15 @@ return [
                 'estan en verde, avisa a soporte con esa salida.',
             ],
         ],
+        'sealing_unavailable' => [
+            'No se ha generado el paquete CON DATOS PERSONALES: esta instalacion no tiene la',
+            'clave publica de soporte del fabricante con la que se cifra, y ese paquete nunca',
+            'sale sin cifrar. No se ha recogido nada ni se ha escrito ningun asiento.',
+            'Genera el anonimizado, que no necesita esa clave y es el que soporte pide casi siempre:',
+            '  php artisan product:diagnostics',
+            'La clave viene con cada version publicada del producto. Mira la comprobacion',
+            'diagnostics.recipient_key de: php artisan product:doctor',
+        ],
         'pending_recorded' => [
             'Se han escrito en la auditoria :count asiento(s) pendiente(s) de paquetes',
             'generados mientras la base de datos no respondia.',
@@ -238,6 +247,8 @@ return [
             'implications' => [
                 'Que implica:',
                 '  - El fichero deja de estar anonimizado y no se debe enviar sin necesidad.',
+                '  - Sale CIFRADO para el fabricante: ni tu ni nadie en este servidor podra abrirlo.',
+                '    Podras leer su cabecera: que secciones lleva y cuantas filas y columnas.',
                 '  - La accion queda registrada en el registro de auditoria, firmada por la cuenta',
                 '    de --responsible.',
                 '  - Si se lo envias al proveedor, este actua como encargado del tratamiento',
@@ -273,6 +284,19 @@ return [
             'check_before_sending' => [
                 'Antes de enviarlo, abrelo y comprueba que no lleva nada que no quieras enviar:',
                 '  less :path',
+            ],
+            'sealed' => [
+                'title' => 'Paquete de diagnostico CON DATOS PERSONALES generado y cifrado.',
+                'key' => '  Cifrado:  para la clave de soporte del fabricante :key',
+                'file_digest' => '  Huella del fichero: :digest',
+                'check_before_sending' => [
+                    'El contenido va cifrado y solo lo puede abrir el fabricante. Lo que si puedes',
+                    'revisar antes de enviarlo es la cabecera, que va en claro: que secciones lleva y',
+                    'cuantas filas y que columnas tiene cada coleccion de datos personales.',
+                    '  less :path',
+                    'Las dos huellas coinciden con el asiento diagnostics.bundle_generated de tu',
+                    'auditoria. Envialo por el canal de tu contrato de soporte y borralo al enviarlo.',
+                ],
             ],
             'verify_hint' => [
                 'Quien lo reciba puede comprobar que no se ha alterado por el camino con:',
@@ -313,6 +337,31 @@ return [
             'entry' => '  Asiento:   :entry',
             'entry_pending' => 'PENDIENTE: la base de datos no respondia al generarlo; se escribe solo al volver',
             'entry_written' => 'escrito en la auditoria al generarlo',
+            'sealed' => [
+                'title' => 'Paquete CON DATOS PERSONALES, cifrado para la clave de soporte :key: :path',
+                'malformed' => [
+                    'El fichero dice ser un paquete cifrado pero su cabecera no tiene la forma',
+                    'esperada: no se puede dar por bueno. Pide que se vuelva a generar.',
+                ],
+                'file_digest' => '  Huella del fichero: :digest',
+                'entry_found' => '  Asiento:   diagnostics.bundle_generated del :at UTC, con la misma huella',
+                'file_matches' => '             y la huella del fichero coincide con la del asiento',
+                'file_differs' => [
+                    'LA HUELLA DEL FICHERO NO COINCIDE con la del asiento: no es el fichero que se',
+                    'entrego, o le falta parte. Pide que se vuelva a generar.',
+                ],
+                'entry_not_sealed' => [
+                    'ESE ASIENTO ES DE UN PAQUETE QUE NO SALIO CIFRADO: la auditoria no guarda la',
+                    'huella de ningun sobre con esa cabecera, asi que este fichero no es lo que se',
+                    'entrego. No lo des por bueno y pide que se vuelva a generar.',
+                ],
+                'entry_missing' => '  Asiento:   no hay ninguno con esa huella en la auditoria de esta instalacion',
+                'entry_unknown' => '  Asiento:   no se ha podido consultar la auditoria (la base de datos no responde)',
+                'content_unchecked' => [
+                    'El contenido no se comprueba: va cifrado y solo se abre con la clave privada del',
+                    'fabricante (tools/diagnostics-opener).',
+                ],
+            ],
         ],
     ],
 

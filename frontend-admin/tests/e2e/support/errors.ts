@@ -42,6 +42,7 @@ export const KIOSK_CRITICAL_ERROR: ErrorEvent = {
   last_seen_at: '2026-09-09T07:30:00.000000Z',
   resolved_at: null,
   resolved_by: null,
+  previous_resolution: null,
 }
 
 function collection(data: ErrorEvent[]): ErrorEventCollection {

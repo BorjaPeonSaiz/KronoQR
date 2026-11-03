@@ -10,11 +10,13 @@ use App\Modules\Identity\Infrastructure\Persistence\User;
 use App\Modules\Product\Application\UseCase\GenerateDiagnosticsBundleHandler;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsActor;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsOptions;
+use App\Modules\Product\Domain\ValueObject\SealedDiagnosticsBundle;
 use App\Modules\Product\Infrastructure\Diagnostics\Collector\KioskCollector;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\Support\Attendance\AttendanceFixtures;
 use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Product\DiagnosticsRecipient;
 use Tests\Support\Product\ErrorHistoryConnection;
 use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Time\FrozenTime;
@@ -54,7 +56,14 @@ afterEach(function (): void {
 /** @return array<string, mixed> */
 function diagKioskPaquete(DiagnosticsOptions $options): array
 {
-    return app(GenerateDiagnosticsBundleHandler::class)->handle($options, DiagnosticsActor::User)->toArray();
+    // El que lleva datos personales sale cifrado (ADR-020, enmienda del
+    // 01-11-2026): se abre con la privada de un par generado para la prueba.
+    $recipient = DiagnosticsRecipient::install();
+    $bundle = app(GenerateDiagnosticsBundleHandler::class)->handle($options, DiagnosticsActor::User);
+
+    return $bundle instanceof SealedDiagnosticsBundle
+        ? $recipient->openedDocument($bundle->toJson())
+        : $bundle->toArray();
 }
 
 /**

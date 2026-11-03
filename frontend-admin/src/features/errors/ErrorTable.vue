@@ -19,7 +19,7 @@
 import { formatInstant } from '@kronoqr/web-kit/datetime'
 import { reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { ErrorEvent, ErrorSource } from '@/shared/api/types'
+import type { ErrorEvent, ErrorEventResolution, ErrorSource } from '@/shared/api/types'
 import { ageSinceLastSeen, levelBadgeClass, whatToDoKey } from './errorPresentation'
 
 const props = defineProps<{
@@ -69,6 +69,24 @@ function firstSeenLabel(entry: ErrorEvent): string {
 
 function lastSeenLabel(entry: ErrorEvent): string {
   return formatInstant(entry.last_seen_at, props.timeZone, locale.value)
+}
+
+function resolvedLabel(entry: ErrorEvent): string {
+  const date = formatInstant(entry.resolved_at ?? '', props.timeZone, locale.value)
+
+  // Sin autor para un acceso de soporte o si la cuenta se borro (RF-PD-11, ADR-020).
+  return entry.resolved_by === null
+    ? t('errorEvents.table.resolvedAnonymous', { date })
+    : t('errorEvents.table.resolvedBy', { name: entry.resolved_by.name, date })
+}
+
+function previousResolutionLabel(resolution: ErrorEventResolution): string {
+  const date = formatInstant(resolution.resolved_at, props.timeZone, locale.value)
+
+  // Sin autor para un acceso de soporte o si la cuenta se borro (RF-PD-11, ADR-020).
+  return resolution.resolved_by === null
+    ? t('errorEvents.table.previousResolutionAnonymous', { date })
+    : t('errorEvents.table.previousResolution', { name: resolution.resolved_by.name, date })
 }
 
 function ageLabel(entry: ErrorEvent): string {
@@ -163,7 +181,16 @@ function contextLines(entry: ErrorEvent): ContextLine[] {
               </span>
             </td>
             <td class="px-3 py-2">{{ sourceLabel(entry.source) }}</td>
-            <td class="max-w-sm truncate px-3 py-2" :title="entry.message">{{ entry.message }}</td>
+            <td class="max-w-sm px-3 py-2">
+              <span class="block truncate" :title="entry.message">{{ entry.message }}</span>
+              <span
+                v-if="entry.previous_resolution !== null"
+                class="block text-sm text-kq-text-muted"
+                :data-test="`previous-resolution-${entry.id}`"
+              >
+                {{ previousResolutionLabel(entry.previous_resolution) }}
+              </span>
+            </td>
             <td class="px-3 py-2 tabular-nums" data-test="occurrences">
               {{ t('errorEvents.table.occurrencesValue', { count: entry.occurrences }) }}
             </td>
@@ -215,7 +242,7 @@ function contextLines(entry: ErrorEvent): ContextLine[] {
                   class="text-sm text-kq-text-muted"
                   :data-test="`resolved-${entry.id}`"
                 >
-                  {{ t('errorEvents.table.resolved') }}
+                  {{ resolvedLabel(entry) }}
                 </span>
               </div>
             </td>

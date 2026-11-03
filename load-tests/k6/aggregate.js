@@ -29,17 +29,18 @@
 // base, y un rojo de lo que depende de la maquina no distingue una regresion de
 // un runner degradado. Sale con 2: repite la pasada (V21-5-QA-01).
 //
-// Y UNO MAS QUE NO ES UN DESENLACE: `info`. Lo lleva `RS-03-RN-18`, que publica
-// cuanto se separa el `422` de RN-18 de los tres rechazos de credencial. A-13
-// (doc 07 §6) acepto esa diferencia SIN suelo de tiempo y pidio la cifra, no una
-// puerta: por eso `info` no entra en el codigo de salida ni en el «VEREDICTO».
+// Y UNO MAS QUE NO ES UN DESENLACE: `info`. Lo llevan `RF-AT-11` y `RNF-P-08`
+// cuando la instalacion no ofrece el PIN: no hay nada que juzgar, y por eso
+// `info` no entra en el codigo de salida ni en el «VEREDICTO». `RS-03-RN-18` lo
+// llevo hasta la 2.3.0; desde la enmienda de ADR-005 (tarea 33.6) se juzga como
+// RS-03.
 //
 // QUE PUBLICA `summary.json`, ademas de lo evidente:
 //
 //   verdicts['<requisito>']       `{ status, detail }`. `status` es `pass`,
 //                                 `fail`, `unmeasurable`, `not_comparable`,
-//                                 `unreliable` o —solo en `RS-03-RN-18`—
-//                                 `info`.
+//                                 `unreliable` o —solo con el PIN apagado,
+//                                 en `RF-AT-11` y `RNF-P-08`— `info`.
 //   machine                       velocidad de la maquina de la pasada y de la
 //                                 linea base, cuantas veces mas lenta iba
 //                                 (`slowdown`), el maximo (`max_slowdown`) y si
@@ -239,15 +240,15 @@ const REJECT_CLASSES = ['signature', 'unknown', 'revoked']
  * NO ES UNA CLASE MAS DE `REJECT_CLASSES`, Y ESO ES LA MITAD DEL ASUNTO. Las
  * tres de arriba son rechazos de CREDENCIAL y `ConstantTimeFloor` las iguala
  * entre si; el `422` de RN-18 comparte el cuerpo generico pero llega por otro
- * camino —tarjeta ya resuelta, ajustes leidos, jornada cargada— y tarda mas.
- * A-13 (doc 07 §6) acepto esa diferencia con argumento y **sin suelo de tiempo**,
- * a condicion de revisarla «con la medicion real que produzca la prueba de
- * carga». Esa medicion es lo que falta y lo que esta fase aporta.
+ * camino —tarjeta ya resuelta, ajustes leidos, jornada cargada—. Hasta la 2.3.0
+ * tardaba mas y A-13 (doc 07 §6) lo aceptaba sin suelo, con veredicto `info`.
  *
- * POR ESO SU VEREDICTO ES `info` Y NUNCA `fail`: publicar la cifra es el
- * encargo; poner una puerta donde la decision dice que no la hay seria inventar
- * un requisito. Si algun dia se decide lo contrario, lo que cambia es la
- * decision de doc 07 §6, y entonces esto pasa a ser un presupuesto.
+ * DESDE LA 2.3.0 SE JUZGA (enmienda de ADR-005, tarea 33.6): el guardian comun de
+ * las tres puertas rellena todo rechazo hasta el mismo suelo, y `RS-03-RN-18`
+ * aplica a esta fase el presupuesto de RS-03 frente a las tres clases sobre
+ * los MINIMOS; la mediana se publica sin juzgar (decision del 02-11-2026). Sigue
+ * siendo una fase aparte porque lo que compara RS-03 son las clases de
+ * credencial entre si, y mezclarlas escondera cual de las dos cosas se rompio.
  */
 const OUT_OF_ORDER_PHASE = 'reject_out_of_order'
 
@@ -1188,20 +1189,31 @@ function analyse(results, options = {}) {
           `${rejectionFloorMs} ms ${floorRespected ? 'respetado' : 'NO respetado'} sobre el minimo de cada clase`),
   )
 
-  // --- RS-03-RN-18: la separacion del cuarto rechazo, INFORMATIVA -------------
+  // --- RS-03-RN-18: el cuarto rechazo, con el presupuesto de RS-03 ------------
 
-  // QUE SE PUBLICA Y POR QUE NO SE JUZGA. A-13 del doc 07 §6 acepto que el `422`
-  // de RN-18 tarde mas que los tres rechazos de credencial, con un argumento que
-  // se sostiene —para provocarlo hace falta un token de quiosco valido Y un
-  // `occurred_at` anterior a la entrada abierta de una persona concreta— y **sin
-  // suelo de tiempo anadido**, porque anadirlo gastaria latencia en el cambio de
-  // turno sin cerrar el oraculo mas limpio que ya existe (el `200` del
-  // anti-rebote, ADR-031). Lo que aquella aceptacion prometia era revisarse «con
-  // la medicion real de la prueba de carga», y esa cifra no existia (H-08).
+  // QUE SE JUZGA Y POR QUE (A-13 cerrada, enmienda de ADR-005, tarea 33.6). Hasta
+  // la 2.3.0 el `422` de RN-18 tardaba mas que los tres rechazos de credencial
+  // —carga la jornada— y doc 07 §6 lo aceptaba sin suelo, asi que esto era una
+  // cifra informativa. Desde la 2.3.0, `UnprocessableScanGuard` rellena TODO
+  // rechazo de las tres puertas hasta el mismo suelo, medido desde la entrada
+  // del escaneo, y el `422` de RN-18 tiene que ser tan indistinguible como los
+  // otros tres. Se juzga con los mismos suelos de muestras que RS-03, el suelo
+  // de tiempo sobre el minimo y «no fiable» en vez de rojo si el runner va
+  // degradado (decision 19 de la 3.6). Sin las tres clases de credencial
+  // medidas no hay contra que comparar: `unmeasurable`.
   //
-  // Aqui esta. Con `verdict: 'info'`: no entra en `exitCodeOf()`, no tiñe la
-  // pasada de rojo y no la declara no fiable. Si alguna vez se decide poner un
-  // suelo, lo que cambia primero es la fila de doc 07 §6.
+  // SOLO LOS MINIMOS BLOQUEAN (decision del propietario del 02-11-2026, tras el
+  // run 41411268664). El suelo iguala lo que tarda menos que el, y el minimo es
+  // la muestra que menos cola llevo: es lo que filtra a quien mide tiempos, y
+  // ahi RN-18 se queda dentro del tope (10-12 ms). La MEDIANA, con carga, queda
+  // por encima del suelo —el camino de RN-18 carga la jornada y pregunta al
+  // agregado, y eso tarda mas que el suelo— y se separa unos 80 ms. Se publica
+  // en la misma linea, como informacion: esa diferencia la acepta A-13 por su
+  // motivo de siempre (hace falta un token de quiosco y un `occurred_at`
+  // fabricado, y el anti-rebote de ADR-031 ya es mejor discriminador).
+  //
+  // El anti-rebote sigue siendo un `200` sin suelo (ADR-031) y no entra aqui:
+  // un `200` en esta fase se cuenta aparte, como `reconciled`.
   const outOfOrderAnswered = percentiles(
     valuesWhere((sample) => sample.phase === OUT_OF_ORDER_PHASE && sample.status === '422'),
   )
@@ -1215,9 +1227,9 @@ function analyse(results, options = {}) {
     (sample) => sample.phase === OUT_OF_ORDER_PHASE && isAttended(sample.status),
   ).length
 
-  // LA SEPARACION VA FIRMADA. Un positivo es «RN-18 tarda mas», que es lo que
-  // A-13 predice; un negativo seria la sorpresa, y redondear el valor absoluto
-  // la escondera.
+  // LA SEPARACION VA FIRMADA en lo que se publica: un positivo es «RN-18 tarda
+  // mas», que es lo que pasaba antes del suelo comun; un negativo seria la
+  // sorpresa. El veredicto mira su valor absoluto.
   const separationOf = (statistic) =>
     Object.fromEntries(
       REJECT_CLASSES.map((rejectClass) => {
@@ -1229,7 +1241,23 @@ function analyse(results, options = {}) {
     )
 
   const outOfOrderSeparation = { median: separationOf('p50'), minimum: separationOf('min') }
-  const outOfOrderFirm = outOfOrderAnswered.samples >= REJECT_SAMPLES_FLOOR
+  const outOfOrderFirm =
+    outOfOrderAnswered.samples >= REJECT_SAMPLES_FLOOR &&
+    outOfOrderOffered > 0 &&
+    outOfOrderAnswered.samples / outOfOrderOffered >= REJECT_SAMPLES_RATIO_FLOOR
+  const outOfOrderMeasurable = outOfOrderFirm && rejectMeasurable
+  const widestOf = (bucket) =>
+    Math.max(...REJECT_CLASSES.map((rejectClass) => Math.abs(bucket[rejectClass] ?? Number.POSITIVE_INFINITY)))
+  const outOfOrderMedianSpread = outOfOrderMeasurable ? widestOf(outOfOrderSeparation.median) : null
+  const outOfOrderMinimumSpread = outOfOrderMeasurable ? widestOf(outOfOrderSeparation.minimum) : null
+  const outOfOrderFloorRespected = outOfOrderAnswered.min !== null && outOfOrderAnswered.min >= rejectionFloorMs
+  // Solo el minimo: la mediana se publica y no juzga (ver arriba).
+  const outOfOrderSpreadOk = outOfOrderMinimumSpread !== null && outOfOrderMinimumSpread <= REJECT_SPREAD_BUDGET_MS
+  const outOfOrderStatus = !outOfOrderMeasurable
+    ? 'unmeasurable'
+    : !outOfOrderFloorRespected
+      ? 'fail'
+      : unlessDegraded(outOfOrderSpreadOk ? 'pass' : 'fail')
   const separationText = (bucket) =>
     REJECT_CLASSES.map(
       (rejectClass) =>
@@ -1238,19 +1266,20 @@ function analyse(results, options = {}) {
 
   verdict(
     'RS-03-RN-18',
-    'info',
-    outOfOrderAnswered.samples === 0
-      ? `el escenario reject-out-of-order no dejo ninguna respuesta 422 de ${outOfOrderOffered} ` +
-        `peticiones (${outOfOrderReconciled} se pudieron reconciliar): sin cifra que publicar`
-      : `mediana ${round(outOfOrderAnswered.p50)} ms y minimo ${round(outOfOrderAnswered.min)} ms sobre ` +
-        `${outOfOrderAnswered.samples} rechazos de RN-18. Separacion de medianas frente a la credencial: ` +
-        `${separationText(outOfOrderSeparation.median)}; de minimos: ` +
-        `${separationText(outOfOrderSeparation.minimum)}. INFORMATIVO: A-13 acepta esta diferencia sin ` +
-        'suelo de tiempo (doc 07 §6), asi que la cifra no cambia el veredicto' +
-        (outOfOrderFirm
-          ? ''
-          : ` — con solo ${outOfOrderAnswered.samples} muestras la cifra es orientativa ` +
-            `(${REJECT_SAMPLES_FLOOR} para que sea firme)`),
+    outOfOrderStatus,
+    degradedPrefix(outOfOrderStatus) +
+      (!outOfOrderFirm
+        ? `solo ${outOfOrderAnswered.samples} respuestas 422 de RN-18 de ${outOfOrderOffered} peticiones ` +
+          `(${outOfOrderReconciled} se pudieron reconciliar; hacen falta ${REJECT_SAMPLES_FLOOR} y el ` +
+          `${REJECT_SAMPLES_RATIO_FLOOR * 100} % de las ofrecidas)`
+        : !rejectMeasurable
+          ? 'sin las tres clases de credencial medidas (RS-03 no evaluable) no hay contra que comparar'
+          : `JUZGA la separacion de minimos frente a la credencial: hasta ${outOfOrderMinimumSpread.toFixed(1)} ms ` +
+            `(${separationText(outOfOrderSeparation.minimum)}; tope ${REJECT_SPREAD_BUDGET_MS}) y el suelo de ` +
+            `${rejectionFloorMs} ms sobre el minimo (${round(outOfOrderAnswered.min)} ms, ` +
+            `${outOfOrderFloorRespected ? 'respetado' : 'NO respetado'}). INFORMATIVA, no juzga: la separacion de ` +
+            `medianas, hasta ${outOfOrderMedianSpread.toFixed(1)} ms (${separationText(outOfOrderSeparation.median)}), ` +
+            'aceptada por A-13'),
   )
 
   const outOfOrder = {
@@ -1422,9 +1451,8 @@ function analyse(results, options = {}) {
         return [rejectClass, published]
       }),
     ),
-    // La cifra que A-13 (doc 07 §6) prometia y no tenia, publicada aparte de
-    // `reject_classes` porque no es una clase mas: `verdicts['RS-03-RN-18']`
-    // lleva su lectura y vale siempre `info`.
+    // El cuarto rechazo, publicado aparte de `reject_classes` porque no es una
+    // clase de credencial: `verdicts['RS-03-RN-18']` lo juzga contra ellas.
     reject_out_of_order: outOfOrder,
     checks: {
       total: totalChecks,
@@ -1523,10 +1551,10 @@ function analyse(results, options = {}) {
  * medir.
  *
  * **`info` no es un cuarto desenlace de esta funcion, y es a proposito.** Un
- * veredicto informativo —hoy solo `RS-03-RN-18`— publica una cifra que una
- * decision aceptada con argumento pidio medir; convertirla en codigo de salida
- * seria crear el presupuesto que esa decision dice que no hay. Se ve en el
- * informe y en `summary.json`, y no en el `exit`.
+ * veredicto informativo —hoy, el del PIN cuando la instalacion no lo ofrece—
+ * no tiene nada que juzgar; convertirlo en codigo de salida seria inventar un
+ * rojo o un «vuelve a medir». Se ve en el informe y en `summary.json`, y no en
+ * el `exit`.
  *
  * **`not_comparable` sale con 2, como `unmeasurable`**: la pasada no ha podido
  * decir si hay regresion, y un 0 ahi seria un verde que no se ha ganado. Lo que
@@ -1640,8 +1668,8 @@ function formatReport(summary) {
   }
 
   // El cuarto rechazo va en la MISMA tabla y en una fila aparte: es la unica
-  // forma de ver de un vistazo lo que A-13 dice —que RN-18 tarda mas— sin
-  // sugerir que sea una clase de credencial comparable con las otras tres.
+  // forma de ver de un vistazo si RN-18 se separa de las tres clases sin
+  // sugerir que sea una clase de credencial mas.
   const outOfOrder = summary.reject_out_of_order
 
   say(

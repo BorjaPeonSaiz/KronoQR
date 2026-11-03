@@ -1939,11 +1939,13 @@ API users.** None of this changes the record or prevents clocking:
   default (`page`, `per_page` up to 100, and `meta.total`); the `summary` count is
   still the whole workforce. And `GET /api/v1/employees/{uuid}/workdays` returns
   31 work days per page.
-- **The full data export moves to format version 7**: `report_exports.csv`
+- **The full data export moves to format version 8**: `report_exports.csv`
   gains the `cancelled_at` column; `discarded_scan_reports.csv` gains `source`,
-  `failed_attempts` and `first_failed_at`; and `scan_processing_failures.csv`
-  appears, the failed attempts to process a clock-in over the last 30 days
-  (pseudonymised technical data, without the card fingerprint). If you compare
+  `failed_attempts` and `first_failed_at`; and two files appear:
+  `scan_processing_failures.csv`, the failed attempts to process a clock-in over
+  the last 30 days (pseudonymised technical data, without the card fingerprint),
+  and `error_event_resolutions.csv`, every time somebody marked a failure in the
+  error history as resolved, including before it reopened. If you compare
   exports from before and after, those are the differences (`manifest.json` says
   so).
 
@@ -2328,9 +2330,12 @@ through your contract's channel. **Support does not go into your server**
   forgotten bundle —perhaps with personal data in it (§12.3)— from staying on
   the server forever.
 
-It is **a single readable JSON file**, `kronoqr-diagnostics-<versión>-<fecha>.json`,
-unencrypted on purpose: **open it before sending it** and check that it carries
-nothing you do not want to send. Its header (`manifest`) carries the
+The default bundle, the **anonymised** one, is **a single readable JSON file**,
+`kronoqr-diagnostics-<versión>-<fecha>.json`, unencrypted on purpose: **open it
+before sending it** and check that it carries nothing you do not want to send.
+(The one with personal data leaves encrypted and is called `….sealed.json`:
+§12.3.)
+Its header (`manifest`) carries the
 fingerprint of the whole document, header included, and with it you can check that it was
 not altered or cut short on the way. Support checks it on receipt; to check it
 yourself before sending it, from the installation directory and with the path
@@ -2348,6 +2353,19 @@ name**, the health of each tablet **without its name**, the grouped error
 history (from the version that adds it), aggregate counters, the report of the
 last update (only the lines in the report format, and never its
 `.detalle.log`) and **only counts** of the audit trail.
+
+**No paths from your server and not its name (since 2.3.0).** No folder on
+your server travels with its real path. Where the `doctor` report or the last
+update report would mention `/srv/my-hotel/backups`, the bundle says
+`<backup_path>`; a subfolder comes out as `<backup_path>/daily`, and a path
+that belongs to no product location as `[path]`. The public name of your
+installation (the one in `APP_URL`) comes out as `[app_host]`. What support
+needs to know about each location goes in `configuration.locations`: whether
+it is the default one (`customized`), whether it exists (`exists`) and whether
+it can be written to (`writable`), never where it is. `.env` variables whose
+value is a path (`BRANDING_LOGO_ROOT`, `PRODUCT_DIAGNOSTICS_PATH`…) do not
+travel. **Nothing changes on your server**: `product:doctor` and `./doctor.sh`
+still show you the real path, which is what you need to fix whatever fails.
 
 **What it carries from the error history.** Each error appears with its code,
 its origin, its class, how many times it has happened and when it happened
@@ -2492,10 +2510,83 @@ you are communicating personal data to a third party: read
 [`legal-obligations.md`](legal-obligations.md) §8 first, and have the
 processing agreement signed.
 
-**The product does not encrypt this file**, so that you can open it and check
-what leaves before sending it. Send it only through the encrypted channel set by
-your support and processing agreement, never by unencrypted email, and delete it
-from the server and from your computer as soon as you have sent it.
+**It leaves encrypted for the vendor (since 2.3.0).** The bundle with personal
+data is no longer a readable JSON: it is an **encrypted envelope** for the
+vendor's support key, which **only the vendor can open**. Neither you nor
+anyone with access to your server can read its content, and nor can anyone who
+intercepts it on the way. You recognise it by its name,
+`kronoqr-diagnostics-<version>-<date>.sealed.json`, and when you generate it
+from the console the result says so (the console speaks the installation
+language; in English):
+
+```text
+Diagnostics bundle WITH PERSONAL DATA generated and encrypted.
+
+  File:      /var/www/html/storage/app/diagnostics/kronoqr-diagnostics-2.3.0-20261101T101500Z.sealed.json
+  Encrypted: for the vendor support key 3f9c1a7e5b2d4c80
+  ...
+```
+
+**What you can check is its header**, which is in clear text at the start of
+the file (`less <file>`): which sections it carries (`manifest.sections`) and,
+for each personal-data collection, **how many rows and which columns**
+(`contents.collections`), without any value. If the header says something you
+do not want to send —more rows than you expected, a collection that is not
+needed—, do not send it and generate another one with a shorter period. The
+header is bound to the content: if anyone changes it, the vendor cannot open
+the envelope.
+
+**Checking it is the one you generated:**
+
+```bash
+docker compose exec app php artisan product:diagnostics --verify=<ruta>
+```
+
+It shows you which key it is for, the declared fingerprint and the file's
+fingerprint, and compares them with the `diagnostics.bundle_generated` entry
+in your audit trail. It must end with `and the file digest matches the one in
+the entry` and exit code `0`. It cannot check the content: it only opens with the
+vendor's private key, and the command says so.
+
+Even though it is encrypted, send it through the channel set by your support
+and processing agreement, and delete it from the server and from your computer
+as soon as you have sent it: the vendor is still a processor for that
+incident.
+
+#### What to do if…
+
+- **The panel says "This installation cannot generate the package with
+  personal data", or the console ends with exit code `1` and the message "The bundle WITH
+  PERSONAL DATA has not been generated: this installation does not have the
+  vendor support public key…".** Your installation does not have the key used
+  to encrypt it, and the product never sends that bundle unencrypted.
+  **Nothing has been collected and no audit entry has been written.** Generate
+  the anonymised one, which is the one support asks for almost every time:
+
+  ```bash
+  docker compose exec app php artisan product:diagnostics
+  ```
+
+  Then look at the `diagnostics.recipient_key` check of
+  `docker compose exec app php artisan product:doctor`: its warning says what
+  to do. The key ships inside every published version of the product and is
+  not configured. If someone added `DIAGNOSTICS_RECIPIENT_PUBLIC_KEY` to the
+  `.env`, remove that line and recreate the containers (`docker compose up -d`).
+  If it is not in the `.env`, the image is not a published version: update with
+  `update.sh` to the version support tells you. **Clocking in, the record and
+  the anonymised bundle do not depend on this key.**
+- **`--verify` ends with exit code `2` and "THE FILE DIGEST DOES NOT MATCH the
+  one in the entry".** The file is not the one that was generated or part of it is
+  missing (a truncated copy, an attachment cut by email). Do not send it:
+  generate another one.
+- **`--verify` says there is no entry with that fingerprint in this
+  installation's audit trail.** The bundle was not generated on this
+  installation, or it was generated on another one restored later. Ask whoever
+  gave it to you where it comes from.
+- **Support tells you they cannot open it.** It is usually an incomplete or
+  modified copy: check the file you sent with `--verify` and, if it gives `0`,
+  tell support the key identifier it shows (`Encrypted: for the vendor support
+  key …`).
 
 ### 12.4 Granting support temporary access
 
@@ -2525,7 +2616,7 @@ time.
 | Scope | Support can | Cannot |
 | --- | --- | --- |
 | `diagnostics` (default) | Generate the **anonymised** bundle and consult errors | See anyone |
-| `read_only` | In addition, **read the workforce and one person's time record** (their record and their working days), **every read audited** as a disclosure of personal data, and the audit trail | Change anything. **Neither the absence register** —health data: the "Sick leave" type and its note—, **nor live presence, nor the per-person compliance summary, nor the department catalogue**: they are not needed to diagnose an hours calculation, and no support access reaches any of them (403 with any scope; absences closed at the Phase 3 close, presence and compliance on 24-09-2026 by a product decision of the manufacturer, the same for every installation) |
+| `read_only` | In addition, **read the workforce and one person's time record** (their record and their working days), **every read audited** as a disclosure of personal data | Change anything. **Not the audit trail**: no support access reads it, and granting it would take a new architecture decision (since 2.3.0). **Neither the absence register** —health data: the "Sick leave" type and its note—, **nor live presence, nor the per-person compliance summary, nor the department catalogue**: they are not needed to diagnose an hours calculation, and no support access reaches any of them (403 with any scope; absences closed at the Phase 3 close, presence and compliance on 24-09-2026 by a product decision of the manufacturer, the same for every installation) |
 | `configuration` | In addition, **change** the operational settings and pair or unlink kiosks | See working days or the workforce, or touch the compliance profile (legal thresholds and retention years are yours), **or turn break clocking on or off** (`ATTENDANCE_BREAK_CLOCKING`: it decides what counts as an incident, just like the profile; any attempt gets a 403), **or touch the two pattern-detection keys** (`ATTENDANCE_PATTERN_WINDOW_SECONDS` and `ATTENDANCE_PATTERN_MIN_REPEATS`: with `0` in the first one the coincidence detection of RF-PR-06 is switched off, the mitigation that makes up for having no biometrics, and that decision is the hotel's; also a 403), **or turn the weekly email summary on or off** (`WEEKLY_SUMMARY_EMAIL`: it decides whether your staff's names and hours go out by email every Monday; also a 403), **or declare or change the pre-system timesheet hours** (`BASELINE_MANUAL_HOURS_PER_MONTH`: it is the declared denominator of the impact dashboard's commercial target and describes your process before the installation, which only you know; also a 403), **or change the PIN length** (`IDENTITY_PIN_LENGTH`: it decides how strong the key to your staff's record is; also a 403), **or see or change the kiosk service code**: it arrives empty and marked as redacted, and any attempt to change it gets a 403 (§16.5) |
 
 With no scope can it activate licences, grant or revoke access, issue or revoke
@@ -3382,7 +3473,7 @@ clock-ins/s — and compares with nothing.
 | **Isolated clock-ins failing with a server error**, while the rest goes fine | A transaction got stuck and the others were waiting behind it; the database timeouts (§17.4) cut it off | Nothing urgent: the kiosk **queues and resends**, and nobody is left unable to clock in. If it repeats, follow the `trace_id` of one of those requests in the technical log (§10.3) |
 | **`429` responses on valid clock-ins** | The edge limit or the per-device one is throttling | Check that the kiosks fall inside `KIOSK_VLAN_CIDR` ([`installation.md`](installation.md) §6). That is the cause in the vast majority of cases |
 | **One kind of rejection clearly takes more or less time than another** | It is a product defect, not a problem with your server | Open an incident with the vendor and attach `summary.json`: a rejection that can be told apart by timing would allow working out from outside which cards exist |
-| **`reject_out_of_order` comes out with a large separation** (verdict `RS-03-RN-18`) | **It is information, not a verdict that blocks.** That key measures how far a clocking rejected for arriving out of order sits from the three card rejections — signature, unknown card and revoked card —, with the signed difference: positive if the former takes longer | Nothing. Keep it with the record. That difference is accepted on purpose: a clocking out of order says nothing about which cards exist, which is what constant timing protects. The figure is there so that the decision can be reviewed with data the day it is needed |
+| **`reject_out_of_order` comes out with a large separation** (verdict `RS-03-RN-18`) | A clocking rejected for arriving out of order takes a different time from the three card rejections — signature, unknown card and revoked card —. Since 2.3.0 they all wait the same time floor, and what is judged against the RS-03 limit is the separation of the **minimums**: if an out-of-order rejection can come out faster or slower than the common floor, it is **a product fault**, like the previous row. The separation of the **medians** is shown in the summary for information only: under load, checking the order of the work day takes more work than rejecting a card (about 80 ms more on the manufacturer's CI) and the floor does not even it out; it is an accepted risk in the threat model, not a fault If it comes out “unreliable”, the test server was too slow to judge it | If it is red, open an incident with the manufacturer and attach `summary.json`. If it is “unreliable”, repeat the run with the server less loaded |
 
 **Raising `PHP_FPM_MAX_CHILDREN` does not move the figure if the CPU is
 saturated**, and it is worth seeing that with numbers before spending an

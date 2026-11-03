@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Product\Application\UseCase;
 
 use App\Modules\Product\Application\Exception\DiagnosticsResponsibleNotAllowed;
+use App\Modules\Product\Application\Exception\DiagnosticsSealingUnavailable;
+use App\Modules\Product\Application\Port\DiagnosticsBundleSealer;
 use App\Modules\Product\Application\Port\DiagnosticsCollector;
 use App\Modules\Product\Application\Port\ProbeFailureClassifier;
 use App\Modules\Product\Application\Port\ProductEventPublisher;
@@ -13,12 +15,15 @@ use App\Modules\Product\Domain\Event\DiagnosticsBundleGenerated;
 use App\Modules\Product\Domain\Event\PersonalDataIncludedInDiagnostics;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsActor;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsBundle;
+use App\Modules\Product\Domain\ValueObject\DiagnosticsManifest;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsOptions;
 use App\Modules\Product\Domain\ValueObject\PendingDiagnosticsAudit;
+use App\Modules\Product\Domain\ValueObject\SealedDiagnosticsBundle;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
+use DateTimeImmutable;
 use Throwable;
 
 /**
@@ -85,6 +90,21 @@ use Throwable;
  * pregunta y la generacion. El manifiesto sigue diciendo `console` y nada mas
  * (ADR-020): la cuenta se queda en `audit_log`, que no sale de la instalacion.
  *
+ * ## Con datos personales, cifrado o nada (ADR-020, enmienda del 01-11-2026)
+ *
+ * El paquete con `personal_data` sale como {@see SealedDiagnosticsBundle}, para
+ * la clave publica de soporte del fabricante. **Sin clave valida no se genera**:
+ * se comprueba antes de recolectar, asi que no se recoge nada ni queda asiento
+ * ({@see DiagnosticsSealingUnavailable}). Se sella **antes** de escribir los
+ * asientos, que llevan la huella de los bytes que salen (`sealed_sha256`). El
+ * anonimizado no pasa nunca por el sellador.
+ *
+ * El tope `PRODUCT_DIAGNOSTICS_MAX_BYTES` vale para el fichero que sale. El
+ * texto cifrado viaja en base64, asi que el recorte se hace contra unos 3/4 del
+ * tope; y como el recorte mide la forma canonica y lo que se cifra es el texto
+ * indentado, si el sobre todavia no cabe se vuelve a recortar contra un
+ * presupuesto menor, sin volver a recolectar.
+ *
  * ## Funciona con la licencia caducada o ausente (regla dura 15)
  *
  * No consulta la licencia para decidir nada. La seccion `license` **informa** de
@@ -92,6 +112,9 @@ use Throwable;
  */
 final readonly class GenerateDiagnosticsBundleHandler
 {
+    /** Cuantas veces se vuelve a recortar un sobre que no cabe en el tope. */
+    private const int SEALED_FIT_ATTEMPTS = 4;
+
     /**
      * @param  list<DiagnosticsCollector>  $collectors  En el orden en que van al documento.
      */
@@ -104,22 +127,25 @@ final readonly class GenerateDiagnosticsBundleHandler
         private ProbeFailureClassifier $failures,
         private ResponsibleAccounts $accounts,
         private SerializedLedgerWrite $ledger,
+        private DiagnosticsBundleSealer $sealer,
     ) {}
 
     /**
      * @param  int|null  $responsibleUserId  la cuenta `admin` que firma el paquete con datos personales pedido por consola
+     * @return DiagnosticsBundle|SealedDiagnosticsBundle el anonimizado en claro; el que lleva datos personales, siempre sellado
      *
      * @throws DiagnosticsResponsibleNotAllowed
+     * @throws DiagnosticsSealingUnavailable
      */
-    public function handle(DiagnosticsOptions $options, DiagnosticsActor $actor, ?int $responsibleUserId = null): DiagnosticsBundle
+    public function handle(DiagnosticsOptions $options, DiagnosticsActor $actor, ?int $responsibleUserId = null): DiagnosticsBundle|SealedDiagnosticsBundle
     {
         return UseCaseInstrumentation::run(
             'product.generate_diagnostics_bundle',
-            fn (): DiagnosticsBundle => $this->doHandle($options, $actor, $responsibleUserId),
+            fn (): DiagnosticsBundle|SealedDiagnosticsBundle => $this->doHandle($options, $actor, $responsibleUserId),
         );
     }
 
-    private function doHandle(DiagnosticsOptions $options, DiagnosticsActor $actor, ?int $responsibleUserId): DiagnosticsBundle
+    private function doHandle(DiagnosticsOptions $options, DiagnosticsActor $actor, ?int $responsibleUserId): DiagnosticsBundle|SealedDiagnosticsBundle
     {
         $this->assertResponsible($options, $actor, $responsibleUserId);
 
@@ -135,17 +161,26 @@ final readonly class GenerateDiagnosticsBundleHandler
             $sections[$name] = $this->collect($collector, $options);
         }
 
+        $generatedAt = $this->clock->now();
+
+        if ($options->includePersonalData) {
+            $sealed = $this->seal($sections, $generatedAt, $actor, $options);
+            $this->audit($sealed->manifest, \strlen($sealed->toJson()), $options, $actor, $responsibleUserId, $sealed);
+
+            return $sealed;
+        }
+
         $bundle = DiagnosticsBundle::of(
             productVersion: $this->productVersion,
-            generatedAt: $this->clock->now(),
-            anonymized: ! $options->includePersonalData,
+            generatedAt: $generatedAt,
+            anonymized: true,
             generatedBy: $actor,
             sections: $sections,
             maxBytes: $this->maxBytes,
         );
 
         try {
-            $this->audit($bundle, $options, $actor, $responsibleUserId);
+            $this->audit($bundle->manifest, \strlen($bundle->toJson()), $options, $actor, $responsibleUserId);
         } catch (Throwable $failure) {
             if (! $this->mayDefer($failure, $options, $actor)) {
                 throw $failure;
@@ -155,6 +190,45 @@ final readonly class GenerateDiagnosticsBundleHandler
         }
 
         return $bundle;
+    }
+
+    /**
+     * El paquete con datos personales, recortado y sellado para que el sobre
+     * quepa en el tope. Ver el docblock de la clase.
+     *
+     * @param  array<string, array<array-key, mixed>>  $sections
+     */
+    private function seal(
+        array $sections,
+        DateTimeImmutable $generatedAt,
+        DiagnosticsActor $actor,
+        DiagnosticsOptions $options,
+    ): SealedDiagnosticsBundle {
+        $budget = SealedDiagnosticsBundle::plaintextBudget($this->maxBytes);
+        $attempt = 0;
+
+        while (true) {
+            $sealed = $this->sealer->seal(DiagnosticsBundle::of(
+                productVersion: $this->productVersion,
+                generatedAt: $generatedAt,
+                anonymized: false,
+                generatedBy: $actor,
+                sections: $sections,
+                maxBytes: $budget,
+            ), $options->periodDays);
+
+            $size = \strlen($sealed->toJson());
+
+            // Con el ultimo intento ya se ha renunciado a todo lo que se puede
+            // renunciar: las seis secciones fijas no se sacrifican nunca.
+            if ($size <= $this->maxBytes || ++$attempt >= self::SEALED_FIT_ATTEMPTS) {
+                return $sealed;
+            }
+
+            // Proporcional a lo que sobra, con un 10 % mas de margen: el
+            // indentado no crece igual en todas las secciones.
+            $budget = max(1, intdiv(intdiv($budget * 9, 10) * $this->maxBytes, $size));
+        }
     }
 
     /**
@@ -183,13 +257,19 @@ final readonly class GenerateDiagnosticsBundleHandler
     /**
      * Por consola, el paquete con datos personales exige una cuenta `admin`
      * activa que lo firme; quien lo pide por el panel firma con su sesion y no
-     * pasa cuenta. Antes de recolectar nada: un paquete que no se va a poder
-     * firmar no se genera.
+     * pasa cuenta. Y, venga de donde venga, una clave publica de soporte con la
+     * que cifrarlo. Antes de recolectar nada: un paquete que no se va a poder
+     * firmar o cifrar no se genera.
      *
      * @throws DiagnosticsResponsibleNotAllowed
+     * @throws DiagnosticsSealingUnavailable
      */
     private function assertResponsible(DiagnosticsOptions $options, DiagnosticsActor $actor, ?int $responsibleUserId): void
     {
+        if ($options->includePersonalData && ! $this->sealer->available()) {
+            throw DiagnosticsSealingUnavailable::missingKey();
+        }
+
         if ($responsibleUserId === null) {
             if ($actor === DiagnosticsActor::Console && $options->includePersonalData) {
                 throw DiagnosticsResponsibleNotAllowed::missing();
@@ -211,34 +291,47 @@ final readonly class GenerateDiagnosticsBundleHandler
         }
     }
 
-    private function audit(DiagnosticsBundle $bundle, DiagnosticsOptions $options, DiagnosticsActor $actor, ?int $responsibleUserId): void
-    {
+    /**
+     * @param  int  $sizeBytes  el tamaño de lo que se entrega: el sobre, si va sellado
+     */
+    private function audit(
+        DiagnosticsManifest $manifest,
+        int $sizeBytes,
+        DiagnosticsOptions $options,
+        DiagnosticsActor $actor,
+        ?int $responsibleUserId,
+        ?SealedDiagnosticsBundle $sealed = null,
+    ): void {
         $now = $this->clock->now();
+        $sealedSha256 = $sealed?->sha256();
 
         $events = [new DiagnosticsBundleGenerated(
-            anonymized: $bundle->manifest->anonymized,
-            sections: $bundle->manifest->sections,
-            sha256: $bundle->manifest->sha256,
-            sizeBytes: \strlen($bundle->toJson()),
+            anonymized: $manifest->anonymized,
+            sections: $manifest->sections,
+            sha256: $manifest->sha256,
+            sizeBytes: $sizeBytes,
             generatedBy: $actor->value,
             occurredAt: $now,
+            deferred: false,
+            sealed: $sealed instanceof SealedDiagnosticsBundle,
             responsibleUserId: $responsibleUserId,
+            recipientKeyId: $sealed?->recipientKeyId,
+            sealedSha256: $sealedSha256,
         )];
 
-        if ($options->includePersonalData) {
-            /** @var array<array-key, mixed> $personal */
-            $personal = $bundle->sections['personal_data'] ?? [];
-
+        if ($sealed instanceof SealedDiagnosticsBundle) {
             $events[] = new PersonalDataIncludedInDiagnostics(
                 periodDays: $options->periodDays,
-                collections: array_values(array_filter(
-                    array_map(strval(...), array_keys($personal)),
-                    static fn (string $key): bool => ! in_array($key, ['status', 'reason', 'bytes'], true),
-                )),
-                sha256: $bundle->manifest->sha256,
+                // Las colecciones de la cabecera del sobre: lo mismo que el
+                // cliente lee sin abrirlo.
+                collections: array_map(strval(...), array_keys($sealed->contents['collections'] ?? [])),
+                sha256: $manifest->sha256,
                 generatedBy: $actor->value,
                 occurredAt: $now,
+                sealed: true,
                 responsibleUserId: $responsibleUserId,
+                recipientKeyId: $sealed->recipientKeyId,
+                sealedSha256: $sealedSha256,
             );
         }
 

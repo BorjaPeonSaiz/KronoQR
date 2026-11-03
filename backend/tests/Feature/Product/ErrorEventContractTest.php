@@ -210,3 +210,26 @@ it('los tres codigos de error tienen la forma del contrato', function (): void {
     // 401: sin token.
     Api::guest()->get('/api/v1/diagnostics/errors')->assertValidResponse(401);
 })->group('RF-PD-15', 'RQ-06');
+
+it('GET y POST validan tambien con una resolucion anterior poblada', function (): void {
+    // `previous_resolution` es otra forma del esquema (objeto con `IncidentUser`
+    // dentro), y con el grupo recien creado siempre sale `null`: hay que
+    // resolver, reabrir y volver a resolver para que la validacion la vea.
+    conRelojFijo();
+
+    $token = ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN));
+    $id = grupoCompleto();
+
+    Api::as($token)->post('/api/v1/diagnostics/errors/'.$id.'/resolve')->assertOk();
+    DB::table('error_events')->where('id', $id)->update(['resolved_at' => null, 'resolved_by_user_id' => null]);
+
+    Api::as($token)->get('/api/v1/diagnostics/errors?status=open')
+        ->assertValidResponse(200)
+        ->assertJsonPath('data.0.previous_resolution.resolved_by.uuid', fn (mixed $uuid): bool => is_string($uuid));
+
+    FrozenTime::at('2026-09-10 08:00:00');
+
+    Api::as($token)->post('/api/v1/diagnostics/errors/'.$id.'/resolve')
+        ->assertValidResponse(200)
+        ->assertJsonPath('previous_resolution.resolved_by.uuid', fn (mixed $uuid): bool => is_string($uuid));
+})->group('RF-PD-15', 'RQ-06');

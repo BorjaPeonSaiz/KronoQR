@@ -111,7 +111,8 @@ interface ErrorEventRepository
      *
      * **Idempotente**: resolver uno ya resuelto no cambia nada y devuelve la
      * misma fila con su autor y su instante originales. La accion no tiene
-     * segundo efecto y no merece un `409`.
+     * segundo efecto —tampoco en el historial de resoluciones, que se escribe
+     * en la misma sentencia y solo si la fila cambio— y no merece un `409`.
      *
      * @return ErrorEvent|null Nulo si el identificador no existe, para que el
      *                         controlador responda `404`.
@@ -135,6 +136,12 @@ interface ErrorEventRepository
      * retiene bloqueos sobre la misma tabla en la que se esta escribiendo cada
      * error que ocurra mientras corre. El bucle acota cada sentencia y suelta
      * entre una y otra.
+     *
+     * **Tambien las resoluciones vencidas de un grupo vivo** (2.3.0): las de
+     * `error_event_resolutions` con `resolved_at` anterior al mismo corte, para
+     * que un grupo que se repite no conserve para siempre quien lo resolvio
+     * cada vez (RL-11). La cifra que devuelve sigue siendo la de grupos, que es
+     * la que cuenta el ensayo.
      *
      * @param  int  $batchSize  Filas por sentencia (`compliance.retention.batch_size`).
      */

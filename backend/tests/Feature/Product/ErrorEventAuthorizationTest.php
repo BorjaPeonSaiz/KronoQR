@@ -166,3 +166,31 @@ it('los tres alcances de soporte leen y NINGUNO resuelve', function (SupportScop
     'read_only' => [SupportScope::ReadOnly],
     'configuration' => [SupportScope::Configuration],
 ])->group('RF-PD-15', 'RF-PD-11');
+
+it('un acceso de soporte tampoco ve QUIEN resolvio la vez anterior', function (): void {
+    // Tarea 33.4: `previous_resolution` lleva el mismo enmascarado que
+    // `resolved_by`. Con el grupo reabierto, el soporte ve que hubo una
+    // resolucion y cuando, nunca el nombre ni la cuenta.
+    $usuario = ManagementUsers::withRole(UserRole::ADMIN);
+    $id = grupoParaAutorizar();
+
+    Api::as(ManagementUsers::tokenFor($usuario))
+        ->post('/api/v1/diagnostics/errors/'.$id.'/resolve')
+        ->assertOk();
+
+    DB::table('error_events')->where('id', $id)->update(['resolved_at' => null, 'resolved_by_user_id' => null]);
+
+    $delCliente = Api::as(ManagementUsers::tokenFor($usuario))
+        ->get('/api/v1/diagnostics/errors?status=open')
+        ->assertOk();
+
+    $deSoporte = Api::as(SupportGrants::tokenFor(SupportScope::Diagnostics))
+        ->get('/api/v1/diagnostics/errors?status=open')
+        ->assertOk();
+
+    expect($delCliente->json('data.0.previous_resolution.resolved_by.name'))->toBe($usuario->name)
+        ->and($deSoporte->json('data.0.previous_resolution.resolved_by'))->toBeNull()
+        ->and($deSoporte->json('data.0.previous_resolution.resolved_at'))->toBeString()
+        ->and((string) $deSoporte->getContent())->not->toContain($usuario->name)
+        ->and((string) $deSoporte->getContent())->not->toContain((string) $usuario->uuid);
+})->group('RF-PD-15', 'RF-PD-11', 'RL-19');

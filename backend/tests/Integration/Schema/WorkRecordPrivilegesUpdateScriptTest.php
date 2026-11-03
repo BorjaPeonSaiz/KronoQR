@@ -448,3 +448,60 @@ function privilegiosDeriva(mixed $row): string
 
     return $value;
 }
+
+it('vigila las resoluciones del historico de errores y su funcion de purga, y la reparacion las deja solo-append', function (): void {
+    // RL-11, RF-PD-15 (2.3.0, 2026_11_02_100000): la tabla es solo-append para
+    // el rol y lo vencido se purga solo por la funcion SECURITY DEFINER. Un
+    // DELETE devuelto o la funcion para PUBLIC se reparan; la funcion sin
+    // DEFINER o borrada es manipulacion. Sin su migracion, no se exige.
+    $migrator = DB::connection(config()->string('database.migrations.connection'));
+    $application = Config::string('database.roles.application');
+    $sql = privilegiosActualizadorSql($application);
+    $funcion = 'public.error_event_resolutions_purge_batch(timestamptz, integer)';
+
+    $process = Process::fromShellCommandline(
+        'bash -c '.escapeshellarg(
+            'set -Eeuo pipefail; . '.escapeshellarg(Repo::file('infra/scripts/update.sh')).'; '
+            .'CFG_DB_USERNAME='.escapeshellarg($application).'; KQ_WORK_RECORD_STAGE=b7; work_record_privileges_repair_sql'
+        ),
+        timeout: 60.0,
+    );
+    $process->run();
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput());
+
+    $migrator->beginTransaction();
+
+    try {
+        $migrator->statement('GRANT UPDATE, DELETE, TRUNCATE ON TABLE error_event_resolutions TO "'.$application.'"');
+        $migrator->statement('GRANT EXECUTE ON FUNCTION '.$funcion.' TO PUBLIC');
+        $before = privilegiosDeriva($migrator->selectOne($sql));
+        $migrator->getPdo()->exec($process->getOutput());
+        $after = privilegiosDeriva($migrator->selectOne($sql));
+
+        $migrator->statement('ALTER FUNCTION '.$funcion.' SECURITY INVOKER');
+        $invoker = privilegiosDeriva($migrator->selectOne($sql));
+
+        $migrator->statement('DROP FUNCTION '.$funcion);
+        $dropped = privilegiosDeriva($migrator->selectOne($sql));
+
+        $migrator->table('migrations')->where('migration', '2026_11_02_100000_purge_error_event_resolutions_by_age')->delete();
+        $without = privilegiosDeriva($migrator->selectOne($sql));
+    } finally {
+        $migrator->rollBack();
+    }
+
+    expect($before)->toBe(implode(',', [
+        'error_event_resolutions:DELETE',
+        'error_event_resolutions:TRUNCATE',
+        'error_event_resolutions:UPDATE',
+        'error_event_resolutions_purge_batch:PUBLIC',
+    ]))
+        ->and(privilegiosActualizadorManipulado($before))->toBeFalse()
+        ->and($after)->toBe('ok')
+        ->and($invoker)->toBe('error_event_resolutions_purge_batch:DEFINER')
+        ->and(privilegiosActualizadorManipulado($invoker))->toBeTrue()
+        ->and($dropped)->toBe('error_event_resolutions_purge_batch:AUSENTE')
+        ->and(privilegiosActualizadorManipulado($dropped))->toBeTrue()
+        ->and($without)->toBe('ok');
+})->group('RS-07', 'RL-11', 'RF-PD-15');

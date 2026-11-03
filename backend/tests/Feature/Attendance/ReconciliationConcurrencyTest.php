@@ -8,8 +8,10 @@ use App\Modules\Attendance\Application\Port\ScanMetrics;
 use App\Modules\Attendance\Application\Port\WorkDayLedger;
 use App\Modules\Attendance\Application\UseCase\ReconcileDailyTotals;
 use App\Modules\Attendance\Application\UseCase\ReconciliationReport;
+use App\Modules\Attendance\Domain\Event\EmployeeClockedOut;
 use App\Modules\Shared\Infrastructure\Persistence\Row;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Quality\Support\Commands;
@@ -19,6 +21,7 @@ use Tests\Support\Attendance\RacingWorkDayLedger;
 use Tests\Support\Attendance\RecordingScanMetrics;
 use Tests\Support\Concurrency\ParallelRequests;
 use Tests\Support\Database\CommittedDatabase;
+use Tests\Support\Database\SchemaOwner;
 use Tests\Support\Http\Api;
 use Tests\Support\Time\FrozenTime;
 use Tests\Support\Workforce\WorkforceFixtures;
@@ -428,6 +431,129 @@ it('corrige una divergencia real con un fichaje esperando, sin abrazo mortal', f
         ->and(AttendanceFixtures::projectionDivergences())->toBe([]);
 })->group('RN-06', 'RF-PR-02');
 
+it('repone una fila ausente con un fichaje esperando y deja ganar al fichaje', function (): void {
+    // **A-12 del doc 07, en el orden en que la correccion llega primero.**
+    //
+    // Una fila que no existe no se puede tomar con `FOR UPDATE`, y la duda era
+    // si eso abria una ventana: la correccion releyendo «sin fila», el fichaje
+    // confirmando su `UPSERT` en ese instante, y la correccion pisandolo despues
+    // con lo releido. No la abre, porque lo que serializa a los dos no es la
+    // fila sino el candado global de la cadena de `audit_log`: la correccion lo
+    // toma antes de leer y lo retiene hasta el commit, y el fichaje lo pide al
+    // sellar su asiento, que el agregado emite **antes** de
+    // `DailyTotalsRecalculated`. Asi que el `UPSERT` del fichaje solo puede
+    // ocurrir despues de que la correccion confirme, con su tramo ya escrito.
+    $kiosk = racedKiosk(1);
+    $employee = $kiosk['employees'][0];
+
+    FrozenTime::at('2026-03-14 06:00:00');
+
+    expect(racedScan($kiosk['token'], $kiosk['cards'][0], '2026-03-14T06:00:00Z'))->toBe(200);
+
+    // La fila desaparece por fuera de la aplicacion: el rol de la aplicacion no
+    // tiene `DELETE` sobre la proyeccion, y es la unica forma en que una fila
+    // ausente llega a existir.
+    racedDeleteProjectionRow($employee);
+
+    FrozenTime::at('2026-03-14 06:10:00');
+
+    $signals = racedSignalDirectory();
+
+    $results = ParallelRequests::runTasks(2, static function (int $index) use ($kiosk, $signals): mixed {
+        if ($index === 0) {
+            racedWaitFor($signals.'/row-locked');
+
+            return ['status' => racedScan($kiosk['token'], $kiosk['cards'][0], '2026-03-14T06:10:00Z')];
+        }
+
+        return racedReconcileWaitingForTheScan($signals);
+    });
+
+    $scan = $results[0] ?? null;
+    $reconciliation = $results[1] ?? null;
+
+    expect(racedCount($scan, 'status'))->toBe(200)
+        // El fichaje llego a esperar por el candado de la correccion: sin esto la
+        // prueba no habria cruzado nada.
+        ->and(racedCount($reconciliation, 'blocked'))->toBe(1);
+
+    // La correccion fue de verdad —la fila faltaba al releer con el candado—
+    // y dejo su asiento con `before` a nulo.
+    expect(racedCount($reconciliation, 'divergences'))->toBe(1)
+        ->and(racedCount($reconciliation, 'corrected'))->toBe(1)
+        ->and(racedCount($reconciliation, 'failures'))->toBe(0)
+        ->and(racedCount($reconciliation, 'self_resolved'))->toBe(0)
+        ->and(DB::table('audit_log')->where('subject_type', 'daily_totals')->count())->toBe(1);
+
+    // Y la ultima palabra es la del fichaje: la jornada cerrada con sus diez
+    // minutos, no el tramo abierto que la correccion releyo.
+    $row = racedRow($employee);
+
+    expect($row->int('total_minutes'))->toBe(10)
+        ->and($row->int('shift_count'))->toBe(1)
+        ->and($row->bool('has_open_shift'))->toBeFalse()
+        ->and(AttendanceFixtures::projectionDivergences())->toBe([]);
+})->group('RN-06', 'RF-PR-02');
+
+it('no repone una fila ausente que el fichaje en vuelo ya iba a escribir', function (): void {
+    // **A-12 en el otro orden: el fichaje llega primero.** Tiene sellado su
+    // asiento —y con el, el candado de la cadena— pero aun no ha hecho el
+    // `UPSERT`. La inspeccion ve la fila ausente; la correccion se queda
+    // esperando el candado antes de releer, y cuando lo obtiene el fichaje ya
+    // ha confirmado su fila: no hay nada que corregir.
+    $kiosk = racedKiosk(1);
+    $employee = $kiosk['employees'][0];
+
+    FrozenTime::at('2026-03-14 06:00:00');
+
+    expect(racedScan($kiosk['token'], $kiosk['cards'][0], '2026-03-14T06:00:00Z'))->toBe(200);
+
+    racedDeleteProjectionRow($employee);
+
+    FrozenTime::at('2026-03-14 06:10:00');
+
+    $signals = racedSignalDirectory();
+
+    $results = ParallelRequests::runTasks(2, static function (int $index) use ($kiosk, $signals): mixed {
+        if ($index === 0) {
+            return racedScanHeldAfterItsAuditEntry($kiosk['token'], $kiosk['cards'][0], $signals);
+        }
+
+        racedWaitFor($signals.'/audited');
+
+        $report = app(ReconcileDailyTotals::class)->handle(
+            new ReconcileDailyTotalsCommand(racedWorkDate(), racedWorkDate()),
+        );
+
+        return [
+            'divergences' => $report->divergences,
+            'corrected' => $report->corrected,
+            'failures' => $report->failures,
+            'self_resolved' => $report->selfResolved,
+        ];
+    });
+
+    $scan = $results[0] ?? null;
+    $reconciliation = $results[1] ?? null;
+
+    expect(racedCount($scan, 'status'))->toBe(200)
+        // La correccion llego a esperar por el candado que el fichaje retenia.
+        ->and(racedCount($scan, 'blocked'))->toBe(1);
+
+    expect(racedCount($reconciliation, 'self_resolved'))->toBe(1)
+        ->and(racedCount($reconciliation, 'corrected'))->toBe(0)
+        ->and(racedCount($reconciliation, 'divergences'))->toBe(0)
+        ->and(racedCount($reconciliation, 'failures'))->toBe(0)
+        ->and(DB::table('audit_log')->where('subject_type', 'daily_totals')->count())->toBe(0);
+
+    $row = racedRow($employee);
+
+    expect($row->int('total_minutes'))->toBe(10)
+        ->and($row->int('shift_count'))->toBe(1)
+        ->and($row->bool('has_open_shift'))->toBeFalse()
+        ->and(AttendanceFixtures::projectionDivergences())->toBe([]);
+})->group('RN-06', 'RF-PR-02');
+
 it('sobrevive a una rafaga de fichajes con la reconciliacion dando vueltas', function (): void {
     // La forma que tenia el fallo en la prueba de carga: varias personas
     // fichando a la vez y la pasada ejecutandose encima. Aqui no se fuerza
@@ -642,4 +768,60 @@ function reconcileDuringTheBurst(string $signals, int $people): array
         'failures' => $failures,
         'self_resolved' => $selfResolved,
     ];
+}
+
+/**
+ * Borra la fila de `daily_totals` de esa persona con el rol propietario.
+ *
+ * El rol de la aplicacion no tiene `DELETE` sobre la proyeccion: una fila
+ * ausente solo llega a existir por fuera del producto, y asi se simula.
+ */
+function racedDeleteProjectionRow(string $employeeUuid): void
+{
+    $deleted = SchemaOwner::connection()->delete(
+        'DELETE FROM daily_totals WHERE employee_id = ? AND work_date = ?::date',
+        [AttendanceFixtures::employeeIdOf($employeeUuid), racedWorkDate()],
+    );
+
+    expect($deleted)->toBe(1);
+}
+
+/**
+ * La salida de las 06:10, **retenida despues de sellar su asiento** y antes de
+ * su `UPSERT` de `daily_totals`.
+ *
+ * El gancho es un listener de `EmployeeClockedOut` registrado en este hijo, que
+ * el despachador ejecuta detras de `RecordShiftEntryAudit`: en ese punto el
+ * fichaje ya tiene el candado global de la cadena. Deja la señal `audited` y no
+ * sigue hasta ver a otra sesion esperando un candado, que es la correccion.
+ *
+ * @return array{status: int, blocked: int}
+ */
+function racedScanHeldAfterItsAuditEntry(string $token, string $card, string $signals): array
+{
+    $blocked = 0;
+    $held = false;
+
+    Event::listen(EmployeeClockedOut::class, static function () use ($signals, &$blocked, &$held): void {
+        if ($held) {
+            return;
+        }
+
+        $held = true;
+        touch($signals.'/audited');
+
+        for ($attempt = 0; $attempt < 1_500; $attempt++) {
+            if (racedWaitingBackends() > 0) {
+                $blocked = 1;
+
+                return;
+            }
+
+            usleep(2_000);
+        }
+    });
+
+    $status = racedScan($token, $card, '2026-03-14T06:10:00Z');
+
+    return ['status' => $status, 'blocked' => $blocked];
 }

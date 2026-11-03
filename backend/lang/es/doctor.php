@@ -494,6 +494,13 @@ return [
                     .'en la auditoria lleva mas de una hora sin escribirse (el mas antiguo, de las :oldest UTC). Se '
                     .'escribe solo cuando la base vuelve; fichar no depende de esto.',
             ],
+            'recipient_key' => [
+                'ok' => 'El paquete de diagnostico con datos personales se puede generar: sale cifrado para la '
+                    .'clave de soporte del fabricante :key_id, que solo el fabricante puede abrir.',
+                'warning' => 'Esta instalacion no tiene la clave publica de soporte del fabricante, asi que el '
+                    .'paquete de diagnostico CON DATOS PERSONALES no se puede generar (nunca sale sin cifrar). El '
+                    .'paquete anonimizado, que es el habitual, funciona con normalidad; fichar no depende de esto.',
+            ],
         ],
 
         // --- Ficheros generados (ADR-045) -----------------------------------
@@ -613,6 +620,14 @@ return [
 
         'kiosk' => [
             'probe' => $probe,
+            'rejection_floor_budget' => [
+                'ok' => 'Un lote de :batch_size rechazos del quiosco tarda como mucho :worst_case_ms ms con el '
+                    .'suelo de :floor_ms ms, holgado frente al corte de :timeout_ms ms de la tablet.',
+                'warning' => 'IDENTITY_CREDENTIAL_REJECTION_FLOOR_MS vale :floor_ms: un lote de :batch_size rechazos '
+                    .'del quiosco tardaria :worst_case_ms ms, mas del 75 % del corte de :timeout_ms ms de la tablet. '
+                    .'Si lo pasa, la tablet da el envio por fallido y lo reintenta mas tarde: no se pierde ningun '
+                    .'fichaje, pero la cola sin conexion tarda en vaciarse.',
+            ],
             'scan_discard_budget' => [
                 'ok' => 'El cupo de descartes del servidor esta dentro de su techo (:ceiling por quiosco y dia).',
                 'warning' => 'SCAN_DISCARD_DAILY_BUDGET vale :configured, por encima del techo de :ceiling '
@@ -1131,6 +1146,15 @@ return [
                     ."responde y el aviso no desaparece en cinco minutos, mira la comprobacion «scheduler.heartbeat».\n"
                     .'Ver docs/cliente/operacion.md §12.2, «Si la base de datos no responde».',
             ],
+            'recipient_key' => [
+                'warning' => "La clave viene dentro de cada version publicada del producto y no se configura. Si\n"
+                    ."ves este aviso, mira si alguien puso DIAGNOSTICS_RECIPIENT_PUBLIC_KEY en el .env: si es asi,\n"
+                    ."quita esa linea y recrea los contenedores:\n"
+                    ."  docker compose up -d\n"
+                    ."Si no esta en el .env, la imagen no es una version publicada: actualiza con update.sh a la\n"
+                    ."version que te indique soporte. Mientras tanto, envia el paquete anonimizado.\n"
+                    .'Ver docs/cliente/operacion.md §12.3, «Qué hacer si…».',
+            ],
         ],
 
         'files' => [
@@ -1261,6 +1285,11 @@ return [
 
         'kiosk' => [
             'probe' => $probeFix,
+            'rejection_floor_budget' => [
+                'warning' => "Pon IDENTITY_CREDENTIAL_REJECTION_FLOOR_MS a :max_floor_ms o menos en el fichero .env y\n"
+                    ."reinicia la aplicacion (con el lote de serie de 50, el maximo es 60; ver configuracion.md §6.5).\n"
+                    .'Mientras tanto el fichaje sigue funcionando: las tablets reintentan lo que no llegan a enviar.',
+            ],
             'scan_discard_budget' => [
                 'warning' => "Pon SCAN_DISCARD_DAILY_BUDGET a :ceiling o menos en el fichero .env y reinicia la\n"
                     .'aplicacion. Hasta entonces el servidor aplica :ceiling, que es el maximo.',

@@ -6,6 +6,7 @@ use App\Modules\Product\Application\Port\ProbeFailureClassifier;
 use App\Modules\Product\Application\Port\ProductEventPublisher;
 use App\Modules\Product\Application\UseCase\GenerateDiagnosticsBundleHandler;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsActor;
+use App\Modules\Product\Domain\ValueObject\DiagnosticsBundle;
 use App\Modules\Product\Domain\ValueObject\DiagnosticsOptions;
 use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
@@ -13,6 +14,7 @@ use App\Modules\Shared\Domain\Event\DomainEvent;
 use App\Modules\Shared\Domain\ValueObject\ResponsibleAccount;
 use App\Modules\Shared\Domain\ValueObject\ResponsibleReference;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
+use Tests\Support\Product\RecordingDiagnosticsSealer;
 use Tests\Support\Time\FixedClock;
 
 /*
@@ -77,12 +79,15 @@ function diagnosticsDeferralHandler(?string $service, ?Throwable $failure = null
                 return $work();
             }
         },
+        sealer: new RecordingDiagnosticsSealer,
     );
 }
 
 it('consola, anonimizado y base caida: devuelve el paquete con la constancia de asiento pendiente', function (): void {
     $bundle = diagnosticsDeferralHandler(ProbeFailureClassifier::DATABASE)
         ->handle(DiagnosticsOptions::anonymized(), DiagnosticsActor::Console);
+
+    assert($bundle instanceof DiagnosticsBundle);
 
     /** @var array<string, mixed> $audit */
     $audit = $bundle->sections['audit'] ?? [];

@@ -10,6 +10,7 @@ use Spectator\Spectator;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
 use Tests\Support\Identity\ManagementUsers;
+use Tests\Support\Product\DiagnosticsRecipient;
 use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Workforce\WorkforceFixtures;
 
@@ -146,20 +147,28 @@ it('incluye datos personales solo cuando se piden, y lo dice en el manifiesto', 
     WorkforceFixtures::employee($siteId, firstName: 'Anastasio', lastName: 'Sin Actividad');
 
     fichajeReciente($siteId, $conActividad);
+    // Sale cifrado (ADR-020, enmienda del 01-11-2026): la forma del sobre la
+    // valida `DiagnosticsBundleContractTest`; aqui se abre con la privada del
+    // par de la prueba y se mira el contenido.
+    $recipient = DiagnosticsRecipient::install();
 
     $response = Api::as(tokenDeDiagnostico())
         ->post('/api/v1/diagnostics/bundle', ['include_personal_data' => true, 'period_days' => 7])
         ->assertValidRequest()
-        ->assertValidResponse(200);
+        ->assertStatus(200);
 
-    $personal = json_encode($response->json('personal_data'), JSON_THROW_ON_ERROR);
+    $document = $recipient->openedDocument((string) $response->getContent());
+    $personal = json_encode(data_get($document, 'personal_data'), JSON_THROW_ON_ERROR);
 
     expect($response->json('manifest.anonymized'))->toBeFalse()
         ->and($response->json('manifest.sections'))->toContain('personal_data')
-        ->and($response->json('personal_data.period_days'))->toBe(7)
+        ->and($response->json('contents.collections.employees.rows'))->toBe(1)
+        ->and((string) $response->getContent())->not->toContain('Marta')
+        ->and(data_get($document, 'manifest.anonymized'))->toBeFalse()
+        ->and(data_get($document, 'personal_data.period_days'))->toBe(7)
         ->and($personal)->toContain('Marta Lopez Garcia')
         ->and($personal)->not->toContain('Anastasio')
-        ->and($response->json('personal_data.employees.total'))->toBe(1);
+        ->and(data_get($document, 'personal_data.employees.total'))->toBe(1);
 })->group('RF-PD-09', 'RL-19');
 
 it('rechaza un periodo por encima del maximo configurado', function (): void {

@@ -12,13 +12,21 @@ use App\Modules\Product\Domain\ValueObject\DiagnosticsManifest;
  *
  * ## Para que sirve la huella
  *
- * El paquete **no va cifrado a proposito**: el cliente tiene que poder abrirlo y
- * comprobar que no lleva nada que no quiera enviar antes de enviarlo (ADR-020, y
- * la ficha 5.9 exige esa inspeccion manual). La contrapartida es que un fichero
- * en claro se puede alterar o truncar por el camino —un cliente de correo que
- * corta a los 5 MB, un copiar y pegar incompleto—, y soporte se pasaria una hora
- * diagnosticando un paquete a medias. La huella lo detecta en un segundo:
+ * El paquete **anonimizado no va cifrado a proposito**: el cliente tiene que
+ * poder abrirlo y comprobar que no lleva nada que no quiera enviar antes de
+ * enviarlo (ADR-020, y la ficha 5.9 exige esa inspeccion manual). La
+ * contrapartida es que un fichero en claro se puede alterar o truncar por el
+ * camino —un cliente de correo que corta a los 5 MB, un copiar y pegar
+ * incompleto—, y soporte se pasaria una hora diagnosticando un paquete a medias.
+ * La huella lo detecta en un segundo:
  * `php artisan product:diagnostics --verify=fichero.json`.
+ *
+ * El que lleva datos personales **sale cifrado** para la clave de soporte
+ * (enmienda de ADR-020 del 01-11-2026). Su huella del texto en claro va en la
+ * cabecera del sobre y en sus asientos, y esta misma forma canonica de la
+ * cabecera son los **datos asociados** del cifrado
+ * ({@see DiagnosticsEnvelope::associatedData()}): cambiar un campo de la
+ * cabecera hace que no abra.
  *
  * ## Por que canonico y no `json_encode` a secas
  *

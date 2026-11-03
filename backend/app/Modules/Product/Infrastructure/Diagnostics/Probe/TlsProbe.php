@@ -76,7 +76,7 @@ final readonly class TlsProbe implements DoctorProbe
         $port = is_int($parts['port'] ?? null) ? $parts['port'] : 443;
 
         if ($host === null) {
-            return [DoctorFinding::warning('tls.certificate', 'no_url', details: ['app_url' => 'unparseable'])];
+            return [DoctorFinding::warning('tls.certificate', 'no_url', details: ['app_url_state' => 'unparseable'])];
         }
 
         if ($scheme !== 'https') {

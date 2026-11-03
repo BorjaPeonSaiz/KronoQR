@@ -13,7 +13,9 @@ use App\Modules\Product\Application\Port\DataExportGuide;
 use App\Modules\Product\Application\Port\DataExportQueue;
 use App\Modules\Product\Application\Port\DataExportRepository;
 use App\Modules\Product\Application\Port\DataExportSource;
+use App\Modules\Product\Application\Port\DiagnosticsBundleSealer;
 use App\Modules\Product\Application\Port\DiagnosticsBundleWriter;
+use App\Modules\Product\Application\Port\DoctorFindingFilter;
 use App\Modules\Product\Application\Port\DoctorTranslator;
 use App\Modules\Product\Application\Port\ErrorEventRepository;
 use App\Modules\Product\Application\Port\ErrorMetrics;
@@ -110,6 +112,7 @@ use App\Modules\Product\Infrastructure\Console\ProductTelemetryCommand;
 use App\Modules\Product\Infrastructure\Console\SupportGrantCommand;
 use App\Modules\Product\Infrastructure\Console\SupportGrantsPruneReasonsCommand;
 use App\Modules\Product\Infrastructure\Console\SupportRevokeCommand;
+use App\Modules\Product\Infrastructure\Diagnostics\BundleDoctorFindingFilter;
 use App\Modules\Product\Infrastructure\Diagnostics\Collector\AuditCollector;
 use App\Modules\Product\Infrastructure\Diagnostics\Collector\ConfigurationCollector;
 use App\Modules\Product\Infrastructure\Diagnostics\Collector\DoctorCollector;
@@ -122,6 +125,7 @@ use App\Modules\Product\Infrastructure\Diagnostics\Collector\PersonalDataCollect
 use App\Modules\Product\Infrastructure\Diagnostics\Collector\ServicesCollector;
 use App\Modules\Product\Infrastructure\Diagnostics\Collector\UpdatesCollector;
 use App\Modules\Product\Infrastructure\Diagnostics\ConnectionProbeFailureClassifier;
+use App\Modules\Product\Infrastructure\Diagnostics\DiagnosticsLocations;
 use App\Modules\Product\Infrastructure\Diagnostics\FilePendingDiagnosticsAudits;
 use App\Modules\Product\Infrastructure\Diagnostics\HorizonQueueSupervisors;
 use App\Modules\Product\Infrastructure\Diagnostics\JsonDiagnosticsBundleWriter;
@@ -132,6 +136,7 @@ use App\Modules\Product\Infrastructure\Diagnostics\Probe\ApplicationProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\BackupOffsiteProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\BackupProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\DatabaseProbe;
+use App\Modules\Product\Infrastructure\Diagnostics\Probe\DiagnosticsRecipientKeyProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\DiskProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\EdgeNetworksProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\ErrorHistoryProbe;
@@ -143,6 +148,7 @@ use App\Modules\Product\Infrastructure\Diagnostics\Probe\MailProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\PendingDiagnosticsAuditProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\PermissionsProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\QueueProbe;
+use App\Modules\Product\Infrastructure\Diagnostics\Probe\RejectionFloorBudgetProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\ScanDiscardBudgetProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\ScheduledOffboardingsProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\Probe\SchedulerProbe;
@@ -151,6 +157,7 @@ use App\Modules\Product\Infrastructure\Diagnostics\Probe\TlsProbe;
 use App\Modules\Product\Infrastructure\Diagnostics\QueueSupervisors;
 use App\Modules\Product\Infrastructure\Diagnostics\RuntimeService;
 use App\Modules\Product\Infrastructure\Diagnostics\ServiceInspector;
+use App\Modules\Product\Infrastructure\Diagnostics\SodiumDiagnosticsBundleSealer;
 use App\Modules\Product\Infrastructure\Diagnostics\TextfileMetricsReader;
 use App\Modules\Product\Infrastructure\Export\TranslatedDataExportGuide;
 use App\Modules\Product\Infrastructure\Export\ZipDataExportArchiveWriter;
@@ -2055,6 +2062,12 @@ final class ProductServiceProvider extends ServiceProvider
                         $app->make(PendingDiagnosticsAudits::class),
                         $app->make(Clock::class),
                     ),
+                    /*
+                     * Si el paquete con datos personales se puede cifrar
+                     * (ADR-020, enmienda del 01-11-2026). Aviso: el anonimizado
+                     * y el fichaje no dependen de la clave.
+                     */
+                    new DiagnosticsRecipientKeyProbe($app->make(DiagnosticsBundleSealer::class)),
                     new ApplicationProbe(
                         timezone: Config::string('app.timezone'),
                         debug: Config::boolean('app.debug'),
@@ -2110,6 +2123,14 @@ final class ProductServiceProvider extends ServiceProvider
                         Config::get('attendance.scan_discard.daily_budget'),
                         Config::integer('attendance.scan_discard.budget_ceiling', 20),
                     ),
+                    /*
+                     * El suelo de los rechazos del fichaje frente al corte de
+                     * 8 s del quiosco (RS-03, A-13). Aviso: el quiosco reintenta.
+                     */
+                    new RejectionFloorBudgetProbe(
+                        Config::integer('security.rejection_floor_ms', 25),
+                        Config::integer('kiosk.batch_max_size', 50),
+                    ),
                     $app->make(LicenseProbe::class),
                 ],
                 translator: $app->make(DoctorTranslator::class),
@@ -2125,6 +2146,29 @@ final class ProductServiceProvider extends ServiceProvider
             DiagnosticsBundleWriter::class,
             static fn (): JsonDiagnosticsBundleWriter => new JsonDiagnosticsBundleWriter(
                 Config::string('product.diagnostics_storage_path'),
+            ),
+        );
+
+        // El sobre del paquete con datos personales, para la clave de soporte
+        // del fabricante, que no es la de licencias (ADR-020, enmienda del
+        // 01-11-2026). Lectura tolerante: sin clave, no hay sobre, y el
+        // anonimizado sigue funcionando.
+        $this->app->bind(
+            DiagnosticsBundleSealer::class,
+            static fn (): SodiumDiagnosticsBundleSealer => new SodiumDiagnosticsBundleSealer(
+                self::text(Config::get('product.diagnostics_recipient_public_key')) ?? '',
+            ),
+        );
+
+        // Lo que el informe de `doctor` puede llevar dentro del paquete: sin
+        // rutas del servidor ni el nombre de `APP_URL` (ADR-020, enmienda del
+        // 01-11-2026). Solo lo usa `DoctorCollector`; el `product:doctor` local
+        // no lo pasa.
+        $this->app->bind(
+            DoctorFindingFilter::class,
+            static fn (): BundleDoctorFindingFilter => new BundleDoctorFindingFilter(
+                DiagnosticsLocations::fromConfiguration(),
+                array_map(strval(...), array_keys(GeneratedFileAreas::configuredRoots())),
             ),
         );
 
@@ -2157,6 +2201,7 @@ final class ProductServiceProvider extends ServiceProvider
                     new ConfigurationCollector(
                         settings: $app->make(GetSettingsHandler::class),
                         environment: $_ENV,
+                        locations: DiagnosticsLocations::fromConfiguration(),
                     ),
                     $app->make(ServicesCollector::class),
                     $app->make(DoctorCollector::class),
@@ -2167,7 +2212,7 @@ final class ProductServiceProvider extends ServiceProvider
                         $app->make(Clock::class),
                     ),
                     $app->make(MetricsCollector::class),
-                    new UpdatesCollector(Config::string('backup.path')),
+                    new UpdatesCollector(Config::string('backup.path'), DiagnosticsLocations::fromConfiguration()),
                     $app->make(AuditCollector::class),
                     new PersonalDataCollector(DB::connection(), $app->make(Clock::class)),
                 ],
@@ -2178,6 +2223,7 @@ final class ProductServiceProvider extends ServiceProvider
                 failures: $app->make(ProbeFailureClassifier::class),
                 accounts: $app->make(ResponsibleAccounts::class),
                 ledger: $app->make(SerializedLedgerWrite::class),
+                sealer: $app->make(DiagnosticsBundleSealer::class),
             ),
         );
     }

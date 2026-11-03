@@ -117,10 +117,38 @@ it('diagnostics NO lee la plantilla', function (): void {
  * Actua como `admin` ante las policies —es lo unico que le permite llegar a las
  * pantallas del registro horario, porque el `auditor` de este producto esta
  * excluido de ellas a proposito— y lo que lo mantiene en solo lectura son sus
- * TRES AMBITOS: `attendance:read`, `employees:read` y `audit:read`, que no abren
- * ni una sola ruta de escritura en toda la API. Eso ultimo no se confia: lo
- * recorre `SupportScopeRoutesTest` sobre las rutas registradas.
+ * AMBITOS DE LECTURA: `attendance:read` y `employees:read`, que no abren ni una
+ * sola ruta de escritura en toda la API. Eso ultimo no se confia: lo recorre
+ * `SupportScopeRoutesTest` sobre las rutas registradas. Sin `audit:read` desde
+ * la 2.3.0 (enmienda de ADR-020, 33.3): leer `audit_log` desde soporte exige
+ * ADR propio.
  */
+it('el token de una concesion read_only lleva exactamente sus tres ambitos, sin audit:read', function (): void {
+    // Por la puerta de verdad, `POST /support/grants`, y mirando lo que Sanctum
+    // guarda: es lo que comprueba el middleware en cada peticion, no el enum.
+    $respuesta = Api::as(ManagementUsers::tokenFor(ManagementUsers::withRole(UserRole::ADMIN)))
+        ->post('/api/v1/support/grants', [
+            'reason' => 'Incidencia #33: a una persona le salen ocho horas',
+            'scope' => 'read_only',
+            'hours' => 24,
+        ])
+        ->assertCreated();
+
+    $token = $respuesta->json('data.token');
+    $id = is_string($token) ? (int) strstr($token, '|', true) : 0;
+
+    $guardados = DB::table('personal_access_tokens')->where('id', $id)->value('abilities');
+
+    /** @var list<string> $ambitos */
+    $ambitos = json_decode(is_string($guardados) ? $guardados : 'null', true, 512, JSON_THROW_ON_ERROR);
+
+    expect($ambitos)->toBe([
+        TokenAbility::DIAGNOSTICS_ALL->value,
+        TokenAbility::ATTENDANCE_READ->value,
+        TokenAbility::EMPLOYEES_READ->value,
+    ])->and($ambitos)->not->toContain(TokenAbility::AUDIT_READ->value);
+})->group('RF-PD-11', 'RL-19');
+
 it('read_only SI lee el registro de jornada de una persona', function (): void {
     // Es para lo que existe: la incidencia que el paquete anonimizado no
     // resuelve, «a esta persona le salen ocho horas y deberian ser nueve».

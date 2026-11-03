@@ -1915,12 +1915,13 @@ quien use la API.** Nada de esto cambia el registro ni impide fichar:
   omisión (`page`, `per_page` hasta 100, y `meta.total`); el recuento de
   `summary` sigue siendo el de toda la plantilla. Y
   `GET /api/v1/employees/{uuid}/workdays` devuelve 31 jornadas por página.
-- **La exportación íntegra pasa a la versión 7 del formato**:
+- **La exportación íntegra pasa a la versión 8 del formato**:
   `report_exports.csv` gana la columna `cancelled_at`; `discarded_scan_reports.csv`
-  gana `source`, `failed_attempts` y `first_failed_at`, y aparece
+  gana `source`, `failed_attempts` y `first_failed_at`, y aparecen
   `scan_processing_failures.csv`, los intentos fallidos de procesar un fichaje de
   los últimos 30 días (datos técnicos seudonimizados, sin la huella de la
-  tarjeta). Si comparas exportaciones de antes y de después, esas son las
+  tarjeta), y `error_event_resolutions.csv`, cada vez que alguien marcó como
+  resuelto un fallo del histórico de errores, también antes de que se reabriera. Si comparas exportaciones de antes y de después, esas son las
   diferencias (`manifest.json` lo dice).
 
 **Al actualizar a la 2.3.0: las exportaciones grandes se generan en segundo
@@ -2304,9 +2305,11 @@ de tu contrato. **Soporte no entra en tu servidor** (ADR-020).
   paquete olvidado —quizá con datos personales (§12.3)— se quede en el
   servidor para siempre.
 
-Es **un único fichero JSON legible**, `kronoqr-diagnostics-<versión>-<fecha>.json`,
-sin cifrar a propósito: **ábrelo antes de enviarlo** y comprueba que no lleva
-nada que no quieras enviar. Su cabecera (`manifest`) lleva la huella del documento
+El paquete de serie, el **anonimizado**, es **un único fichero JSON legible**,
+`kronoqr-diagnostics-<versión>-<fecha>.json`, sin cifrar a propósito: **ábrelo
+antes de enviarlo** y comprueba que no lleva nada que no quieras enviar. (El que
+lleva datos personales sale cifrado y se llama `….sealed.json`: §12.3.)
+Su cabecera (`manifest`) lleva la huella del documento
 entero, cabecera incluida, y con ella se comprueba que no se alteró ni se cortó por el
 camino. Soporte lo comprueba al recibirlo; para comprobarlo tú antes de
 enviarlo, desde el directorio de la instalación y con la ruta que imprimió el
@@ -2325,6 +2328,19 @@ histórico de errores agrupado (a partir de la versión que lo incorpore),
 contadores agregados, el informe de la última actualización (solo las líneas
 del formato del informe, y nunca su `.detalle.log`) y **solo recuentos** del
 registro de auditoría.
+
+**Sin rutas de tu servidor ni su nombre (desde la 2.3.0).** Ninguna carpeta
+de tu servidor viaja con su ruta real. Donde el informe de `doctor` o el de
+la última actualización hablarían de `/srv/mi-hotel/copias`, el paquete dice
+`<backup_path>`; una subcarpeta sale como `<backup_path>/daily`, y una ruta
+que no es de ninguna ubicación del producto, como `[path]`. El nombre público
+de tu instalación (el de `APP_URL`) sale como `[app_host]`. Lo que soporte
+necesita saber de cada ubicación va en `configuration.locations`: si es la de
+serie (`customized`), si existe (`exists`) y si se puede escribir
+(`writable`), nunca dónde está. Las variables del `.env` cuyo valor es una ruta
+(`BRANDING_LOGO_ROOT`, `PRODUCT_DIAGNOSTICS_PATH`…) no viajan. **En tu servidor
+no cambia nada**: `product:doctor` y `./doctor.sh` te siguen enseñando la ruta
+real, que es la que necesitas para arreglar lo que falle.
 
 **Qué lleva del histórico de errores.** Cada error aparece con su código, su
 origen, su clase, cuántas veces ha ocurrido y cuándo fue la primera y la
@@ -2463,10 +2479,79 @@ Al enviarlo comunicas datos personales a un tercero: mira
 [`obligaciones-legales.md`](obligaciones-legales.md) §8 antes, y ten firmado
 el contrato de encargo.
 
-**El producto no cifra este fichero**, para que puedas abrirlo y revisar qué
-sale antes de enviarlo. Envíalo solo por el canal cifrado que fije tu contrato
-de soporte y de encargo, nunca por correo sin cifrar, y bórralo del servidor y
-de tu equipo en cuanto lo hayas enviado.
+**Sale cifrado para el fabricante (desde la 2.3.0).** El paquete con datos
+personales ya no es un JSON legible: es un **sobre cifrado** con la clave de
+soporte del fabricante, que **solo puede abrir el fabricante**. Ni tú ni nadie
+con acceso a tu servidor puede leer su contenido; tampoco quien lo intercepte
+por el camino. Se reconoce por el nombre,
+`kronoqr-diagnostics-<versión>-<fecha>.sealed.json`, y al generarlo por consola
+el resultado lo dice así:
+
+```text
+Paquete de diagnostico CON DATOS PERSONALES generado y cifrado.
+
+  Fichero:  /var/www/html/storage/app/diagnostics/kronoqr-diagnostics-2.3.0-20261101T101500Z.sealed.json
+  Cifrado:  para la clave de soporte del fabricante 3f9c1a7e5b2d4c80
+  ...
+```
+
+**Lo que sí puedes revisar es su cabecera**, que va en claro al principio del
+fichero (`less <fichero>`): qué secciones lleva (`manifest.sections`) y, de
+cada colección de datos personales, **cuántas filas y qué columnas**
+(`contents.collections`), sin ningún valor. Si la cabecera dice algo que no
+quieres enviar —más filas de las que esperabas, una colección que no hace
+falta—, no lo envíes y genera otro con un periodo más corto. La cabecera va
+atada al contenido: si alguien la cambia, el fabricante no puede abrir el
+sobre.
+
+**Comprobar que es el que generaste:**
+
+```bash
+docker compose exec app php artisan product:diagnostics --verify=<ruta>
+```
+
+Te enseña para qué clave va, la huella declarada y la del fichero, y las
+compara con el asiento `diagnostics.bundle_generated` de tu auditoría. Debe
+terminar con `y la huella del fichero coincide con la del asiento` y código
+`0`. El contenido no lo puede comprobar: solo se abre con la clave privada del
+fabricante, y la orden lo dice.
+
+Aunque vaya cifrado, envíalo por el canal que fije tu contrato de soporte y de
+encargo, y bórralo del servidor y de tu equipo en cuanto lo hayas enviado: el
+fabricante sigue siendo encargado del tratamiento para esa incidencia.
+
+#### Qué hacer si…
+
+- **El panel dice «Esta instalación no puede generar el paquete con datos
+  personales», o la consola termina con código `1` y el mensaje «No se ha generado el paquete CON DATOS
+  PERSONALES: esta instalacion no tiene la clave publica de soporte…».** Tu
+  instalación no tiene la clave con la que se cifra, y el producto no envía
+  nunca ese paquete sin cifrar. **No se ha recogido nada ni ha quedado ningún
+  asiento.** Genera el anonimizado, que es el que soporte pide casi siempre:
+
+  ```bash
+  docker compose exec app php artisan product:diagnostics
+  ```
+
+  Después mira la comprobación `diagnostics.recipient_key` de
+  `docker compose exec app php artisan product:doctor`: su aviso dice qué
+  hacer. La clave viene dentro de cada versión publicada del producto y no se
+  configura. Si alguien añadió `DIAGNOSTICS_RECIPIENT_PUBLIC_KEY` al `.env`,
+  quita esa línea y recrea los contenedores (`docker compose up -d`). Si no
+  está en el `.env`, la imagen no es una versión publicada: actualiza con
+  `update.sh` a la versión que te indique soporte. **Fichar, el registro y el
+  paquete anonimizado no dependen de esta clave.**
+- **`--verify` termina con código `2` y «LA HUELLA DEL FICHERO NO COINCIDE con
+  la del asiento».** El fichero no es el que se generó o le falta parte (una
+  copia cortada, un adjunto recortado por el correo). No lo envíes: genera
+  otro.
+- **`--verify` dice «no hay ninguno con esa huella en la auditoria de esta
+  instalacion».** El paquete no se generó en esta instalación, o se generó en
+  otra restaurada después. Pregunta a quien te lo pasó de dónde sale.
+- **Soporte te dice que no puede abrirlo.** Suele ser una copia incompleta o
+  modificada: comprueba con `--verify` el fichero que enviaste y, si da `0`,
+  dile a soporte el identificador de clave que enseña (`Cifrado: para la clave
+  de soporte del fabricante …`).
 
 ### 12.4 Conceder a soporte un acceso temporal
 
@@ -2493,7 +2578,7 @@ con motivo, alcance y duración, y lo puedes revocar en cualquier momento.
 | Alcance | Soporte puede | No puede |
 | --- | --- | --- |
 | `diagnostics` (por defecto) | Generar el paquete **anonimizado** y consultar errores | Ver a nadie |
-| `read_only` | Además, **leer la plantilla y el registro horario de una persona** (su ficha y sus jornadas), **cada lectura auditada** como divulgación de datos personales, y la auditoría | Cambiar nada. **Ni el registro de ausencias** —dato de salud: el tipo «Baja médica» y su nota—, **ni la presencia en vivo, ni el resumen de cumplimiento por persona, ni el catálogo de departamentos**: no hacen falta para diagnosticar un cálculo de horas, y ninguno lo alcanza ningún acceso de soporte (403 con cualquier alcance; ausencias cerradas en el cierre de la Fase 3, presencia y cumplimiento el 24-09-2026 por decisión de producto del fabricante, igual para todas las instalaciones) |
+| `read_only` | Además, **leer la plantilla y el registro horario de una persona** (su ficha y sus jornadas), **cada lectura auditada** como divulgación de datos personales | Cambiar nada. **Ni el registro de auditoría**: ningún acceso de soporte lo lee, y concederlo exigiría una decisión de arquitectura nueva (desde la 2.3.0). **Ni el registro de ausencias** —dato de salud: el tipo «Baja médica» y su nota—, **ni la presencia en vivo, ni el resumen de cumplimiento por persona, ni el catálogo de departamentos**: no hacen falta para diagnosticar un cálculo de horas, y ninguno lo alcanza ningún acceso de soporte (403 con cualquier alcance; ausencias cerradas en el cierre de la Fase 3, presencia y cumplimiento el 24-09-2026 por decisión de producto del fabricante, igual para todas las instalaciones) |
 | `configuration` | Además, **cambiar** los ajustes operativos y emparejar o desvincular quioscos | Ver jornadas ni plantilla, ni tocar el perfil de cumplimiento (umbrales legales y años de conservación son tuyos), **ni activar o desactivar el fichaje de pausa** (`ATTENDANCE_BREAK_CLOCKING`: decide qué se considera incidencia, igual que el perfil; si lo intenta obtiene un 403), **ni tocar las dos claves de detección de patrones** (`ATTENDANCE_PATTERN_WINDOW_SECONDS` y `ATTENDANCE_PATTERN_MIN_REPEATS`: con `0` en la primera se apaga la detección de coincidencias de RF-PR-06, la mitigación que compensa no tener biometría, y esa decisión es del hotel; también 403), **ni activar o desactivar el resumen semanal por correo** (`WEEKLY_SUMMARY_EMAIL`: decide que cada lunes salgan por correo nombres y horas de tu plantilla; también 403), **ni declarar ni cambiar las horas de hojas anteriores al sistema** (`BASELINE_MANUAL_HOURS_PER_MONTH`: es el denominador declarado del objetivo comercial del cuadro de impacto y describe tu proceso anterior a la instalación, que solo tú conoces; también 403), **ni cambiar la longitud del PIN** (`IDENTITY_PIN_LENGTH`: decide cuánta fuerza tiene la llave del registro de tu plantilla; también 403), **ni ver ni cambiar el código de servicio del quiosco**: lo recibe vacío y marcado como redactado, y si intenta cambiarlo obtiene un 403 (§16.5) |
 
 Con ningún alcance puede activar licencias, conceder o revocar accesos,
@@ -3339,7 +3424,7 @@ ella. Si el fichero no está, la herramienta se limita a aplicar el presupuesto
 | **Fichajes sueltos que fallan con un error de servidor**, mientras el resto va bien | Una transacción se quedó colgada y los demás esperaban por ella; los topes de la base de datos (§17.4) la cortan | Nada urgente: el quiosco **encola y reenvía**, y nadie se queda sin fichar. Si se repite, sigue el `trace_id` de una de esas peticiones en el registro técnico (§10.3) |
 | **Respuestas `429` sobre fichajes válidos** | El límite del borde o el de por dispositivo están frenando | Comprueba que los quioscos caen dentro de `KIOSK_VLAN_CIDR` ([`instalacion.md`](instalacion.md) §6). Es la causa en la inmensa mayoría de los casos |
 | **Un rechazo tarda claramente más o menos que otro** | Es un fallo del producto, no de tu servidor | Abre incidencia con el fabricante y adjunta `summary.json`: un rechazo que se distingue por el tiempo permitiría averiguar desde fuera qué tarjetas existen |
-| **`reject_out_of_order` sale con una separación grande** (veredicto `RS-03-RN-18`) | **Es información, no un veredicto que bloquee.** Esa clave mide cuánto se aparta un fichaje rechazado por llegar fuera de orden de los tres rechazos de tarjeta —firma, tarjeta desconocida y tarjeta revocada—, con la diferencia firmada: positiva si el primero tarda más | Nada. Guárdalo con el acta. Esa diferencia está aceptada a propósito: un fichaje fuera de orden no dice nada sobre qué tarjetas existen, que es lo que el tiempo constante protege. La cifra está ahí para poder revisar esa decisión con datos el día que haga falta |
+| **`reject_out_of_order` sale con una separación grande** (veredicto `RS-03-RN-18`) | Un fichaje rechazado por llegar fuera de orden tarda distinto que los tres rechazos de tarjeta —firma, tarjeta desconocida y tarjeta revocada—. Desde la 2.3.0 todos esperan el mismo suelo de tiempo, y lo que se juzga con el tope de RS-03 es la separación de los **mínimos**: si un rechazo fuera de orden puede salir más rápido o más lento que el suelo común, es **un fallo del producto**, como la fila anterior. La separación de las **medianas** sale en el resumen solo como información: con carga, comprobar el orden de la jornada lleva más trabajo que rechazar una tarjeta (unos 80 ms más en la CI del fabricante) y el suelo no lo iguala; es un riesgo aceptado del modelo de amenazas, no un fallo Si sale «no fiable», el servidor de la prueba iba demasiado lento para juzgarlo | Si es rojo, abre incidencia con el fabricante y adjunta `summary.json`. Si es «no fiable», repite la pasada con el servidor menos cargado |
 
 **Subir `PHP_FPM_MAX_CHILDREN` no mueve la cifra si la CPU está saturada**, y
 conviene verlo con números antes de gastar una tarde en ello. Estas medidas son

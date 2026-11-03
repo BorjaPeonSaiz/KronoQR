@@ -429,7 +429,7 @@ El aviso de caducidad aparece **30 días antes**, con la fecha y con lo que se d
 
 ### 10.6 Soporte y diagnóstico
 
-Cuando hay una incidencia, el administrador del hotel genera con un clic un **paquete de diagnóstico**: versión, configuración sin contraseñas, estado de los servicios, últimos errores, salud de las tablets y comprobaciones internas. **Sin nombres, documentos ni identificadores de empleado, sin registros de jornada, y con el texto de los errores reducido a palabras técnicas.** Es un fichero legible que el hotel puede abrir antes de enviarlo. Se envía al soporte y este lo analiza.
+Cuando hay una incidencia, el administrador del hotel genera con un clic un **paquete de diagnóstico**: versión, configuración sin contraseñas, estado de los servicios, últimos errores, salud de las tablets y comprobaciones internas. **Sin nombres, documentos ni identificadores de empleado, sin registros de jornada, y con el texto de los errores reducido a palabras técnicas.** Es un fichero legible que el hotel puede abrir antes de enviarlo, y no lleva rutas ni el nombre del servidor. Se envía al soporte y este lo analiza. Si soporte necesita datos personales para un caso concreto, el hotel puede generar, a decisión suya y dejando constancia, un paquete que sí los incluye: ese sale **cifrado** para el soporte del fabricante, el hotel ve qué secciones lleva pero no puede abrirlo, y si se pierde o se reenvía por error nadie más puede leerlo.
 
 Hay además un comando de **revisión de salud** que valida base de datos, colas, correo, certificados, permisos y espacio en disco, y devuelve un informe con lo que hay que corregir.
 
