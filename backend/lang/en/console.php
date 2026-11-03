@@ -377,6 +377,7 @@ return [
 
     'product_export_all' => [
         'unidentified' => 'unidentified',
+        'confirm' => 'Generate the full export, with ALL the personal data of the installation, with this signature?',
         'in_progress' => [
             'There is already a full export in progress (:uuid).',
             'Wait for it to finish and run this again, or look at them with:',
@@ -535,6 +536,7 @@ return [
             'reason_required' => 'A revocation must state its reason: --reason="lost".',
             'revoked' => 'Credential revoked: :uuid',
             'reason' => 'Reason: :reason',
+            'confirm' => 'Revoke card :uuid with this signature? From then on it cannot be used to clock.',
         ],
         'deliver' => [
             'delivered' => 'Delivery recorded: :uuid',
@@ -670,7 +672,7 @@ return [
     ],
 
     'legal_export' => [
-        'example' => 'Example: php artisan compliance:legal-export --from=2026-01-01 --to=2026-01-31',
+        'example' => 'Example: php artisan compliance:legal-export --from=2026-01-01 --to=2026-01-31 --responsible=<e-mail>',
         'generated' => 'Legal export generated.',
         'columns' => ['Item', 'Value'],
         'rows' => [
@@ -680,8 +682,10 @@ return [
             'corrections' => 'Corrections',
             'employees' => 'Employees',
             'file' => 'File',
+            'signed_by' => 'Signed by',
         ],
         'whole_staff' => 'whole staff',
+        'confirm' => 'Generate the legal export from :from to :to (:scope) with this signature?',
     ],
 
     'apply_scheduled_offboardings' => [

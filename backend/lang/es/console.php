@@ -377,6 +377,7 @@ return [
 
     'product_export_all' => [
         'unidentified' => 'sin identificar',
+        'confirm' => '¿Generar la exportación íntegra, con TODOS los datos personales de la instalación, con esta firma?',
         'in_progress' => [
             'Ya hay una exportacion integra en curso (:uuid).',
             'Espera a que termine y vuelve a ejecutarlo, o miralas con:',
@@ -535,6 +536,7 @@ return [
             'reason_required' => 'Una revocacion tiene que declarar su motivo: --reason="perdida".',
             'revoked' => 'Credencial revocada: :uuid',
             'reason' => 'Motivo: :reason',
+            'confirm' => '¿Revocar la tarjeta :uuid con esta firma? Desde ese momento no sirve para fichar.',
         ],
         'deliver' => [
             'delivered' => 'Entrega registrada: :uuid',
@@ -670,7 +672,7 @@ return [
     ],
 
     'legal_export' => [
-        'example' => 'Ejemplo: php artisan compliance:legal-export --from=2026-01-01 --to=2026-01-31',
+        'example' => 'Ejemplo: php artisan compliance:legal-export --from=2026-01-01 --to=2026-01-31 --responsible=<correo>',
         'generated' => 'Exportacion legal generada.',
         'columns' => ['Concepto', 'Valor'],
         'rows' => [
@@ -680,8 +682,10 @@ return [
             'corrections' => 'Correcciones',
             'employees' => 'Trabajadores',
             'file' => 'Fichero',
+            'signed_by' => 'Firmada por',
         ],
         'whole_staff' => 'plantilla completa',
+        'confirm' => '¿Generar la exportación legal del :from al :to (:scope) con esta firma?',
     ],
 
     'apply_scheduled_offboardings' => [

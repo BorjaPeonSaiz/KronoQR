@@ -4,16 +4,20 @@ declare(strict_types=1);
 
 namespace Tests\Support\Product;
 
+use App\Modules\Product\Application\Command\RequestDataExportCommand;
 use App\Modules\Product\Application\Port\DataExportArchiveWriter;
 use App\Modules\Product\Application\Port\DataExportRepository;
 use App\Modules\Product\Domain\Model\DataExport;
+use App\Modules\Product\Domain\ValueObject\DataExportOrigin;
 use App\Modules\Product\Infrastructure\Export\ZipDataExportArchiveWriter;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Domain\ValueObject\UserRole;
 use DateTimeImmutable;
 use DateTimeInterface;
 use DateTimeZone;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Tests\Support\Identity\ManagementUsers;
 
 /**
  * Exportaciones integras para las pruebas (**RF-PD-14**, RL-20, tarea 5.10).
@@ -165,6 +169,20 @@ final class DataExports
         ]);
 
         return self::find($uuid);
+    }
+
+    /**
+     * La peticion de `product:export-all`, firmada por una cuenta `admin`
+     * nueva, como la exige el caso de uso desde la 2.3.0 (doc 01 §7.2,
+     * «Firmas por consola»). Para las pruebas que llaman al caso de uso y no
+     * miran la firma.
+     */
+    public static function consoleRequest(): RequestDataExportCommand
+    {
+        return new RequestDataExportCommand(
+            DataExportOrigin::Console,
+            ManagementUsers::withRole(UserRole::ADMIN)->id,
+        );
     }
 
     public static function find(string $uuid): DataExport

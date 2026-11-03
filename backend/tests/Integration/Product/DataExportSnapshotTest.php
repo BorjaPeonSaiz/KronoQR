@@ -2,13 +2,11 @@
 
 declare(strict_types=1);
 
-use App\Modules\Product\Application\Command\RequestDataExportCommand;
 use App\Modules\Product\Application\Port\DataExportArchiveWriter;
 use App\Modules\Product\Application\UseCase\GenerateDataExportHandler;
 use App\Modules\Product\Application\UseCase\RequestDataExportHandler;
 use App\Modules\Product\Domain\ValueObject\DataExportArchive;
 use App\Modules\Product\Domain\ValueObject\DataExportFile;
-use App\Modules\Product\Domain\ValueObject\DataExportOrigin;
 use App\Modules\Product\Domain\ValueObject\ExportedDataset;
 use App\Modules\Product\Infrastructure\Export\ZipDataExportArchiveWriter;
 use Illuminate\Support\Facades\DB;
@@ -195,7 +193,7 @@ it('no incluye nada escrito por otra conexion mientras se estaba generando', fun
     );
 
     $requested = app(RequestDataExportHandler::class)->handle(
-        new RequestDataExportCommand(DataExportOrigin::Console, null),
+        DataExports::consoleRequest(),
     );
 
     $export = app(GenerateDataExportHandler::class)->handle($requested->uuid);

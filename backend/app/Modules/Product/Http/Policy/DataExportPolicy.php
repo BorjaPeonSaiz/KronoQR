@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Product\Http\Policy;
 
+use App\Modules\Product\Application\Support\DataExportSigners;
 use App\Modules\Shared\Application\Port\ManagementActor;
-use App\Modules\Shared\Domain\ValueObject\UserRole;
 
 /**
  * Quien puede llevarse **todos** los datos de la instalacion (**RF-PD-14**,
@@ -77,6 +77,8 @@ final class DataExportPolicy
             return false;
         }
 
-        return $actor->actsAs(UserRole::ADMIN);
+        // La misma lista que firma `product:export-all` en la consola: la
+        // consola no es la via por la que alguien hace lo que el panel le niega.
+        return $actor->actsAs(...DataExportSigners::ROLES);
     }
 }

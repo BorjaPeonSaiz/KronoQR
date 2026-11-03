@@ -25,7 +25,11 @@ final readonly class RequestDataExportCommand
 {
     public function __construct(
         public DataExportOrigin $requestedVia,
-        /** Nulo desde la consola: ahi no hay sesion que atribuir. */
+        /**
+         * Quien la pide y firma sus asientos: la sesion del panel o, desde la
+         * consola, la cuenta `admin` de `--responsible`, obligatoria (doc 01
+         * §7.2). Nulo solo cuando no hay persona: por consola se rechaza.
+         */
         public ?int $requestedByUserId,
     ) {}
 }

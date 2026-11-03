@@ -5,15 +5,19 @@ declare(strict_types=1);
 namespace App\Modules\Product\Application\UseCase;
 
 use App\Modules\Product\Application\Command\RequestDataExportCommand;
+use App\Modules\Product\Application\Exception\DataExportSignerNotAllowed;
 use App\Modules\Product\Application\Port\DataExportQueue;
 use App\Modules\Product\Application\Port\DataExportRepository;
 use App\Modules\Product\Application\Port\ProductEventPublisher;
+use App\Modules\Product\Application\Support\DataExportSigners;
 use App\Modules\Product\Domain\Event\DataExportRequested;
 use App\Modules\Product\Domain\Exception\DataExportAlreadyInProgress;
 use App\Modules\Product\Domain\Model\DataExport;
 use App\Modules\Product\Domain\ValueObject\DataExportFailure;
 use App\Modules\Product\Domain\ValueObject\DataExportOrigin;
 use App\Modules\Shared\Application\Port\Clock;
+use App\Modules\Shared\Application\Port\ResponsibleAccounts;
+use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Application\Port\UuidGenerator;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use Illuminate\Database\ConnectionInterface;
@@ -70,6 +74,8 @@ final readonly class RequestDataExportHandler
         private ProductEventPublisher $events,
         private Clock $clock,
         private ConnectionInterface $connection,
+        private ResponsibleAccounts $accounts,
+        private SerializedLedgerWrite $serialized,
         /**
          * Segundos tras los cuales una exportacion sin terminar se declara
          * atascada. Ya resuelto por quien construye (regla dura 14): el caso de
@@ -82,6 +88,7 @@ final readonly class RequestDataExportHandler
 
     /**
      * @throws DataExportAlreadyInProgress si ya hay una `pending` o `running`
+     * @throws DataExportSignerNotAllowed por consola, sin una cuenta `admin` activa que la firme
      */
     public function handle(RequestDataExportCommand $command): DataExport
     {
@@ -90,6 +97,21 @@ final readonly class RequestDataExportHandler
 
     private function doHandle(RequestDataExportCommand $command): DataExport
     {
+        /*
+         * Por consola la firma la cuenta `admin` de `--responsible` (doc 01
+         * §7.2, «Firmas por consola»). Se comprueba antes de tocar nada —ni
+         * siquiera se desatasca— y otra vez con la cadena tomada, justo antes
+         * de crear la fila: la baja de una cuenta toma la cadena antes de tocar
+         * su fila (ADR-051 §6), asi que una baja entre la pregunta de la consola
+         * y la firma no deja una exportacion a nombre de quien ya no responde.
+         * Por el panel firma la sesion, que ya autorizo `DataExportPolicy`.
+         */
+        $signedAtConsole = $command->requestedVia === DataExportOrigin::Console;
+
+        if ($signedAtConsole) {
+            $this->assertSigner($command->requestedByUserId);
+        }
+
         $now = $this->clock->now();
 
         /*
@@ -121,25 +143,35 @@ final readonly class RequestDataExportHandler
          */
         $this->exports->failStale($now->modify('-'.max(1, $this->staleAfterSeconds).' seconds'), $now);
 
+        $create = function () use ($uuid, $command, $now, $signedAtConsole): DataExport {
+            if ($signedAtConsole) {
+                $this->assertSigner($command->requestedByUserId);
+            }
+
+            $created = $this->exports->create(
+                uuid: $uuid,
+                requestedVia: $command->requestedVia,
+                requestedByUserId: $command->requestedByUserId,
+                requestedAt: $now,
+            );
+
+            $this->events->publish(new DataExportRequested(
+                uuid: $created->uuid,
+                requestedVia: $created->requestedVia,
+                requestedByUserId: $command->requestedByUserId,
+                occurredAt: $now,
+            ));
+
+            return $created;
+        };
+
         try {
+            // Por consola, la cadena primero (ADR-046 §1.2): con ella tomada se
+            // vuelve a comprobar la cuenta y se escribe el asiento.
             /** @var DataExport $export */
-            $export = $this->connection->transaction(function () use ($uuid, $command, $now): DataExport {
-                $created = $this->exports->create(
-                    uuid: $uuid,
-                    requestedVia: $command->requestedVia,
-                    requestedByUserId: $command->requestedByUserId,
-                    requestedAt: $now,
-                );
-
-                $this->events->publish(new DataExportRequested(
-                    uuid: $created->uuid,
-                    requestedVia: $created->requestedVia,
-                    requestedByUserId: $command->requestedByUserId,
-                    occurredAt: $now,
-                ));
-
-                return $created;
-            });
+            $export = $signedAtConsole
+                ? $this->serialized->withChainLock($create)
+                : $this->connection->transaction($create);
         } catch (DataExportAlreadyInProgress) {
             /*
              * **La que ocupa el turno se relee AQUI y no en el repositorio.**
@@ -177,5 +209,19 @@ final readonly class RequestDataExportHandler
         }
 
         return $export;
+    }
+
+    /**
+     * @throws DataExportSignerNotAllowed sin cuenta, o la que se dio ya no es `admin` activa
+     */
+    private function assertSigner(?int $userId): void
+    {
+        if ($userId === null) {
+            throw DataExportSignerNotAllowed::missing();
+        }
+
+        if (! $this->accounts->isActiveManagementAccount($userId, DataExportSigners::ROLES)) {
+            throw DataExportSignerNotAllowed::notAnActiveAdmin();
+        }
     }
 }

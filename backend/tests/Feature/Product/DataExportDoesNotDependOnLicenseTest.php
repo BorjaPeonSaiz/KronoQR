@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Queue;
 use Tests\Feature\Quality\Support\Commands;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
+use Tests\Support\Identity\ConsoleSignature;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Product\DataExports;
 use Tests\Support\Product\LicenseKeys;
@@ -142,7 +143,7 @@ it('el comando genera la exportacion completa con la licencia caducada', functio
     // panel. El fichero sale entero, no una version recortada.
     exportacionConLicenciaCaducada();
 
-    [$codigo, $salida] = Commands::run('product:export-all');
+    [$codigo, $salida] = Commands::run('product:export-all '.ConsoleSignature::inline(ManagementUsers::withRole(UserRole::ADMIN)));
 
     expect($codigo)->toBe(0)
         ->and($salida)->toContain('Exportacion integra generada');

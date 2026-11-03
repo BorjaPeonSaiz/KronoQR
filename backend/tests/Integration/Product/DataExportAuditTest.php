@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Modules\Product\Application\Command\RequestDataExportCommand;
+use App\Modules\Product\Application\Exception\DataExportSignerNotAllowed;
 use App\Modules\Product\Application\Port\DataExportArchiveWriter;
 use App\Modules\Product\Application\UseCase\DownloadDataExportHandler;
 use App\Modules\Product\Application\UseCase\GenerateDataExportHandler;
@@ -118,11 +119,13 @@ it('atribuye los tres asientos a quien pidio la exportacion, incluida la generac
     }
 })->group('RF-PD-14', 'RS-05', 'RL-04');
 
-it('atribuye a system la exportacion pedida desde la consola', function (): void {
-    // Sin nadie detras, `system` es la verdad. Decir «usuario desconocido» seria
-    // peor, y atribuirla a una cuenta cualquiera, falso.
+it('atribuye la exportacion pedida desde la consola a la cuenta que la firma', function (): void {
+    // Desde la 2.3.0 la consola firma con `--responsible` (doc 01 §7.2): los
+    // dos asientos nombran a esa cuenta, no a `system`.
+    $admin = ManagementUsers::withRole(UserRole::ADMIN);
+
     $requested = app(RequestDataExportHandler::class)->handle(
-        new RequestDataExportCommand(DataExportOrigin::Console, null),
+        new RequestDataExportCommand(DataExportOrigin::Console, $admin->id),
     );
 
     app(GenerateDataExportHandler::class)->handle($requested->uuid);
@@ -130,18 +133,39 @@ it('atribuye a system la exportacion pedida desde la consola', function (): void
     $pedida = asientoDeExportacion('data_export.requested');
     $generada = asientoDeExportacion('data_export.generated');
 
-    expect($pedida['actor_type'])->toBe('system')
-        ->and($pedida['actor_id'])->toBeNull()
+    expect($pedida['actor_type'])->toBe('user')
+        ->and($pedida['actor_id'])->toBe($admin->id)
         ->and($pedida['payload']['requested_via'])->toBe('console')
-        ->and($generada['actor_type'])->toBe('system');
-})->group('RF-PD-14', 'RS-05');
+        ->and($generada['actor_type'])->toBe('user')
+        ->and($generada['actor_id'])->toBe($admin->id);
+})->group('RF-PD-14', 'RS-05', 'RL-04');
+
+it('no pide nada por consola sin una cuenta admin activa que la firme', function (Closure $firmante): void {
+    // El caso de uso no se fia de la orden: sin firma, o con una cuenta que no
+    // es `admin` activa, no hay fila ni asiento.
+    expect(fn () => app(RequestDataExportHandler::class)->handle(
+        new RequestDataExportCommand(DataExportOrigin::Console, $firmante()),
+    ))->toThrow(DataExportSignerNotAllowed::class);
+
+    expect(DB::table('data_exports')->count())->toBe(0)
+        ->and(DB::table('audit_log')->where('action', 'data_export.requested')->count())->toBe(0);
+})->with([
+    'sin cuenta' => [fn (): ?int => null],
+    'rrhh' => [fn (): int => ManagementUsers::withRole(UserRole::RRHH)->id],
+    'admin dado de baja' => [function (): int {
+        $baja = ManagementUsers::withRole(UserRole::ADMIN);
+        DB::table('users')->where('id', $baja->id)->update(['is_active' => false]);
+
+        return $baja->id;
+    }],
+])->group('RF-PD-14', 'RS-05', 'RL-04');
 
 it('registra recuentos y huella en el asiento, y nunca el contenido', function (): void {
     // El payload sirve para reconocer ESE fichero mas adelante; el contenido no
     // entra, porque el trail se exporta —dentro de esta misma exportacion— y no
     // hay razon para difundirlo otra vez ahi (regla dura 21).
     $requested = app(RequestDataExportHandler::class)->handle(
-        new RequestDataExportCommand(DataExportOrigin::Console, null),
+        DataExports::consoleRequest(),
     );
 
     $export = app(GenerateDataExportHandler::class)->handle($requested->uuid);
@@ -234,7 +258,7 @@ it('deja la fila en failed con el codigo del catalogo y sin restos en el disco',
      * produccion y el que lleva a mirar `df -h`.
      */
     $requested = app(RequestDataExportHandler::class)->handle(
-        new RequestDataExportCommand(DataExportOrigin::Console, null),
+        DataExports::consoleRequest(),
     );
 
     // Un directorio inexistente y no escribible: `/proc` no admite `mkdir`.
@@ -269,7 +293,7 @@ it('el trabajo marca la fila aunque muera sin poder atrapar el fallo', function 
      * Se invoca directamente, que es exactamente lo que hace el trabajador.
      */
     $requested = app(RequestDataExportHandler::class)->handle(
-        new RequestDataExportCommand(DataExportOrigin::Console, null),
+        DataExports::consoleRequest(),
     );
 
     // La fila esta `pending`: el trabajo ni siquiera llego a arrancar.
@@ -288,7 +312,7 @@ it('el trabajo no reabre ni reescribe una exportacion que ya habia terminado', f
     // convertiria una exportacion descargable en fallida y el cliente perderia su
     // copia sin motivo.
     $requested = app(RequestDataExportHandler::class)->handle(
-        new RequestDataExportCommand(DataExportOrigin::Console, null),
+        DataExports::consoleRequest(),
     );
 
     app(GenerateDataExportHandler::class)->handle($requested->uuid);
