@@ -36,7 +36,9 @@ use App\Modules\Product\Domain\Event\DataExportRequested;
  * para que los tres asientos de la familia se atribuyan por el mismo camino: el
  * hermano `data_export.generated` corre en la cola, donde no hay sesion, y dos
  * mecanismos distintos para la misma pregunta es como acaban divergiendo.
- * Sin nadie detras —consola— es `system`, que es la verdad.
+ * Por consola es la cuenta `admin` de `--responsible`, que firma la peticion
+ * desde la 2.3.0 (doc 01 §7.2); sin nadie detras —las pedidas por consola
+ * antes de la 2.3.0— era `system`.
  *
  * ## Sincrono y dentro de la transaccion
  *

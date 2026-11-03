@@ -2,9 +2,12 @@
 
 declare(strict_types=1);
 
+use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Illuminate\Support\Facades\DB;
 use Tests\Feature\Quality\Support\Commands;
 use Tests\Support\Database\RefreshDatabase;
+use Tests\Support\Identity\ConsoleSignature;
+use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Product\DataExports;
 use Tests\Support\Product\LicenseKeys;
 use Tests\Support\Time\FrozenTime;
@@ -24,10 +27,11 @@ use Tests\Support\Workforce\WorkforceFixtures;
  * ## Lo que se comprueba
  *
  * Que **registra su fila igual que el panel** —con `requested_via = console` y
- * sin usuario—, que imprime lo que quien esta delante de la terminal necesita
+ * a nombre de la cuenta que la firma—, que imprime lo que quien esta delante de la terminal necesita
  * —ruta, tamaño, huella, recuentos y como sacar el fichero del contenedor—, que
  * `--purge` purga y no genera, y que dos ejecuciones simultaneas no producen dos
- * exportaciones.
+ * exportaciones. La firma con `--responsible` y sus negativas, en
+ * `DataExportConsoleSignatureTest`.
  */
 
 uses(RefreshDatabase::class);
@@ -45,17 +49,19 @@ afterEach(function (): void {
 });
 
 it('genera el ZIP, registra su fila y dice como sacarlo del contenedor', function (): void {
-    [$codigo, $salida] = Commands::run('product:export-all');
+    $admin = ManagementUsers::withRole(UserRole::ADMIN);
+
+    [$codigo, $salida] = Commands::run('product:export-all '.ConsoleSignature::inline($admin));
 
     expect($codigo)->toBe(0, $salida);
 
     $fila = DB::table('data_exports')->orderByDesc('id')->first();
 
     expect($fila?->status)->toBe('completed')
-        // Sin usuario: por consola no hay sesion que atribuir, y `requested_via`
-        // es lo que dice la verdad de por donde se pidio.
+        // A nombre de la cuenta que la firma, como desde el panel; y
+        // `requested_via` dice por donde se pidio.
         ->and($fila?->requested_via)->toBe('console')
-        ->and($fila?->requested_by_user_id)->toBeNull()
+        ->and($fila?->requested_by_user_id)->toBe($admin->id)
         ->and($fila?->sha256)->toBeString()
         ->and($fila?->expires_at)->not->toBeNull()
         ->and(is_file((string) $fila?->file_path))->toBeTrue();
@@ -83,7 +89,7 @@ it('la exportacion de consola aparece en la lista del panel', function (): void 
     // No es un fichero paralelo que nadie ve: se registra igual y se puede
     // descargar desde el panel, que es lo que hace que las dos vias sean la
     // misma funcionalidad.
-    Commands::run('product:export-all');
+    Commands::run('product:export-all '.ConsoleSignature::inline(ManagementUsers::withRole(UserRole::ADMIN)));
 
     $fila = DB::table('data_exports')->orderByDesc('id')->first();
 
@@ -99,7 +105,7 @@ it('sale con 2 y no genera nada si ya hay una en curso', function (): void {
     // distintas para quien escribe un script alrededor del comando.
     DataExports::inProgress('running');
 
-    [$codigo, $salida] = Commands::run('product:export-all');
+    [$codigo, $salida] = Commands::run('product:export-all '.ConsoleSignature::inline(ManagementUsers::withRole(UserRole::ADMIN)));
 
     expect($codigo)->toBe(2)
         ->and($salida)->toContain('Ya hay una exportacion integra en curso')

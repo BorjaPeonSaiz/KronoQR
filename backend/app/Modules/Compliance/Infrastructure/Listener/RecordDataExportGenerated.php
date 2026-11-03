@@ -25,8 +25,11 @@ use App\Modules\Product\Domain\Event\DataExportGenerated;
  * `data_export.requested` de unos segundos antes, y eso es exactamente lo que
  * un trail existe para evitar.
  *
- * El identificador viaja dentro del evento; sin nadie detras —consola—,
- * `system`, que es la verdad.
+ * El identificador viaja dentro del evento. Por consola es la cuenta `admin`
+ * de `--responsible`, que firmo la peticion (doc 01 §7.2): la firma cubre la
+ * peticion y la generacion se le atribuye, igual que en el panel aunque la
+ * cola genere despues. Solo sin nadie detras —las pedidas por consola antes
+ * de la 2.3.0— es `system`.
  *
  * ## Lo que lleva el payload
  *

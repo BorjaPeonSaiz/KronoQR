@@ -26,9 +26,15 @@ use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
  *
  * ## Deliberadamente estrecho
  *
- * No acepta accion ni actor. La accion es siempre
+ * No acepta accion, y actor solo uno. La accion es siempre
  * `AuditAction::LegalExportGenerated` y la decide el adaptador; si aceptara una
  * cualquiera, el catalogo cerrado de acciones dejaria de estar cerrado.
+ *
+ * El actor es el de la peticion en curso, salvo por consola desde la 2.3.0: la
+ * cuenta que firma con `--responsible` (doc 01 §7.2, «Firmas por consola»),
+ * que el caso de uso acaba de comprobar con la cadena tomada. No es un actor
+ * cualquiera que se declara: es una cuenta de gestion activa con el rol que
+ * exporta, y la persona ha confirmado que es ella.
  *
  * ## Que se apunta y que no
  *
@@ -39,5 +45,8 @@ use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
  */
 interface LegalExportAudit
 {
-    public function recordGeneration(LegalExportManifest $manifest, LegalExportTally $tally): void;
+    /**
+     * @param  int|null  $signedByUserId  la cuenta que firma por consola; nulo, el actor de la peticion en curso
+     */
+    public function recordGeneration(LegalExportManifest $manifest, LegalExportTally $tally, ?int $signedByUserId = null): void;
 }

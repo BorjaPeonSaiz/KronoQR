@@ -2292,6 +2292,7 @@
     "generateDisabledHint": "You cannot request another one while the previous one is still in progress; you can download it from this same list once it finishes.",
     "activeNotice": "An export is in progress, requested on {requestedAt}. This screen refreshes itself every few seconds.",
     "requestedByConsole": "Console",
+    "requestedByAtConsole": "{name} · console",
     "announceRequested": "The full export has been requested.",
     "announceDownloaded": "The export {filename} has been downloaded.",
     "confirm": {

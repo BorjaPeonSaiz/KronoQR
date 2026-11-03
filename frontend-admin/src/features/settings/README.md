@@ -98,10 +98,13 @@ motivo para tener ese contenido en memoria del navegador.
 
 **Límite práctico del navegador.** El panel recibe el ZIP entero en memoria
 antes de guardarlo, así que por encima de ~1 GB conviene generar la
-exportación desde la consola (`php artisan product:export-all`) y sacar el
-fichero del contenedor (`docker compose cp`, `docs/cliente/operacion.md`); esa
-misma fila aparece igual en esta lista, con `requested_via: console` reflejado
-en «Pedida por» como «Consola».
+exportación desde la consola
+(`php artisan product:export-all --responsible=<correo de una cuenta admin>`)
+y sacar el fichero del contenedor (`docker compose cp`,
+`docs/cliente/operacion.md`); esa misma fila aparece igual en esta lista, con
+`requested_via: console`. Desde la 2.3.0 trae además `requested_by`: la cuenta
+`admin` que la firmó en la consola. Las pedidas por consola antes de la 2.3.0
+lo traen nulo.
 
 Solo `admin` con ámbito `settings:*` (doc 02 §7.3, nota 6): llevarse todos los
 datos de la instalación es la potestad de quien responde de ella, y ningún

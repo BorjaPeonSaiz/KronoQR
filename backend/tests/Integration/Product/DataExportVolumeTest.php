@@ -2,10 +2,8 @@
 
 declare(strict_types=1);
 
-use App\Modules\Product\Application\Command\RequestDataExportCommand;
 use App\Modules\Product\Application\UseCase\GenerateDataExportHandler;
 use App\Modules\Product\Application\UseCase\RequestDataExportHandler;
-use App\Modules\Product\Domain\ValueObject\DataExportOrigin;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\Support\Database\RefreshDatabase;
@@ -313,7 +311,7 @@ it('exporta 500 empleados y 90 dias con los recuentos cuadrados y sin agotar mem
     $escenario = instalacionParaExportar();
 
     $requested = app(RequestDataExportHandler::class)->handle(
-        new RequestDataExportCommand(DataExportOrigin::Console, null),
+        DataExports::consoleRequest(),
     );
 
     /*
@@ -407,7 +405,7 @@ it('no deja salir ni un secreto en el ZIP entero', function (): void {
     instalacionParaExportar();
 
     $requested = app(RequestDataExportHandler::class)->handle(
-        new RequestDataExportCommand(DataExportOrigin::Console, null),
+        DataExports::consoleRequest(),
     );
 
     $export = app(GenerateDataExportHandler::class)->handle($requested->uuid);
@@ -451,7 +449,7 @@ it('lleva los datos del cliente, incluidas las versiones sustituidas y las corre
     $escenario = instalacionParaExportar();
 
     $requested = app(RequestDataExportHandler::class)->handle(
-        new RequestDataExportCommand(DataExportOrigin::Console, null),
+        DataExports::consoleRequest(),
     );
 
     $export = app(GenerateDataExportHandler::class)->handle($requested->uuid);
@@ -484,7 +482,7 @@ it('escribe el ZIP con permisos 0600 y su directorio con 0700', function (): voi
     instalacionParaExportar();
 
     $requested = app(RequestDataExportHandler::class)->handle(
-        new RequestDataExportCommand(DataExportOrigin::Console, null),
+        DataExports::consoleRequest(),
     );
 
     $export = app(GenerateDataExportHandler::class)->handle($requested->uuid);

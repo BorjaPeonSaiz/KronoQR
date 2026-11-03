@@ -1498,8 +1498,10 @@ la 2.3.0 no vale el número de la cuenta). La orden enseña quién firma y lo
 pregunta; si la lanzas sin terminal, confirma con
 `--responsible-confirm=<el mismo correo>`. Las demás órdenes de consola que
 dejan un asiento firmado —la corrección de la zona del centro, las revisiones
-de la conciliación y la entrega de una tarjeta— siguen la misma regla; el
-paquete de diagnóstico con datos personales lo firma solo una cuenta admin.
+de la conciliación y la entrega y la revocación de una tarjeta— siguen la misma
+regla; la exportación para la Inspección la firma además una cuenta auditor, y
+el paquete de diagnóstico con datos personales y la exportación íntegra, solo
+una cuenta admin.
 
 ### …necesito saber quién cambió un umbral y cuándo
 

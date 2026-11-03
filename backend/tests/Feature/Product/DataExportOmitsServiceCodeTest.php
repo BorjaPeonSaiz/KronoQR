@@ -2,10 +2,8 @@
 
 declare(strict_types=1);
 
-use App\Modules\Product\Application\Command\RequestDataExportCommand;
 use App\Modules\Product\Application\UseCase\GenerateDataExportHandler;
 use App\Modules\Product\Application\UseCase\RequestDataExportHandler;
-use App\Modules\Product\Domain\ValueObject\DataExportOrigin;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
@@ -88,7 +86,7 @@ function exportacionConCodigoDeServicio(): array
         ->assertStatus(200);
 
     $requested = app(RequestDataExportHandler::class)->handle(
-        new RequestDataExportCommand(DataExportOrigin::Console, null),
+        DataExports::consoleRequest(),
     );
 
     $export = app(GenerateDataExportHandler::class)->handle($requested->uuid);

@@ -299,26 +299,18 @@ final class ProductDiagnosticsCommand extends Command
      */
     private function signedBy(ResponsibleAccounts $accounts, DiagnosticsOptions $options): ResponsibleAccount|int
     {
-        $option = $this->option('responsible');
-
-        if (! is_string($option) || trim($option) === '') {
-            return ConsoleResponsible::missing($this);
-        }
-
-        $responsible = ConsoleResponsible::resolve($this, $accounts, $option, DiagnosticsSigners::ROLES);
-
-        if (is_int($responsible)) {
-            return $responsible;
-        }
-
-        $this->warnAboutPersonalData($options);
-
-        return ConsoleResponsible::confirm(
+        // El aviso va entre la cuenta resuelta y la pregunta: quien confirma
+        // tiene que haberlo leido, y una cuenta que no puede firmar no lo ve.
+        return ConsoleResponsible::sign(
             $this,
-            $responsible,
+            $this->input,
+            $accounts,
+            DiagnosticsSigners::ROLES,
             $this->text('confirm_personal_data'),
-            ! $this->input->isInteractive(),
-        ) ?? $responsible;
+            function () use ($options): void {
+                $this->warnAboutPersonalData($options);
+            },
+        );
     }
 
     /**

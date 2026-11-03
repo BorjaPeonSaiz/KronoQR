@@ -2292,6 +2292,7 @@
     "generateDisabledHint": "No se puede pedir otra mientras la anterior sigue en curso; puedes descargarla desde esta misma lista en cuanto termine.",
     "activeNotice": "Hay una exportación en curso, pedida el {requestedAt}. Esta pantalla se actualiza sola cada pocos segundos.",
     "requestedByConsole": "Consola",
+    "requestedByAtConsole": "{name} · consola",
     "announceRequested": "Se ha pedido la exportación completa.",
     "announceDownloaded": "Se ha descargado la exportación {filename}.",
     "confirm": {

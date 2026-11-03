@@ -1614,6 +1614,30 @@ cámbialos antes de actualizar**: con el número de la cuenta, con `--by` o sin
 §3, §9 y §12.3, y en [`configuracion.md`](configuracion.md) (fila
 `APP_TIMEZONE`).
 
+**Al actualizar a la 2.3.0: las exportaciones y la revocación de tarjetas
+también firman.** Hasta la 2.2.1, `product:export-all`,
+`compliance:legal-export` y `credentials:revoke` dejaban su asiento a nombre
+del «sistema». Desde la 2.3.0 **exigen `--responsible`** igual que las órdenes
+de arriba (correo o uuid, `Firma: …` y, con `--force` o sin terminal,
+`--responsible-confirm=<el mismo correo>`), y el asiento nombra a esa cuenta:
+
+- `product:export-all` (la exportación íntegra): solo una cuenta **admin**.
+  `product:export-all --purge`, la pasada horaria del planificador, **no
+  cambia**: no exporta nada y no lleva firma.
+- `compliance:legal-export` (la exportación para la Inspección): una cuenta
+  **admin, rrhh o auditor**.
+- `credentials:revoke` (retirar una tarjeta): una cuenta **admin o rrhh**.
+
+Sin `--responsible`, con el número de la cuenta o con una cuenta de otro rol o
+dada de baja, salen con `2` **sin exportar ni revocar nada**. Si tienes un
+`cron` que saca la exportación íntegra o la de la Inspección, añádele
+`--responsible=<correo> --responsible-confirm=<el mismo correo>` antes de
+actualizar. **Ese `cron` empezará a salir con `2`, sin exportar, si la cuenta
+se da de baja o cambia de rol más adelante**: al dar de baja a quien firmaba,
+cámbialo por otra cuenta. Los ejemplos están en §13.2 y en los procedimientos
+[`requerimiento-inspeccion.md`](../runbooks/requerimiento-inspeccion.md) y
+[`solicitud-derechos-rgpd.md`](../runbooks/solicitud-derechos-rgpd.md).
+
 **Al actualizar a la 2.3.0: la zona del centro, fija también en la base de
 datos.** Desde la 2.2.1 el panel y la API ya no dejaban cambiar la zona con
 fichajes hechos. Desde la 2.3.0 **tampoco lo deja la base de datos** a quien
@@ -2680,11 +2704,18 @@ pedido, el panel te enseña esa en lugar de empezar otra. **La descarga desde
 el panel es el camino recomendado**: es el único que deja asiento de quién se
 llevó el fichero (§13.3).
 
-**Desde la consola**, en el acto y en primer plano:
+**Desde la consola**, en el acto y en primer plano, firmada por una cuenta
+**admin** (su correo o su uuid; cambia `admin@hotel.example` por el de la
+tuya):
 
 ```bash
-docker compose exec app php artisan product:export-all
+docker compose exec app php artisan product:export-all --responsible=admin@hotel.example
 ```
+
+La orden enseña quién firma (`Firma: nombre <correo> · rol · uuid`) y lo
+pregunta. Sin terminal —un `cron`, `exec -T`— no hay a quién preguntar:
+añade `--responsible-confirm=<el mismo correo>`. La exportación queda a
+nombre de esa cuenta, como si la hubiera pedido desde el panel.
 
 Deja el fichero en `storage/app/exports/`, dentro del volumen de ficheros
 generados (§13.6), imprime la ruta, el tamaño, la huella y el número de filas

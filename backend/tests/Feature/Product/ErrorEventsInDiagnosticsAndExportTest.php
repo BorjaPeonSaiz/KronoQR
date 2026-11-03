@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Tests\Feature\Quality\Support\Commands;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Http\Api;
+use Tests\Support\Identity\ConsoleSignature;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Product\DataExports;
 use Tests\Support\Product\DiagnosticsRecipient;
@@ -186,7 +187,7 @@ it('la exportacion integra escribe error_events.csv con la tabla entera', functi
     $usuario = ManagementUsers::withRole(UserRole::ADMIN);
     grupoParaElPaquete($usuario->id);
 
-    [$codigo, $salida] = Commands::run('product:export-all');
+    [$codigo, $salida] = Commands::run('product:export-all '.ConsoleSignature::inline($usuario));
 
     expect($codigo)->toBe(0, $salida);
 
@@ -233,7 +234,7 @@ it('la exportacion integra lleva el historial de resoluciones y el paquete de di
         ->and((string) $paquete->getContent())->not->toContain('error_event_resolutions')
         ->and((string) $paquete->getContent())->not->toContain($usuario->name);
 
-    [$codigo, $salida] = Commands::run('product:export-all');
+    [$codigo, $salida] = Commands::run('product:export-all '.ConsoleSignature::inline($usuario));
 
     expect($codigo)->toBe(0, $salida);
 

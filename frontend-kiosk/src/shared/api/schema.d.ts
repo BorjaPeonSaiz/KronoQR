@@ -5475,7 +5475,8 @@ export interface paths {
          *     exactamente la situacion para la que existe.
          *
          *     Desde la consola, `php artisan product:export-all` hace lo mismo en el
-         *     acto y en primer plano, y registra tambien su fila.
+         *     acto y en primer plano, y registra tambien su fila, a nombre de la
+         *     cuenta `admin` de `--responsible` (2.3.0).
          */
         post: operations["requestDataExport"];
         delete?: never;
@@ -14222,7 +14223,7 @@ export interface components {
             status: "pending" | "running" | "completed" | "failed" | "purged";
             /** @enum {string} */
             requested_via: "panel" | "console";
-            /** @description La cuenta de gestion que la pidio. Nulo si se pidio desde la consola. */
+            /** @description La cuenta de gestion que la pidio, tambien por consola desde la 2.3.0 (la de `--responsible`). Nulo en las pedidas por consola antes de la 2.3.0. */
             requested_by: {
                 /** Format: uuid */
                 uuid: string;

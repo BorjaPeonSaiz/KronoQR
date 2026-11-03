@@ -5,14 +5,17 @@ declare(strict_types=1);
 namespace App\Modules\Identity\Application\UseCase;
 
 use App\Modules\Identity\Application\Command\RevokeCredentialCommand;
+use App\Modules\Identity\Application\Exception\CredentialRevocationSignerNotAllowed;
 use App\Modules\Identity\Application\Port\CredentialRepository;
 use App\Modules\Identity\Application\Port\IdentityEventPublisher;
+use App\Modules\Identity\Application\Support\CredentialManagers;
 use App\Modules\Identity\Domain\Event\CredentialRevoked;
 use App\Modules\Identity\Domain\Exception\CredentialAlreadyRevoked;
 use App\Modules\Identity\Domain\Exception\CredentialRevocationNeedsReason;
 use App\Modules\Identity\Domain\Model\Credential;
 use App\Modules\Shared\Application\Port\Clock;
 use App\Modules\Shared\Application\Port\EmployeeRegistry;
+use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Application\Port\SerializedLedgerWrite;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 
@@ -40,6 +43,7 @@ final readonly class RevokeCredential
         private IdentityEventPublisher $events,
         private Clock $clock,
         private SerializedLedgerWrite $serialized,
+        private ResponsibleAccounts $accounts,
     ) {}
 
     /**
@@ -47,6 +51,7 @@ final readonly class RevokeCredential
      *
      * @throws CredentialAlreadyRevoked
      * @throws CredentialRevocationNeedsReason
+     * @throws CredentialRevocationSignerNotAllowed por consola, la cuenta que firma ya no puede hacerlo
      */
     public function handle(RevokeCredentialCommand $command): ?CredentialView
     {
@@ -62,6 +67,13 @@ final readonly class RevokeCredential
         // dentro, una tarjeta que la baja acaba de revocar responde
         // `CredentialAlreadyRevoked` en vez de reescribir su motivo.
         return $this->serialized->withChainLock(function () use ($command): ?CredentialView {
+            // Por consola, con la cadena tomada la cuenta que firma no puede
+            // darse de baja hasta que esto confirme (ADR-051 §6): la consola ya
+            // la comprobo al preguntar, pero lo que vale es lo de ahora.
+            if ($command->signedAtConsole && ! $this->canSign($command->actorUserId)) {
+                throw new CredentialRevocationSignerNotAllowed;
+            }
+
             $credential = $this->credentials->findByUuid($command->credentialUuid);
 
             if (! $credential instanceof Credential) {
@@ -89,5 +101,10 @@ final readonly class RevokeCredential
 
             return new CredentialView($revoked, $employeeUuid);
         });
+    }
+
+    private function canSign(?int $userId): bool
+    {
+        return $userId !== null && $this->accounts->isActiveManagementAccount($userId, CredentialManagers::ROLES);
     }
 }

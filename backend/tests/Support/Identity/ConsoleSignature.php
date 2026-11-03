@@ -43,6 +43,17 @@ final class ConsoleSignature
     }
 
     /**
+     * La misma firma que {@see self::for()}, escrita en una linea para las
+     * pruebas que lanzan la orden como texto (`Commands::run`).
+     */
+    public static function inline(User|int $account): string
+    {
+        [$email] = self::identifiers($account);
+
+        return '--responsible='.$email.' --responsible-confirm='.$email.' --no-interaction';
+    }
+
+    /**
      * @return array{0: string, 1: string}
      */
     private static function identifiers(User|int $account): array

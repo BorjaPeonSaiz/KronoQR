@@ -29,6 +29,8 @@ it('cada clase admite los nombres que produce su escritor', function (GeneratedF
     'informe en diferido' => [GeneratedFileAreas::reportExports('/r'), GENERATED_FILE_AREAS_UUID],
     'temporal legal HTTP' => [GeneratedFileAreas::legalExportTemporaries('/r'), 'registro-horario-2026-01-01_2026-01-31-AbCdEf123456.csv'],
     'exportacion legal de consola' => [GeneratedFileAreas::legalExportConsole('/r'), 'registro-horario-2026-01-01_2026-01-31.csv'],
+    'parcial del temporal legal' => [GeneratedFileAreas::legalExportTemporaries('/r'), 'registro-horario-2026-01-01_2026-01-31-AbCdEf123456.csv.partial-'.GENERATED_FILE_AREAS_UUID],
+    'parcial de la exportacion legal de consola' => [GeneratedFileAreas::legalExportConsole('/r'), 'registro-horario-2026-01-01_2026-01-31.csv.partial-'.GENERATED_FILE_AREAS_UUID],
     'paquete de diagnostico' => [GeneratedFileAreas::diagnostics('/r'), 'kronoqr-diagnostics-2.2.0-20261002T120000Z.json'],
 ])->group('RF-PD-14', 'RF-IN-06', 'RF-IN-05');
 
@@ -52,6 +54,8 @@ it('ninguna clase admite un nombre ajeno, con barra o con salto de linea', funct
     'otra clase en la raiz de informes' => [GeneratedFileAreas::reportExports('/r'), 'exports'],
     'los dos puntos' => [GeneratedFileAreas::reportExports('/r'), '..'],
     'un CSV legal sin prefijo' => [GeneratedFileAreas::legalExportTemporaries('/r'), 'horario.csv'],
+    'un parcial legal con uuid v4' => [GeneratedFileAreas::legalExportConsole('/r'), 'registro-horario-a.csv.partial-019a0000-0000-4000-8000-00000000dead'],
+    'un parcial legal con sufijo libre' => [GeneratedFileAreas::legalExportTemporaries('/r'), 'registro-horario-a.csv.partial-x'],
     'un diagnostico que no es JSON' => [GeneratedFileAreas::diagnostics('/r'), 'kronoqr-diagnostics-2.2.0.zip'],
 ])->group('RF-PD-14', 'RF-IN-06', 'RF-IN-05');
 

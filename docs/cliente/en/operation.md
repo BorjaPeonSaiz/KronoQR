@@ -1632,6 +1632,32 @@ or without `--operator` they exit with an error and do nothing. The complete
 examples are in §3, §9 and §12.3, and in
 [`configuration.md`](configuration.md) (the `APP_TIMEZONE` row).
 
+**When updating to 2.3.0: the exports and card revocation are signed too.** Up
+to 2.2.1, `product:export-all`, `compliance:legal-export` and
+`credentials:revoke` left their audit entry in the name of the "system". From
+2.3.0 they **require `--responsible`** just like the commands above (e-mail or
+uuid, `Signed by: …` and, with `--force` or without a terminal,
+`--responsible-confirm=<the same e-mail>`), and the entry names that account:
+
+- `product:export-all` (the full export): an **admin** account only.
+  `product:export-all --purge`, the scheduler's hourly pass, **does not
+  change**: it exports nothing and is not signed.
+- `compliance:legal-export` (the export for the Labour Inspectorate): an
+  **admin, rrhh or auditor** account.
+- `credentials:revoke` (withdrawing a card): an **admin or rrhh** account.
+
+Without `--responsible`, with the account number or with an account of another
+role or deactivated, they exit with `2` **without exporting or revoking
+anything**. If you have a `cron` job that takes the full export or the one for
+the Labour Inspectorate, add
+`--responsible=<e-mail> --responsible-confirm=<the same e-mail>` to it before
+updating. **That `cron` job will start exiting with `2`, without exporting, if
+the account is deactivated or changes role later on**: when you deactivate
+whoever signed it, switch it to another account. The examples are in §13.2 and in the procedures
+[`requerimiento-inspeccion.md`](../../runbooks/requerimiento-inspeccion.md) and
+[`solicitud-derechos-rgpd.md`](../../runbooks/solicitud-derechos-rgpd.md) (in
+Spanish).
+
 **When updating to 2.3.0: the site's time zone, fixed in the database too.**
 Since 2.2.1 the panel and the API no longer let you change the zone once there
 are clock-ins. From 2.3.0 **the database does not let anyone writing outside
@@ -2718,11 +2744,18 @@ already requested one, the panel shows you that one instead of starting
 another. **Downloading from the panel is the recommended route**: it is the
 only one that records who took the file (§13.3).
 
-**From the console**, on the spot and in the foreground:
+**From the console**, on the spot and in the foreground, signed by an
+**admin** account (its e-mail or its uuid; replace `admin@hotel.example` with
+yours):
 
 ```bash
-docker compose exec app php artisan product:export-all
+docker compose exec app php artisan product:export-all --responsible=admin@hotel.example
 ```
+
+The command shows who signs (`Signed by: name <e-mail> · role · uuid`) and asks.
+Without a terminal —a `cron` job, `exec -T`— there is nobody to ask: add
+`--responsible-confirm=<the same e-mail>`. The export is recorded in the name
+of that account, as if it had requested it from the panel.
 
 It leaves the file in `storage/app/exports/`, inside the generated-files volume
 (§13.6), prints the path, the size, the fingerprint and the row count of each

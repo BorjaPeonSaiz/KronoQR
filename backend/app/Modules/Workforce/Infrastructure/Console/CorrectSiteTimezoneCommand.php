@@ -184,6 +184,13 @@ final class CorrectSiteTimezoneCommand extends Command
      * `--responsible-confirm` con su correo, y si no, pregunta. Sin terminal y
      * sin `--force` no hay a quien preguntar, y eso es `INVALID`. Si la persona
      * responde que no, `FAILURE`.
+     *
+     * No usa `ConsoleResponsible::sign()`, a diferencia de las demas ordenes que
+     * firman, por dos motivos: entre resolver la cuenta y confirmar va la vista
+     * previa de lo que se va a corregir, que necesita la cuenta ya resuelta; y
+     * sin terminal exige `--force` ademas de `--responsible-confirm`, porque
+     * reescribe la zona de un centro con fichajes y un guion no la cambia sin
+     * decirlo dos veces. Con `sign()` bastaria `--responsible-confirm`.
      */
     private function declined(ResponsibleAccount $responsible): ?int
     {

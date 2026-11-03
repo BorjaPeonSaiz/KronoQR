@@ -297,7 +297,7 @@ Lo que conviene saber del bloque 5:
 - `package.sh` deja fuera del paquete los runbooks internos `fallo-de-ci.md` y `triaje-hallazgos-seguridad.md` (I10). Ningún documento que viaja puede enlazarlos: lo comprueban `ClientDocumentationTest` y `check-package-links.sh`.
 - La guía de RRHH §5.4 (es/en) explica «Este tramo terminó en pausa» y RN-05 (ADR-058).
 
-**Siguiente acción (03-11-2026):** **bloque 33 parcial integrado** (#228, `main` `d91d991c`): 33.3, 33.4, 33.5, 33.6, 33.8 y 33.11; la 33.12 va con el B32, así que el título del bloque sigue en ⬜. **Bloque 34 en `fix/baja-medica-y-franja`**: 34.1 hecha (asiento `sick_leave_detail` al abrir el detalle de una baja médica, enmienda de ADR-037 del 03-11-2026, V21-7-SC-2 cerrado en el doc 07; la 34.2 pasó a la 2.4.0). Pendiente: CI manual, revisiones de `revisor-codigo` y `seguridad-cumplimiento`, PR y merge. **El propietario tiene que generar el par de claves de diagnóstico antes de publicar la 2.3.0** (`php tools/diagnostics-opener/generate-keypair.php --keyring=$HOME/.kronoqr/diagnostics`; `release-gate` lo exige). Después: B35 (`--responsible` en `product:export-all`, `compliance:legal-export` y `credentials:revoke`) y B32 con la 33.12. El bloque final, solo con orden del propietario.
+**Siguiente acción (03-11-2026):** bloques 33 parcial (#228, `main` `d91d991c`) y 34 (#229, `main` `095c195e`) **integrados**; la 33.12 va con el B32, así que el título del 33 sigue en ⬜. **Bloque 35 en `fix/firma-exportaciones-y-revocacion`**: `product:export-all`, `compliance:legal-export` y `credentials:revoke` firman con `--responsible` (una sola implementación, `ConsoleResponsible::sign`); la exportación legal escribe un parcial y lo publica tras el commit del asiento; el panel pide la íntegra con la cadena primero y enseña «nombre · consola». Revisiones de `revisor-codigo` y `seguridad-cumplimiento` (apto con correcciones) corregidas. Pendiente: CI manual sobre las correcciones, PR y merge. **El propietario tiene que generar el par de claves de diagnóstico antes de publicar la 2.3.0** (`php tools/diagnostics-opener/generate-keypair.php --keyring=$HOME/.kronoqr/diagnostics`; `release-gate` lo exige). Después: B32 con la 33.12. El bloque final, solo con orden del propietario.
 
 **B17 a B26 y B24 integrados** (orden del 15-10-2026: un PR por bloque en verde):
 - B17 (#161), B18 (#162), B19 (#167), B20 (#168) y B21 (#169).
@@ -374,6 +374,11 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
 
 ## Pendiente
 
+### Bloque 35 de la 2.3.0 (03-11-2026)
+
+- **Sin prueba propia:** la exportación legal a un destino que no es un fichero normal (`--output=/dev/stdout`, una FIFO) se escribe sin parcial; la carrera real entre la petición del panel y la de consola tras el cambio de candados, y la baja concurrente con la cadena tomada en otro proceso (`UseCaseInOtherProcess`), solo se simulan con dobles. Candidatas para `qa-testing`.
+- **Aceptado:** un `rename()` que falle después del commit dejaría el asiento de la exportación legal sin fichero (lo contrario de lo que se evita).
+
 ### Bloque 34 de la 2.3.0 (03-11-2026, revisión de seguridad de la 34.1)
 
 - **Fila A-17 del doc 07 desactualizada** (anterior a la 34.1): dice que `absences` se conserva «sin purga automática», pero desde ADR-060 (21-10-2026) la minimización de la ficha borra contratos y ausencias (`DatabasePersonnelRecordArchive`). Reescribirla en la revisión del doc 07 del B32 (33.12).
@@ -389,7 +394,6 @@ remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` 
 - **Decidido por el propietario (31-10-2026):** se **aceptan** los tres residuales de doc 07 §6 (bloqueo RS-12 con la cola de alguien de baja; PIN del periodo anterior si se readmite o se hace `reset_pin` antes de sincronizar; salida de un turno de noche del día del cese llegada tras la baja). La 25.6 añade **dos avisos en el panel**: al dar un alta o una readmisión con fecha futura, «los fichajes anteriores a esa fecha se rechazan»; y al readmitir con la baja de hoy, «espera a que los quioscos estén sincronizados» (fila 25.6 del plan). La **incidencia del fichaje anterior al alta** pasa a la 2.4.0 («Fuera de la 2.3.0» del plan). El **apartado para el DPO** en `docs/cliente/obligaciones-legales.md` va en el bloque final, tarea 7.
 - **Validación jurídica (asesoría y DPO del cliente):** retención de periodos y motivos de un readmitido; atribuir un fichaje rechazado a quien ya no tiene relación laboral; visibilidad de bajas programadas para el responsable.
 
-- **Decidido (18-10-2026):** firma `--responsible` para `product:export-all`, `compliance:legal-export` y `credentials:revoke` en el bloque 35 de la 2.3.0 (tras el B7). El resto sigue como `system` (doc 07 §6).
 
 ### Anotado en el bloque 20 de la 2.3.0 (27-10-2026, revisión de seguridad de la reapertura de RN-19)
 

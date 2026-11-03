@@ -110,9 +110,14 @@ produce en el formato normalizado que la Inspección acepta (RF-IN-05, RL-06):
 
 ```bash
 docker compose exec app \
-  php artisan compliance:legal-export --from=2023-01-01 --to=2026-12-31 --employee=<employee_uuid>
+  php artisan compliance:legal-export --from=2023-01-01 --to=2026-12-31 --employee=<employee_uuid> \
+  --responsible=<tu correo>
 ```
 
+- **La firma una cuenta de gestión** (desde la 2.3.0): la tuya, activa y con
+  rol `admin`, `rrhh` o `auditor`, por su correo o su uuid. La orden enseña
+  quién firma y lo pregunta; con `exec -T` (sin terminal) añade
+  `--responsible-confirm=<el mismo correo>`. El asiento queda a su nombre.
 - El `employee_uuid` se ve en la ficha del panel. **Nunca** uses el nombre para
   acotar la exportación: el UUID es el identificador estable.
 - El fichero cae en `storage/app/legal-exports/`, en el volumen de ficheros

@@ -36,6 +36,15 @@ use App\Modules\Compliance\Domain\ValueObject\LegalExportTally;
  * fallara a mitad—. Con el fichero cerrado antes de responder, la garantia de la
  * regla dura 6 se mantiene: si la traza falla, la descarga no ocurre. El coste es
  * un fichero temporal que se borra al enviarlo, no memoria.
+ *
+ * ## Y se publica solo con el asiento confirmado
+ *
+ * `GenerateLegalExport` escribe en {@see self::stagingPathFor()} y solo
+ * {@see self::publish()} despues de confirmar el asiento; ante cualquier fallo,
+ * {@see self::discard()}. Asi no queda nunca en el destino un registro horario
+ * nominal sin asiento —ni por un fallo de `audit_log`, ni por la espera del
+ * candado, ni por una baja de quien firma—, y una exportacion anterior en la
+ * misma ruta no se trunca antes de saber si la nueva vale.
  */
 interface LegalExportWriter
 {
@@ -50,4 +59,27 @@ interface LegalExportWriter
         string $destinationPath,
         iterable $records,
     ): LegalExportTally;
+
+    /**
+     * Donde escribir antes de saber si la exportacion vale: un parcial junto
+     * al destino que nadie confunde con una exportacion entregable.
+     *
+     * Un destino que no es un fichero normal —un dispositivo, una tuberia, un
+     * flujo— no se puede sustituir con un `rename()`: entonces el parcial es el
+     * propio destino, y lo que se escribe sale antes del asiento.
+     */
+    public function stagingPathFor(string $destinationPath): string;
+
+    /**
+     * Convierte el parcial en el fichero entregable, de una vez. Se llama
+     * despues de confirmar el asiento: hasta entonces el destino no existe, o
+     * conserva lo que tenia.
+     */
+    public function publish(string $stagingPath, string $destinationPath): void;
+
+    /**
+     * Borra el parcial si sigue ahi. Sin efecto si ya se publico o si el
+     * parcial es el propio destino.
+     */
+    public function discard(string $stagingPath, string $destinationPath): void;
 }

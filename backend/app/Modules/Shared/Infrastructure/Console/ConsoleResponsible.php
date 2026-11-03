@@ -9,14 +9,17 @@ use App\Modules\Shared\Domain\Exception\InvalidResponsibleReference;
 use App\Modules\Shared\Domain\ValueObject\ResponsibleAccount;
 use App\Modules\Shared\Domain\ValueObject\ResponsibleReference;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
+use Closure;
 use Illuminate\Console\Command;
+use Symfony\Component\Console\Input\InputInterface;
 
 /**
  * La firma de una orden de consola con valor legal: quien es `--responsible`,
  * si puede firmar y si quien teclea confirma que es esa cuenta (doc 01 §7.2, «Firmas por consola»).
  *
  * La usan todas las ordenes que firman un asiento, para que las reglas y los
- * mensajes sean los mismos en todas:
+ * mensajes sean los mismos en todas. {@see self::sign()} hace los dos pasos
+ * seguidos, que es lo que necesitan casi todas:
  *
  * 1. {@see self::resolve()}: `--responsible` es un `uuid` o un correo (un
  *    numero se rechaza explicando el cambio), la cuenta existe, esta activa y
@@ -39,6 +42,60 @@ final class ConsoleResponsible
 {
     /** La opcion con la que se confirma sin terminal o con `--force`. */
     public const string CONFIRM_OPTION = 'responsible-confirm';
+
+    /** La opcion que nombra la cuenta que firma. */
+    public const string RESPONSIBLE_OPTION = 'responsible';
+
+    /**
+     * La firma entera de una orden: lee `--responsible`, la resuelve con los
+     * roles de la accion y pide la confirmacion. Devuelve la cuenta que firma o
+     * el codigo de salida con el motivo ya escrito: `2` si falta
+     * `--responsible`, la cuenta no puede firmar o falta o no cuadra
+     * `--responsible-confirm`; `1` si la persona responde que no. Con un codigo
+     * no se ha escrito nada.
+     *
+     * Se pregunta salvo que la orden no tenga a quien preguntar: con `--force`
+     * —si la orden lo define— o sin terminal, la confirmacion es
+     * `--responsible-confirm`. Igual en todas las ordenes que la usan.
+     *
+     * @param  list<UserRole>  $roles  los que pueden firmar la accion; vacia: cualquier rol de gestion
+     * @param  (Closure(ResponsibleAccount): void)|null  $beforeConfirm  lo que la orden tiene que decir antes de pedir la firma
+     */
+    public static function sign(
+        Command $command,
+        InputInterface $input,
+        ResponsibleAccounts $accounts,
+        array $roles,
+        string $question,
+        ?Closure $beforeConfirm = null,
+    ): ResponsibleAccount|int {
+        $option = $input->hasOption(self::RESPONSIBLE_OPTION) ? $input->getOption(self::RESPONSIBLE_OPTION) : null;
+
+        if (! \is_string($option) || trim($option) === '') {
+            return self::missing($command);
+        }
+
+        $responsible = self::resolve($command, $accounts, $option, $roles);
+
+        if (\is_int($responsible)) {
+            return $responsible;
+        }
+
+        if ($beforeConfirm instanceof Closure) {
+            $beforeConfirm($responsible);
+        }
+
+        return self::confirm($command, $responsible, $question, self::unattended($input)) ?? $responsible;
+    }
+
+    /**
+     * Sin nadie a quien preguntar: `--force`, si la orden lo define, o sin
+     * terminal (`--no-interaction`, un `cron`, `exec -T`).
+     */
+    public static function unattended(InputInterface $input): bool
+    {
+        return ($input->hasOption('force') && $input->getOption('force') === true) || ! $input->isInteractive();
+    }
 
     /**
      * La cuenta que firma, o `Command::INVALID` con el motivo ya escrito.

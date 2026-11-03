@@ -38,17 +38,27 @@ pide `--from=2026-01-01 --to=2026-01-31` y el turno de nochevieja no se parte.
 ## 1. La vía corta: por consola (5 minutos)
 
 Es la que hay que usar por defecto. No necesita sesión, ni navegador, ni que el
-panel esté desplegado.
+panel esté desplegado. **Sí necesita una cuenta de gestión que la firme**
+(desde la 2.3.0): una cuenta activa con rol **admin, rrhh o auditor**, nombrada
+por su correo o su uuid en `--responsible`. El asiento de `audit_log` queda a
+su nombre. Con `exec -T` no hay terminal a la que preguntar, así que la firma
+se confirma con `--responsible-confirm` y el mismo correo; sin `-T`, la orden
+enseña quién firma y lo pregunta. **Si no queda ninguna cuenta activa que pueda
+firmar**, da de alta una con `identity:create-user --role=rrhh` antes de
+exportar ([`../cliente/operacion.md`](../cliente/operacion.md) §9, «Las cuentas
+del panel»).
 
 ```bash
 # En el servidor del cliente, desde el directorio de la instalación
 docker compose exec -T app \
-  php artisan compliance:legal-export --from=2026-01-01 --to=2026-01-31
+  php artisan compliance:legal-export --from=2026-01-01 --to=2026-01-31 \
+  --responsible=rrhh@hotel.es --responsible-confirm=rrhh@hotel.es
 ```
 
 Salida esperada:
 
 ```
+Firma: Nombre de la cuenta <rrhh@hotel.es> · rrhh · 0199f0c2-…
 Exportacion legal generada.
 +--------------+------------------------------------------------------------------------------------+
 | Concepto     | Valor                                                                              |
@@ -59,8 +69,14 @@ Exportacion legal generada.
 | Correcciones | 17                                                                                 |
 | Trabajadores | 63                                                                                 |
 | Fichero      | /var/www/html/storage/app/legal-exports/registro-horario-2026-01-01_2026-01-31.csv  |
+| Firmada por  | rrhh@hotel.es                                                                      |
 +--------------+------------------------------------------------------------------------------------+
 ```
+
+Si sale con `2` y no escribe nada, el mensaje dice por qué: falta
+`--responsible`, la cuenta no existe, está dada de baja o no tiene uno de los
+tres roles, o `--responsible-confirm` no coincide. Las cuentas y sus roles los
+da `docker compose exec app php artisan identity:list-users`.
 
 **Apunta las tres cifras.** Son las que quedan en `audit_log` y las que
 permiten, meses después, demostrar que lo entregado es lo que se generó.
@@ -70,14 +86,14 @@ El fichero queda en el volumen de ficheros generados de la instalación
 reinicios y actualizaciones: **no desaparece solo**. El comando termina
 recordándolo: bórralo en cuanto lo hayas entregado (§7).
 
-Variantes:
+Variantes (con la misma firma, `--responsible=… --responsible-confirm=…`):
 
 ```bash
 # Una sola persona (el UUID sale del panel o de la §4)
-… php artisan compliance:legal-export --from=2026-01-01 --to=2026-01-31 --employee=0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90
+… php artisan compliance:legal-export --from=2026-01-01 --to=2026-01-31 --employee=0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90 --responsible=rrhh@hotel.es --responsible-confirm=rrhh@hotel.es
 
 # A una ruta concreta, por ejemplo un directorio compartido
-… php artisan compliance:legal-export --from=2026-01-01 --to=2026-01-31 --output=/var/backups/fichaje/requerimiento-2026-02.csv
+… php artisan compliance:legal-export --from=2026-01-01 --to=2026-01-31 --output=/var/backups/fichaje/requerimiento-2026-02.csv --responsible=rrhh@hotel.es --responsible-confirm=rrhh@hotel.es
 ```
 
 > **Con `--output` dentro de `BACKUP_PATH`**, el fichero queda en la carpeta de
@@ -230,9 +246,12 @@ lleva: la lista de personas exportadas ni el contenido del fichero. `audit_log`
 se conserva cuatro años y no puede acabar siendo una segunda copia del registro
 horario (regla dura 21, minimización del RGPD).
 
-Desde consola el actor es `system`: no hay sesión detrás. Es la verdad —lo lanzó
-alguien con acceso al servidor— y se cruza con el registro de acceso de la
-máquina. Desde el panel el actor es la cuenta que descargó.
+Desde el panel el actor es la cuenta que descargó. Desde consola, desde la 2.3.0,
+es la cuenta de `--responsible`: la orden la enseñó y quien la lanzó confirmó
+que era ella (o la confirmó con `--responsible-confirm`), y se volvió a
+comprobar justo antes del asiento. Hasta la 2.2.1 era `system`. Lo que la consola
+no puede probar es que quien tecleó sea de verdad esa persona: eso se cruza con
+el registro de acceso a la máquina.
 
 La métrica `legal_exports_total{scope}` sube en los dos casos
 (`BACKUP_PATH/metrics/kronoqr_legal_exports.prom`). Una instalación que empieza a
@@ -328,8 +347,9 @@ abortada a medias — nunca toca la copia de este apartado.
 | `El campo «from» … no es una fecha en forma YYYY-MM-DD` | Fecha en formato español o con hora | `2026-01-01`, sin hora. El periodo es por fecha de jornada |
 | `El periodo … termina antes de empezar` | `--from` y `--to` cambiados | Corrígelos. **El sistema no los da la vuelta solo**: el fichero llevaría escrito un periodo que nadie pidió |
 | El comando termina sin fichero y con un error de escritura | Ruta de `--output` inexistente o sin permisos | Usa la ruta por defecto y saca el fichero con `docker compose cp` |
-| El comando falla en el asiento de auditoría | `audit_log` sin partición del año, o permisos | La exportación **no se da por hecha**: es lo correcto. Ve a [`rotura-cadena-auditoria.md`](rotura-cadena-auditoria.md) §5 |
+| El comando falla en el asiento de auditoría | `audit_log` sin partición del año, o permisos | La exportación **no se da por hecha** y no deja fichero: es lo correcto. Ve a [`rotura-cadena-auditoria.md`](rotura-cadena-auditoria.md) §5 |
 | El panel devuelve 403 | El rol no es `rrhh`, `auditor` ni `admin`, o el token no tiene ámbito | Usa una cuenta de RRHH, o la vía de consola de la §1 |
+| La consola sale con `2` y dice que la cuenta no existe, está dada de baja o no tiene el rol | No queda ninguna cuenta activa `admin`, `rrhh` o `auditor` con ese correo | `docker compose exec app php artisan identity:list-users` para ver las que hay; si no queda ninguna que pueda firmar, `identity:create-user --role=rrhh` ([`../cliente/operacion.md`](../cliente/operacion.md) §9) y vuelve a lanzar la §1 con su correo |
 | Tarda más de unos minutos | Periodo muy largo sobre una instalación grande | Déjalo terminar: escribe en streaming y no carga el periodo en memoria. Si hay plazo, parte el periodo por meses |
 
 **Escalado:** si a los 30 minutos no hay fichero, avisa al responsable de la

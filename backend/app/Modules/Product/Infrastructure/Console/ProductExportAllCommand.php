@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Product\Infrastructure\Console;
 
 use App\Modules\Product\Application\Command\RequestDataExportCommand;
+use App\Modules\Product\Application\Exception\DataExportSignerNotAllowed;
+use App\Modules\Product\Application\Support\DataExportSigners;
 use App\Modules\Product\Application\UseCase\GenerateDataExportHandler;
 use App\Modules\Product\Application\UseCase\PurgeExpiredDataExportsHandler;
 use App\Modules\Product\Application\UseCase\RequestDataExportHandler;
@@ -12,7 +14,10 @@ use App\Modules\Product\Application\UseCase\SweepExpiredDiagnosticsBundles;
 use App\Modules\Product\Domain\Exception\DataExportAlreadyInProgress;
 use App\Modules\Product\Domain\Model\DataExport;
 use App\Modules\Product\Domain\ValueObject\DataExportOrigin;
+use App\Modules\Shared\Application\Port\ResponsibleAccounts;
 use App\Modules\Shared\Domain\Support\UtcInstant;
+use App\Modules\Shared\Domain\ValueObject\ResponsibleAccount;
+use App\Modules\Shared\Infrastructure\Console\ConsoleResponsible;
 use App\Modules\Shared\Infrastructure\Console\SpeaksInstallationLanguage;
 use App\Modules\Shared\Infrastructure\Format\ByteSize;
 use Illuminate\Console\Command;
@@ -39,13 +44,23 @@ use Throwable;
  * Quien esta delante de la terminal quiere ver la ruta del fichero antes de
  * irse, y aqui no hay ningun tiempo de espera de HTTP que agotar.
  *
- * ## Registra su fila igual que el panel
+ * ## Registra su fila igual que el panel, firmada por quien la pide
  *
- * Con `requested_via = console` y sin usuario: ahi no hay sesion que atribuir. La
- * exportacion aparece en la lista del panel y se puede descargar desde el, y
- * deja sus tres asientos en `audit_log` como cualquier otra. Un fichero con
- * todos los datos personales de la plantilla no se genera sin dejar rastro por
- * el hecho de generarse por SSH (RS-05).
+ * Con `requested_via = console` y, desde la 2.3.0, a nombre de la cuenta `admin`
+ * de `--responsible` (doc 01 §7.2, «Firmas por consola»): la orden enseña la
+ * cuenta (`Firma: nombre <correo> · rol · uuid`) y la persona confirma que es
+ * ella —con `--force` o sin terminal, con `--responsible-confirm=<correo>`—, asi
+ * que la fila y sus asientos la nombran, como cuando se pide desde el panel.
+ * Firma quien puede pedirla desde el panel: solo `admin` (`DataExportSigners`).
+ * La exportacion aparece en la lista del panel y se puede descargar desde el, y
+ * deja sus asientos en `audit_log` como cualquier otra. Un fichero con todos
+ * los datos personales de la plantilla no se genera sin dejar rastro por el
+ * hecho de generarse por SSH (RS-05). El caso de uso vuelve a comprobar la
+ * cuenta con la cadena tomada: una baja entre la pregunta y la firma no pide
+ * nada.
+ *
+ * Un `cron` del cliente que la automatice la firma igual, sin terminal:
+ * `--responsible=<correo> --responsible-confirm=<correo>`.
  *
  * ## `--purge` no genera nada
  *
@@ -54,7 +69,8 @@ use Throwable;
  * ZIP o el `.work-<uuid>/` que ninguna fila viva nombra se borra al superar su
  * edad minima. Todo dentro de `PRODUCT_DATA_EXPORT_PATH` y por patron exacto de
  * nombre. Es lo que el planificador ejecuta cada hora; a mano sirve para hacer
- * sitio en el disco sin esperar.
+ * sitio en el disco sin esperar. **No lleva firma**: no exporta nada, y la
+ * pasada horaria no tiene a nadie detras.
  *
  * En la misma pasada barre los paquetes de diagnostico de mas de
  * `PRODUCT_DIAGNOSTICS_RETENTION_DAYS` dias (ADR-045 §g, condicion C4): es la pasada
@@ -66,8 +82,11 @@ use Throwable;
  * | Codigo | Significado |
  * |---|---|
  * | `0` | La exportacion se genero, o la purga termino. |
- * | `1` | No se pudo generar. El mensaje dice que fallo y la fila queda en `failed`. |
- * | `2` | Ya hay una exportacion en curso. Espera a que termine. |
+ * | `1` | No se pudo generar —el mensaje dice que fallo y la fila queda en `failed`—, o la persona responde que no a la firma. |
+ * | `2` | Ya hay una exportacion en curso; o falta `--responsible`, la cuenta no es `admin` activa (al preguntar o al firmar), o falta o no cuadra `--responsible-confirm`. |
+ *
+ * Con la firma rechazada (`1` por el «no», o `2`) no se ha pedido nada: ni fila
+ * ni asiento.
  *
  * ## Funciona con la licencia caducada, ausente o ilegible (regla dura 15)
  *
@@ -81,7 +100,10 @@ final class ProductExportAllCommand extends Command
     private const string TEXTS = 'console.product_export_all';
 
     protected $signature = 'product:export-all
-        {--purge : No genera nada: borra los ficheros caducados, marca sus filas y concilia fila y fichero}';
+        {--purge : No genera nada: borra los ficheros caducados, marca sus filas y concilia fila y fichero}
+        {--responsible= : Uuid o correo de la cuenta admin que pide la exportacion y la firma. Obligatorio salvo con --purge}
+        {--force : No preguntar por la firma; exige --responsible-confirm}
+        {--responsible-confirm= : Correo de la cuenta de --responsible. Obligatorio con --force o sin terminal}';
 
     protected $description = 'Exporta TODOS los datos de la instalacion a un ZIP con un CSV por tabla, o purga los caducados';
 
@@ -90,16 +112,29 @@ final class ProductExportAllCommand extends Command
         GenerateDataExportHandler $generate,
         PurgeExpiredDataExportsHandler $purge,
         SweepExpiredDiagnosticsBundles $diagnostics,
+        ResponsibleAccounts $accounts,
     ): int {
         if ($this->option('purge') === true) {
             return $this->purge($purge, $diagnostics);
         }
 
+        $responsible = $this->signedBy($accounts);
+
+        if (\is_int($responsible)) {
+            return $responsible;
+        }
+
         try {
             $requested = $request->handle(new RequestDataExportCommand(
                 requestedVia: DataExportOrigin::Console,
-                requestedByUserId: null,
+                // La cuenta que ha confirmado su firma: la fila y sus asientos
+                // son suyos, como cuando se pide desde el panel.
+                requestedByUserId: $responsible->id,
             ));
+        } catch (DataExportSignerNotAllowed) {
+            // La cuenta se dio de baja o perdio el rol entre la pregunta y la
+            // firma: no se ha pedido ni escrito nada.
+            return ConsoleResponsible::noLongerAllowed($this);
         } catch (DataExportAlreadyInProgress $conflict) {
             $this->paragraph('in_progress', ['uuid' => $conflict->current->uuid ?? $this->text('unidentified')]);
 
@@ -120,6 +155,19 @@ final class ProductExportAllCommand extends Command
         }
 
         return $this->report($export);
+    }
+
+    /**
+     * La cuenta `admin` que firma la exportacion, o el codigo de salida con el
+     * motivo ya escrito: `2` si falta `--responsible`, la cuenta no puede
+     * firmar o falta o no cuadra `--responsible-confirm`; `1` si la persona
+     * responde que no. En ningun caso se ha pedido ni escrito nada.
+     */
+    private function signedBy(ResponsibleAccounts $accounts): ResponsibleAccount|int
+    {
+        // Los roles que la piden desde el panel (`DataExportPolicy`): la
+        // consola no es la via por la que alguien hace lo que el panel le niega.
+        return ConsoleResponsible::sign($this, $this->input, $accounts, DataExportSigners::ROLES, $this->text('confirm'));
     }
 
     private function report(DataExport $export): int
