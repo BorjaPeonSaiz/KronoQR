@@ -18,5 +18,12 @@ final readonly class RevokeCredentialCommand
         public string $credentialUuid,
         public string $reason,
         public ?int $actorUserId = null,
+        /**
+         * Si `actorUserId` es la cuenta que firma por consola (`--responsible`,
+         * doc 01 §7.2): el caso de uso la vuelve a comprobar con la cadena
+         * tomada, y sin ella no revoca. Por el panel el actor es la sesion, que
+         * ya autorizo `CredentialPolicy`.
+         */
+        public bool $signedAtConsole = false,
     ) {}
 }

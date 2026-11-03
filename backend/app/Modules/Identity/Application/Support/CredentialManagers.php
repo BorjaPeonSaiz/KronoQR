@@ -11,9 +11,9 @@ use App\Modules\Shared\Domain\ValueObject\UserRole;
  * `{admin, rrhh}` (RF-QR-04, RF-QR-06).
  *
  * Una sola lista para los tres caminos —`CredentialPolicy` en el panel,
- * `credentials:deliver` en la consola y la comprobacion de `DeliverCredential`
- * con la cadena tomada—, de modo que la consola nunca permita lo que la API
- * niega (doc 01 §7.2).
+ * `credentials:deliver` y `credentials:revoke` en la consola y la comprobacion
+ * de `DeliverCredential` y `RevokeCredential` con la cadena tomada—, de modo
+ * que la consola nunca permita lo que la API niega (doc 01 §7.2).
  */
 final class CredentialManagers
 {
