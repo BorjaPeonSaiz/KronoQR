@@ -1198,6 +1198,13 @@ historia completa de una ausencia se puede reconstruir sin abrir la pantalla.
 Una carga por fichero deja **un asiento por cada ausencia registrada**, no uno
 de resumen: cien ausencias importadas son cien anotaciones.
 
+**Abrir una baja médica también queda anotado.** Mirar el listado deja una
+anotación con el mes y los filtros. Abrir el detalle de una baja médica deja
+otra propia, con la persona y la ausencia, aunque hoy sea de otro tipo pero
+alguna de sus versiones fuera una baja. Así se puede contestar a quien pregunte
+quién ha visto su baja. La anotación dice si salió la nota, nunca lo que decía.
+Abrir unas vacaciones o un permiso no deja anotación propia.
+
 **La nota nunca entra en el asiento.** Puede llevar información sobre la salud
 de una persona, y la anotación no la necesita para explicar qué pasó: le basta
 el tipo, las fechas, quién y cuándo. Por el mismo motivo, ni el tipo ni la nota

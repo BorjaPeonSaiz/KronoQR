@@ -1761,6 +1761,9 @@ anotadas.** Nada de esto impide fichar:
   estado del PIN de su plantilla.
 - **Abrir la presencia en directo y la lista de cuentas de gestión deja
   asiento** en la auditoría, como ya lo dejaba la vista de presencia.
+- **Abrir el detalle de una baja médica deja asiento** con la persona y la
+  ausencia (conjunto `sick_leave_detail`). Mirar el listado ya lo dejaba; abrir
+  unas vacaciones o un permiso, no. La guía de RRHH lo explica en su §5 bis.6.
 - **El paquete de diagnóstico pasa a la versión 2 del formato** (§12.2): un
   paquete anterior se comprueba con la regla de su versión. **La huella del PDF
   del registro propio del portal también cambia de versión**: no compares una

@@ -239,7 +239,8 @@ UUID='<employee_uuid de la persona>'   # se ve en su ficha del panel
 #    por correo), weekly_summary SOLO cuando el alcance tenía 50 personas o
 #    menos (por encima no nombra: ver b), la exportación legal por empleado,
 #    la búsqueda de la persona de esa exportación (legal_export_employee_search,
-#    las como mucho 10 personas que devolvió) y las denegaciones sobre su ficha.
+#    las como mucho 10 personas que devolvió), el detalle de una baja médica
+#    (sick_leave_detail, desde la 2.3.0) y las denegaciones sobre su ficha.
 docker compose --env-file .env exec -T postgres \
   psql -U fichaje_app -d fichaje -c "
   SELECT occurred_at, action, actor_type, actor_id,
@@ -300,6 +301,7 @@ centro: si el padrón se descargó, esa persona estaba dentro.
 | `management_accounts` | Listado de las cuentas de gestión: nombre, correo y rol de quien entra al panel (desde la 2.3.0) | No (recuento, filtros y si hubo búsqueda; nunca el término) |
 | `compliance_summary` | Vista de cumplimiento: quién incumplió y en qué | No (recuento, rango, filtros y alcance) |
 | `absence_register` | Listado de ausencias: quién falta y **por qué categoría** | Solo si se filtró por una persona: `employee_uuid` |
+| `sick_leave_detail` | **Detalle de una baja médica** (desde la 2.3.0): la ausencia, sus versiones anteriores y, para `rrhh` y `admin`, la nota. Es dato de salud del art. 9. Lo deja también una ausencia que hoy es de otro tipo si alguna de sus versiones fue una baja | **Sí**: `employee_uuid` y `absence_uuid`, con `versions` (cuántas versiones salieron) y `has_note` (si salió la nota, nunca lo que decía) |
 | `incident` | Una incidencia concreta al resolverla | Según el asiento |
 
 **Sobre `absence_register`, que puede llevar dato de salud.** Lo que se divulga

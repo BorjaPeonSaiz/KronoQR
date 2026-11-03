@@ -1224,6 +1224,13 @@ history of an absence can be reconstructed without opening the screen.
 A file load leaves **one entry per absence registered**, not a summary one: a
 hundred imported absences are a hundred log entries.
 
+**Opening a sick leave is logged too.** Looking at the list leaves an entry with
+the month and the filters. Opening the detail of a sick leave leaves its own
+entry, with the person and the absence, even if it is now another type but one
+of its versions was a sick leave. That way you can answer anyone who asks who
+has seen their sick leave. The entry says whether the note was shown, never
+what it said. Opening a holiday or time off leaves no entry of its own.
+
 **The note never goes into the entry.** It may carry information about a
 person's health, and the entry does not need it to explain what happened: the
 type, the dates, who and when are enough. For the same reason, neither the type
