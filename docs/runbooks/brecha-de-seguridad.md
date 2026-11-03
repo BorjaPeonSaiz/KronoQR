@@ -478,9 +478,12 @@ docker compose --env-file .env exec -T app \
   php artisan identity:2fa-reset <users.uuid> --reason='<motivo>'
 
 # Revocar la tarjeta comprometida de una persona. Deja `credential.revoked`
-# con el motivo; la reemisión posterior deja `credential.reissued`.
+# con el motivo, firmado por la cuenta admin o rrhh de --responsible (desde la
+# 2.3.0; con -T, confirmada con el mismo correo); la reemisión posterior deja
+# `credential.reissued`.
 docker compose --env-file .env exec -T app \
-  php artisan credentials:revoke <uuid de la credencial> --reason='<motivo>'
+  php artisan credentials:revoke <uuid de la credencial> --reason='<motivo>' \
+  --responsible=<tu correo> --responsible-confirm=<tu correo>
 
 # Qué más hay disponible en TU versión, por módulo. Compruébalo antes de
 # teclear nada a las 03:00: este runbook no sustituye a `--help`.

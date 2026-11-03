@@ -1518,8 +1518,10 @@ their uuid; since 2.3.0 the account number is not accepted). The command shows
 who signs and asks; if you run it without a terminal, confirm with
 `--responsible-confirm=<the same e-mail>`. The other console commands that
 leave a signed audit entry —the site time zone correction, the reconciliation
-reviews and the delivery of a card— follow the same rule; the diagnostics
-bundle with personal data is signed only by an admin account.
+reviews and the delivery and revocation of a card— follow the same rule; the
+export for the Labour Inspectorate can also be signed by an auditor account,
+and the diagnostics bundle with personal data and the full export only by an
+admin account.
 
 ### …I need to know who changed a threshold and when
 

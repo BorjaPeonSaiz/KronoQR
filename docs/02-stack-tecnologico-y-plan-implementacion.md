@@ -1895,14 +1895,14 @@ php artisan reporting:weekly-summary [--week=AAAA-Www]   # Resumen semanal por c
 php artisan qa:traceability                     # Matriz requisito → pruebas (RQ-13)
 php artisan qa:traceability --check             # Falla si un requisito implementado no tiene prueba
 php artisan docs:consistency --check             # Falla si los documentos que mandan divergen (RQ-12, RNF-M-04)
-php artisan compliance:legal-export --from= --to= --employee=
+php artisan compliance:legal-export --from= --to= --employee= --responsible=<correo|uuid>   # Firmada por una cuenta admin, rrhh o auditor (doc 01 §7.2)
 
 # Credenciales
 php artisan credentials:issue {employee}         # Emite y deja pendiente de imprimir
 php artisan credentials:print {employee}         # PDF en formato tarjeta
 php artisan credentials:print-batch --site= --pending   # Impresión masiva en A4
 php artisan credentials:deliver {credential} --responsible=<correo|uuid>   # Registra la entrega, firmada por una cuenta admin o rrhh (doc 01 §7.2)
-php artisan credentials:revoke {credential} --reason=
+php artisan credentials:revoke {credential} --reason= --responsible=<correo|uuid>   # Firmada por una cuenta admin o rrhh (doc 01 §7.2)
 php artisan credentials:rotate-key               # Rotación con solape (--dry-run para informar sin escribir)
 php artisan credentials:retire-key {key_id}      # Cierra el solape. Se niega si queda alguna tarjeta viva
 php artisan credentials:status --pending         # Quién no puede fichar todavía
@@ -1927,8 +1927,8 @@ php artisan product:errors:prune                 # Purga a 90 días, en el sched
 php artisan product:diagnostics [--anonymized]   # Paquete de diagnóstico (RF-PD-09); anonimizado por defecto
 php artisan product:diagnostics --with-personal-data --period-days=7 --responsible=<correo|uuid>   # Acción distinta y auditada (RL-19), firmada por una cuenta admin
 php artisan product:diagnostics --verify=RUTA    # Recalcula la huella de un paquete recibido
-php artisan product:export-all                   # Exportación íntegra (RF-PD-14, RL-20): ZIP con CSV por tabla, JSON, manifest y README. Registra su fila; funciona sin licencia
-php artisan product:export-all --purge           # Borra los ZIP caducados y marca sus filas (nunca las borra). En el planificador, cada hora
+php artisan product:export-all --responsible=<correo|uuid>   # Exportación íntegra (RF-PD-14, RL-20): ZIP con CSV por tabla, JSON, manifest y README. Registra su fila, firmada por una cuenta admin (doc 01 §7.2); funciona sin licencia
+php artisan product:export-all --purge           # Borra los ZIP caducados y marca sus filas (nunca las borra). En el planificador, cada hora. Sin firma
 php artisan product:telemetry [--send] [--json]  # Imprime el informe de telemetría que SE ENVIARÍA (RF-PD-12); --send lo envía si está activada. Semanal en el planificador
 php artisan license:show / license:activate {key}
 php artisan support:grant --hours=24 --reason= [--scope=diagnostics|read_only|configuration]   # Acceso de soporte auditado (RF-PD-11); el token sale UNA vez
