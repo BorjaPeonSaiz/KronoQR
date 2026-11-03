@@ -13,6 +13,7 @@ use Tests\Feature\Quality\Support\Commands;
 use Tests\Support\Database\RefreshDatabase;
 use Tests\Support\Factory\ClockingPolicyFactory;
 use Tests\Support\Http\Api;
+use Tests\Support\Identity\ConsoleSignature;
 use Tests\Support\Identity\ManagementUsers;
 use Tests\Support\Shared\GeneratedFilesSandbox;
 use Tests\Support\Time\FrozenTime;
@@ -83,6 +84,7 @@ it('la exportacion de consola termina diciendo que se borre en cuanto se entregu
 
     [$codigo, $salida] = Commands::run(
         'compliance:legal-export --from=2026-03-01 --to=2026-03-31 --output='.$destino
+        .' '.ConsoleSignature::inline(ManagementUsers::withRole(UserRole::RRHH))
     );
 
     expect($codigo)->toBe(0)
@@ -97,7 +99,10 @@ it('la exportacion legal nace con directorio 0700 y fichero 0600, como todo el v
     $directorio = GeneratedFilesSandbox::directory('legal-modo').'/nuevo';
     $destino = $directorio.'/registro-horario-2026-03-01_2026-03-31.csv';
 
-    [$codigo] = Commands::run('compliance:legal-export --from=2026-03-01 --to=2026-03-31 --output='.$destino);
+    [$codigo] = Commands::run(
+        'compliance:legal-export --from=2026-03-01 --to=2026-03-31 --output='.$destino
+        .' '.ConsoleSignature::inline(ManagementUsers::withRole(UserRole::RRHH))
+    );
 
     clearstatcache();
 

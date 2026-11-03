@@ -8,6 +8,7 @@ use App\Modules\Compliance\Application\Command\RecordAuditEntryCommand;
 use App\Modules\Compliance\Application\Port\LegalExportAudit;
 use App\Modules\Compliance\Application\UseCase\RecordAuditEntry;
 use App\Modules\Compliance\Domain\ValueObject\AuditAction;
+use App\Modules\Compliance\Domain\ValueObject\AuditActor;
 use App\Modules\Compliance\Domain\ValueObject\AuditPayload;
 use App\Modules\Compliance\Domain\ValueObject\AuditSubject;
 use App\Modules\Compliance\Domain\ValueObject\LegalExportManifest;
@@ -38,9 +39,10 @@ use App\Modules\Compliance\Infrastructure\Audit\CurrentAuditContext;
  * ## El actor sale de la peticion, no de quien llama
  *
  * Mismo motivo que en {@see AuditedPersonalDataAccessLog}: quien exporta no
- * puede declarar quien es. Desde el comando de consola no hay sesion y
- * {@see CurrentAuditContext} devuelve `system()`, que es la verdad —lo lanzo
- * alguien con acceso al servidor— y no «usuario desconocido».
+ * puede declarar quien es. Desde la 2.3.0 la consola es la excepcion: firma la
+ * cuenta de `--responsible`, que la orden enseña, la persona confirma y el caso
+ * de uso vuelve a comprobar con la cadena tomada (doc 01 §7.2, «Firmas por
+ * consola»). Hasta la 2.2.1 aqui no habia sesion y el asiento era de `system`.
  *
  * ## Corre dentro de la transaccion de la exportacion
  *
@@ -56,10 +58,10 @@ final readonly class AuditedLegalExportGeneration implements LegalExportAudit
         private CurrentAuditContext $context,
     ) {}
 
-    public function recordGeneration(LegalExportManifest $manifest, LegalExportTally $tally): void
+    public function recordGeneration(LegalExportManifest $manifest, LegalExportTally $tally, ?int $signedByUserId = null): void
     {
         $this->audit->handle(new RecordAuditEntryCommand(
-            actor: $this->context->actor(),
+            actor: $signedByUserId === null ? $this->context->actor() : AuditActor::user($signedByUserId),
             action: AuditAction::LegalExportGenerated,
             // El sujeto es la exportacion en si. No lleva identificador porque
             // el fichero no es una fila de ninguna tabla: lo que lo describe es

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Compliance\Http\Policy;
 
+use App\Modules\Compliance\Application\Support\LegalExporters;
 use App\Modules\Shared\Application\Port\ManagementActor;
 use App\Modules\Shared\Domain\ValueObject\UserRole;
 
@@ -56,7 +57,8 @@ final class LegalExportPolicy
      */
     private static function exporters(): array
     {
-        return [UserRole::ADMIN, UserRole::RRHH, UserRole::AUDITOR];
+        // La misma lista que firma `compliance:legal-export` en la consola.
+        return LegalExporters::ROLES;
     }
 
     /**
