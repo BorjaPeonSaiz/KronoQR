@@ -20,6 +20,10 @@ const BACKEND_MODULES = resolve(process.cwd(), '../backend/app/Modules')
 const SCREEN_BY_DATASET: Readonly<Record<string, { file: string; marker: string }>> = {
   employee_directory: { file: 'employees/EmployeeListView.vue', marker: '<AuditNotice' },
   absence_register: { file: 'absences/AbsenceListView.vue', marker: '<AuditNotice' },
+  // El detalle de una baja medica se abre desde la misma pantalla, que ya avisa.
+  sick_leave_detail: { file: 'absences/AbsenceListView.vue', marker: '<AuditNotice' },
+  // Y la carga por fichero, cuyo dialogo se abre tambien desde ahi.
+  sick_leave_import_match: { file: 'absences/AbsenceListView.vue', marker: '<AuditNotice' },
   live_presence: { file: 'live/LivePresenceView.vue', marker: '<AuditNotice' },
   live_presence_stream: { file: 'live/LivePresenceView.vue', marker: '<AuditNotice' },
   incident_board: { file: 'incidents/IncidentsView.vue', marker: '<AuditNotice' },
@@ -55,14 +59,15 @@ function phpFiles(directory: string): string[] {
   })
 }
 
-/** Los conjuntos de datos de lectura que declara el backend (`const string DATASET` y `ReportDataset`). */
+/** Los conjuntos de datos de lectura que declara el backend (`const string …DATASET` y `ReportDataset`). */
 function backendDatasets(): string[] {
   const found = new Set<string>()
 
   for (const path of phpFiles(BACKEND_MODULES)) {
     const source = readFileSync(path, 'utf8')
 
-    for (const match of source.matchAll(/const string DATASET = '([a-z_]+)'/g)) {
+    // Tambien con prefijo (`SICK_LEAVE_DETAIL_DATASET`), cuando una consulta divulga dos conjuntos.
+    for (const match of source.matchAll(/const string (?:[A-Z0-9]+_)*DATASET = '([a-z_]+)'/g)) {
       found.add(match[1] ?? '')
     }
 

@@ -59,9 +59,12 @@ function conjuntosDivulgadosPorElCodigo(): array
     foreach (ModuleTree::filesIn('') as $file) {
         $source = (string) file_get_contents($file);
 
-        // a) `private const string DATASET = 'x';`
-        if (preg_match('/const\s+string\s+DATASET\s*=\s*\'([a-z0-9_]+)\'/', $source, $match) === 1) {
-            $datasets[] = $match[1];
+        // a) `private const string DATASET = 'x';`, y las que llevan prefijo
+        //    (`SICK_LEAVE_DETAIL_DATASET`) cuando un caso de uso divulga dos.
+        if (preg_match_all('/const\s+string\s+(?:[A-Z0-9]+_)*DATASET\s*=\s*\'([a-z0-9_]+)\'/', $source, $constants) > 0) {
+            foreach ($constants[1] as $constant) {
+                $datasets[] = $constant;
+            }
         }
 
         // b) `->recordDisclosure('x', …)` con el nombre escrito en el sitio.
@@ -123,8 +126,13 @@ it('los incluye tambien en la consulta que acota el alcance por bloque', functio
      *
      * `legal_export_employee_search` (RF-IN-05) es nominal sin corte: devuelve
      * como mucho diez personas y su asiento las enumera siempre, todas.
+     *
+     * `sick_leave_detail` (enmienda de ADR-037 del 03-11-2026) es el detalle de
+     * una baja medica: una persona, siempre con su `employee_uuid`.
+     * `sick_leave_import_match`, de la misma enmienda, enumera siempre las
+     * personas cuya baja confirmo la comprobacion de una carga.
      */
-    $nominales = ['employee_workdays', 'incident_digest', 'incident', 'legal_export_employee_search'];
+    $nominales = ['employee_workdays', 'incident_digest', 'incident', 'legal_export_employee_search', 'sick_leave_detail', 'sick_leave_import_match'];
 
     /*
      * Y los NOMINALES ACOTADOS, que son otra cosa y estan en las dos listas.

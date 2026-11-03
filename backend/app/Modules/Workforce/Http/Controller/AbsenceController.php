@@ -127,10 +127,14 @@ final class AbsenceController extends Controller
 
         $this->ensureWithinScope($request, $scope, $view);
 
+        $withNote = Gate::allows('viewNote', Absence::class);
+
+        // Despues del alcance: el detalle de una baja medica deja su asiento
+        // al leer el historial (ADR-037, enmienda del 03-11-2026).
         return (new AbsenceDetailResource(
             $view,
-            $queries->historyOf($uuid),
-            Gate::allows('viewNote', Absence::class),
+            $queries->historyForDetail($view, $withNote),
+            $withNote,
         ))->response();
     }
 

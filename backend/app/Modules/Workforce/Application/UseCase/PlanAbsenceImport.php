@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Workforce\Application\UseCase;
 
+use App\Modules\Shared\Application\Port\PersonalDataAccessLog;
 use App\Modules\Shared\Application\Support\UseCaseInstrumentation;
 use App\Modules\Workforce\Application\Port\AbsenceRepository;
 use App\Modules\Workforce\Application\Port\EmployeeImportDirectory;
@@ -52,9 +53,22 @@ use DateTimeImmutable;
  * 3. **Dos lineas del mismo fichero que se pisan: se rechaza la segunda.** No la
  *    primera: aplicar las dos dejaria el resultado a merced del orden de las
  *    filas.
+ *
+ * ## Por que la comprobacion deja asiento si confirma una baja medica
+ *
+ * Una linea `unchanged` confirma el tipo y las fechas exactas de una ausencia
+ * guardada, con su `uuid`, y una `overlapping_absence` confirma que hay algo en
+ * esas fechas. Sin asiento, cargar en modo comprobacion un fichero con el codigo
+ * de una persona y todas las combinaciones de fechas responde «cuando estuvo de
+ * baja» sin que `audit_log` lo diga (enmienda de ADR-037 del 03-11-2026). Si la
+ * ausencia que casa es una baja medica, la persona entra en el asiento
+ * `sick_leave_import_match`, que es nominal como `sick_leave_detail`.
  */
 final readonly class PlanAbsenceImport
 {
+    /** Las personas cuya baja medica guardada confirmo el informe de la carga. */
+    private const string SICK_LEAVE_IMPORT_MATCH_DATASET = 'sick_leave_import_match';
+
     private const string FIELD_EMPLOYEE_CODE = 'employee_code';
 
     private const string FIELD_TYPE = 'type';
@@ -68,6 +82,7 @@ final readonly class PlanAbsenceImport
         private EmployeeImportDirectory $directory,
         private AbsenceRepository $absences,
         private EmployeeRepository $employees,
+        private PersonalDataAccessLog $disclosures,
     ) {}
 
     /**
@@ -98,9 +113,16 @@ final readonly class PlanAbsenceImport
         /** @var array<string, list<Absence>> $plannedByEmployee */
         $plannedByEmployee = [];
 
+        // Las personas con una baja medica guardada que el informe confirma,
+        // como clave para no repetirlas.
+        /** @var array<string, true> $sickLeaveMatches */
+        $sickLeaveMatches = [];
+
         foreach ($this->source->rows($path, $maxRows) as $line => $raw) {
-            $rows[] = $this->planRow($line, $this->normalise($raw, $map), $plannedByEmployee);
+            $rows[] = $this->planRow($line, $this->normalise($raw, $map), $plannedByEmployee, $sickLeaveMatches);
         }
+
+        $this->recordSickLeaveMatches($checksum, $sickLeaveMatches);
 
         return AbsenceImportReport::of($checksum, $rows, $this->source->wasTruncated(), $warnings);
     }
@@ -155,8 +177,9 @@ final readonly class PlanAbsenceImport
     /**
      * @param  array<string, string>  $fields
      * @param  array<string, list<Absence>>  $plannedByEmployee
+     * @param  array<string, true>  $sickLeaveMatches
      */
-    private function planRow(int $line, array $fields, array &$plannedByEmployee): AbsenceImportRow
+    private function planRow(int $line, array $fields, array &$plannedByEmployee, array &$sickLeaveMatches): AbsenceImportRow
     {
         $imported = new ImportedAbsence(
             employeeCode: $fields[self::FIELD_EMPLOYEE_CODE] ?? '',
@@ -185,7 +208,7 @@ final readonly class PlanAbsenceImport
             ]);
         }
 
-        return $this->planAgainstWhatExists($line, $label, $imported, $employeeUuid, $plannedByEmployee);
+        return $this->planAgainstWhatExists($line, $label, $imported, $employeeUuid, $plannedByEmployee, $sickLeaveMatches);
     }
 
     /**
@@ -197,6 +220,7 @@ final readonly class PlanAbsenceImport
      * de {@see self::planRow()} pasaban del maximo.
      *
      * @param  array<string, list<Absence>>  $plannedByEmployee
+     * @param  array<string, true>  $sickLeaveMatches
      */
     private function planAgainstWhatExists(
         int $line,
@@ -204,10 +228,17 @@ final readonly class PlanAbsenceImport
         ImportedAbsence $imported,
         string $employeeUuid,
         array &$plannedByEmployee,
+        array &$sickLeaveMatches,
     ): AbsenceImportRow {
         $candidate = $this->candidateFrom($imported, $employeeUuid);
 
         foreach ($this->absences->activeWithin($employeeUuid, $candidate->startsOn, $candidate->endsOn) as $existing) {
+            // Las dos salidas de abajo hablan de esta ausencia guardada: si es
+            // una baja medica, el informe la confirma.
+            if ($existing->type === AbsenceType::SickLeave) {
+                $sickLeaveMatches[$employeeUuid] = true;
+            }
+
             // IDENTICA no es solape: es una reimportacion, y reimportar el mismo
             // cuadrante tiene que ser seguro.
             if ($candidate->describesTheSameFactAs($existing)) {
@@ -258,6 +289,29 @@ final readonly class PlanAbsenceImport
      * en {@see ApplyAbsenceImport}, que pasa por `RegisterAbsenceHandler` y
      * genera uno v7. Este solo existe para que el modelo se pueda construir.
      */
+    /**
+     * El asiento de las bajas medicas que confirma el informe, antes de
+     * devolverlo: si `audit_log` falla, el informe no sale (regla dura 6). Los
+     * `uuid` de las personas y la huella del fichero, nunca un nombre ni las
+     * fechas (regla dura 21).
+     *
+     * @param  array<string, true>  $sickLeaveMatches
+     */
+    private function recordSickLeaveMatches(string $checksum, array $sickLeaveMatches): void
+    {
+        if ($sickLeaveMatches === []) {
+            return;
+        }
+
+        $employeeUuids = array_keys($sickLeaveMatches);
+        sort($employeeUuids);
+
+        $this->disclosures->recordDisclosure(self::SICK_LEAVE_IMPORT_MATCH_DATASET, \count($employeeUuids), [
+            'employee_uuids' => implode(',', $employeeUuids),
+            'file_sha256' => $checksum,
+        ]);
+    }
+
     private function candidateFrom(ImportedAbsence $imported, string $employeeUuid): Absence
     {
         return new Absence(

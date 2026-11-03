@@ -239,13 +239,18 @@ UUID='<employee_uuid de la persona>'   # se ve en su ficha del panel
 #    por correo), weekly_summary SOLO cuando el alcance tenía 50 personas o
 #    menos (por encima no nombra: ver b), la exportación legal por empleado,
 #    la búsqueda de la persona de esa exportación (legal_export_employee_search,
-#    las como mucho 10 personas que devolvió) y las denegaciones sobre su ficha.
+#    las como mucho 10 personas que devolvió), el detalle de una baja médica
+#    (sick_leave_detail, desde la 2.3.0), la comprobación de una carga que
+#    confirmó su baja (sick_leave_import_match), las denegaciones sobre su ficha y
+#    el alta, la corrección y la anulación de sus ausencias (absence.*), cuya
+#    respuesta devuelve la ausencia y su nota a quien la escribe.
 docker compose --env-file .env exec -T postgres \
   psql -U fichaje_app -d fichaje -c "
   SELECT occurred_at, action, actor_type, actor_id,
          payload->>'dataset' AS conjunto, ip, payload
     FROM audit_log
-   WHERE action IN ('personal_data.accessed','access.denied','legal_export.generated')
+   WHERE action IN ('personal_data.accessed','access.denied','legal_export.generated',
+                    'absence.registered','absence.corrected','absence.voided')
      AND (payload->>'employee_uuid' = '$UUID'
           OR payload->>'employee_uuids' LIKE '%$UUID%')
    ORDER BY occurred_at;"
@@ -300,7 +305,11 @@ centro: si el padrón se descargó, esa persona estaba dentro.
 | `management_accounts` | Listado de las cuentas de gestión: nombre, correo y rol de quien entra al panel (desde la 2.3.0) | No (recuento, filtros y si hubo búsqueda; nunca el término) |
 | `compliance_summary` | Vista de cumplimiento: quién incumplió y en qué | No (recuento, rango, filtros y alcance) |
 | `absence_register` | Listado de ausencias: quién falta y **por qué categoría** | Solo si se filtró por una persona: `employee_uuid` |
+| `sick_leave_detail` | **Detalle de una baja médica** (desde la 2.3.0): la ausencia, sus versiones anteriores y, para `rrhh` y `admin`, la nota. Es dato de salud del art. 9. Lo deja también una ausencia que hoy es de otro tipo si alguna de sus versiones fue una baja | **Sí**: `employee_uuid` y `absence_uuid`, con `versions` (cuántas versiones salieron) y `has_note` (si salió la nota, nunca lo que decía) |
+| `sick_leave_import_match` | **Comprobación o aplicación de una carga de ausencias** que confirmó una baja médica guardada (desde la 2.3.0): una línea igual a la baja confirma su tipo y sus fechas, y una que la pisa confirma que hay algo en esas fechas | **Sí**: `employee_uuids`, las personas cuya baja confirmó el informe, con `file_sha256`. Nunca las fechas |
 | `incident` | Una incidencia concreta al resolverla | Según el asiento |
+
+**«¿Quién ha visto la baja médica de esta persona?»** La consulta (a) da quién abrió su historial (`sick_leave_detail`), quién la confirmó con una carga (`sick_leave_import_match`) y quién la registró, corrigió o anuló (`absence.*`). El listado también enseña el tipo y, a `rrhh` y `admin`, la nota, y su asiento (`absence_register`) solo nombra a la persona si se filtró por ella: los listados que la contenían salen de la consulta (b), por ventana y alcance.
 
 **Sobre `absence_register`, que puede llevar dato de salud.** Lo que se divulga
 es una lista de personas con una categoría de ausencia al lado, y una de esas
