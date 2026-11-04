@@ -1301,8 +1301,12 @@ for one person open their record from their name.
 
 ![Labour Inspectorate export screen](../img/en/rrhh-13-exportacion-legal.png)
 
-You choose the dates and, if the requirement names a person, that person. Left
-blank, the whole workforce comes out. What the file contains:
+You choose the dates and the scope: the **whole workforce** or, if the
+requirement names a person, **one person**. For the whole workforce or more
+than a month, the export **is generated in the background**, as in the
+screenshot: the screen shows how far it has got, you can cancel it and, when it
+finishes, it offers **"Download"** (§6.3). One person over a period of up to a
+month is downloaded at once. What the file contains:
 
 - One row per **entry**, with clock-in, clock-out, duration and the working
   day's total. A night shift is a single entry, on the working day it started

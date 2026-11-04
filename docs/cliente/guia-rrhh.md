@@ -1276,8 +1276,12 @@ para el caso de una persona entra por su nombre a su registro.
 
 ![Pantalla de exportación para la Inspección](img/es/rrhh-13-exportacion-legal.png)
 
-Se eligen las fechas y, si el requerimiento nombra a una persona, esa persona.
-En blanco, sale la plantilla completa. Qué contiene el fichero:
+Se eligen las fechas y el alcance: **toda la plantilla** o, si el requerimiento
+nombra a una persona, **una persona**. Con toda la plantilla o con más de un
+mes, la exportación **se genera en segundo plano**, como en la captura: la
+pantalla enseña por dónde va, se puede cancelar y, al terminar, ofrece
+**«Descargar»** (§6.3). Una persona en un periodo de hasta un mes se descarga
+al momento. Qué contiene el fichero:
 
 - Una fila por cada **tramo**, con entrada, salida, duración y total de la
   jornada. Un turno de noche es un único tramo, en la jornada en la que empezó.
