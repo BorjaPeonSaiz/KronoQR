@@ -1980,6 +1980,28 @@ API users.** None of this changes the record or prevents clocking:
   exports from before and after, those are the differences (`manifest.json` says
   so).
 
+**When updating to 2.3.0: clearer API errors, for those who call it from their
+own integrations.** The panel, the portal and the tablet already handle them,
+and nothing changes for them:
+
+- **A body the server cannot read is rejected.** A request with
+  `Content-Type: application/json` whose body is not valid JSON gets `400`
+  (`urn:kronoqr:problem:bad-request`). Until 2.2.1 some routes answered `200`
+  without saving anything. A body with any other `Content-Type` gets `415`
+  (`unsupported-media-type`); only the file-upload routes also accept
+  `multipart/form-data`. A request with no body is not checked.
+- **`503` where there used to be a `500`.** If the database or Redis is down,
+  login, the tablet heartbeat, the roster, an employee's own export and the
+  correction of a shift entry answer `503`. That means "try again in a moment",
+  not a product fault. The tablet keeps its queue and resends, as always.
+- **Every error comes as `application/problem+json`**, including the `400` and
+  `414` from the web server. `title` and `detail` are in the requested
+  language. A `422` always brings `errors`, and a `503` its real `type`.
+
+If an integration of yours treated any `200` as "saved", or retried only on a
+`500`, review it before updating. The details are in the contract
+(`docs/api/openapi.yaml`).
+
 **When updating to 2.3.0: large exports are generated in the background, with
 progress and cancellation.** None of this changes what each file contains:
 

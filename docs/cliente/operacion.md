@@ -1953,6 +1953,29 @@ quien use la API.** Nada de esto cambia el registro ni impide fichar:
   resuelto un fallo del histórico de errores, también antes de que se reabriera. Si comparas exportaciones de antes y de después, esas son las
   diferencias (`manifest.json` lo dice).
 
+**Al actualizar a la 2.3.0: errores de la API más claros, para quien la llame
+desde integraciones propias.** El panel, el portal y la tablet ya los tratan,
+y para ellos no cambia nada:
+
+- **Un cuerpo que el servidor no puede leer se rechaza.** Una petición con
+  `Content-Type: application/json` cuyo cuerpo no es JSON válido recibe `400`
+  (`urn:kronoqr:problem:bad-request`). Hasta la 2.2.1 alguna ruta respondía
+  `200` sin guardar nada. Un cuerpo con otro `Content-Type` recibe `415`
+  (`unsupported-media-type`); solo las rutas de subida de ficheros admiten
+  además `multipart/form-data`. Una petición sin cuerpo no se mira.
+- **`503` donde antes había un `500`.** Con la base de datos o Redis caídos, el
+  inicio de sesión, el latido de la tablet, el padrón, la exportación del
+  registro propio y la corrección de un tramo responden `503`. Quiere decir
+  «vuelve a intentarlo en un momento», no que el producto tenga un defecto. La
+  tablet conserva su cola y reenvía, como siempre.
+- **Todo error llega en `application/problem+json`**, también los `400` y `414`
+  del servidor web. `title` y `detail` van en el idioma pedido. Un `422` trae
+  siempre `errors`, y un `503`, su `type` real.
+
+Si una integración tuya daba por guardado cualquier `200`, o solo reintentaba
+ante un `500`, revísala antes de actualizar. El detalle está en el contrato
+(`docs/api/openapi.yaml`).
+
 **Al actualizar a la 2.3.0: las exportaciones grandes se generan en segundo
 plano, con avance y cancelación.** Nada de esto cambia lo que contiene cada
 fichero:

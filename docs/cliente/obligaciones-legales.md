@@ -324,6 +324,35 @@ diagnóstico ni el motivo médico en esa nota
 ([`guia-rrhh.md`](guia-rrhh.md) §5 bis.5): lo que no se escribe no hay que
 conservarlo, ni entregarlo, ni explicarlo.
 
+### Para tu DPO: la baja programada y la readmisión (desde la 2.3.0)
+
+La 2.3.0 permite programar una baja y readmitir a alguien en su misma ficha
+([`guia-rrhh.md`](guia-rrhh.md)). Hay dos preguntas que tu delegado de
+protección de datos tiene que valorar. Aquí está lo que hace el producto de
+serie, para que decida si le vale o si nos pide otra cosa:
+
+1. **Lo que se guarda de una persona readmitida.** Su ficha conserva todos sus
+   periodos de alta, con sus fechas, y **cada corrección de una fecha de cese,
+   con su motivo**. También conserva los contratos y las ausencias de las
+   temporadas anteriores. Todo eso se queda **mientras la persona siga en la
+   plantilla**. El plazo de conservación de la ficha cuenta **desde la última
+   baja**, no desde cada una. Cuando ese plazo vence, la purga minimiza la ficha
+   como en cualquier baja (arriba): borra los contratos y las ausencias, y
+   cambia el motivo de cada corrección por un texto fijo. Si tu DPO quiere que
+   los datos de una temporada antigua caduquen por su cuenta, aunque la persona
+   haya vuelto, pídenoslo.
+2. **El fichaje que llega después de la baja.** Si una persona ya dada de baja
+   ficha con su tarjeta o con su código y su PIN correcto, y el día de ese
+   fichaje está dentro de su periodo de alta, **el fichaje se rechaza**. Se le
+   atribuye a ella **solo para que RRHH lo revise**, con la incidencia «Fichaje
+   anterior a la retirada de la credencial». **Nunca se convierte en un tramo
+   ni cuenta horas.** Si RRHH comprueba que trabajó ese día, añade el tramo a
+   mano, con su motivo. Un fichaje con fecha posterior al cese, o del hueco
+   entre dos periodos de alta, no se atribuye a nadie.
+
+Son decisiones de tu DPO, no del fabricante: si concluye que hay que cambiar
+alguna, pídenoslo y entra en una versión.
+
 **El motivo de un acceso de soporte no debe nombrar a nadie.** Escribe el
 identificador de la persona, no su nombre; el sistema rechaza un motivo con
 forma de correo, documento o teléfono. A los 90 días de terminar la concesión,
