@@ -54,7 +54,7 @@ test('vinculacion del primer quiosco: codigo visible y pantalla de fichaje opera
   await stubPairing(page, { pendingPolls: PENDING_POLLS, pollIntervalSeconds: 1 })
   // Marca por defecto del producto (RF-PD-08): sin cliente ni datos reales
   // (regla dura 21), que es justo lo que debe verse en una captura generica.
-  await stubBrandingApi(page)
+  await stubBrandingApi(page, { variant: testInfo.project.name === 'en' ? 'bilingual' : 'product' })
 
   await page.goto('/')
 
