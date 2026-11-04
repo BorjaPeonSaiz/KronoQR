@@ -126,7 +126,7 @@ on:
         required: false
         default: false
       update_from:
-        description: "Etiqueta publicada desde la que ⑧b actualiza (p. ej. v2.2.1). Vacio = el main previo, como siempre. Para probar el salto real de una version publicada antes de etiquetar la siguiente."
+        description: "Etiqueta publicada desde la que ⑧b actualiza (p. ej. v2.2.1). Vacio = el main previo, como siempre. Para probar el salto desde una version publicada antes de etiquetar la siguiente; sus imagenes se reconstruyen desde el arbol de la etiqueta, no se bajan de GHCR."
         type: string
         required: false
         default: ""
