@@ -662,7 +662,7 @@ https://fichaje.tuhotel.local/api/v1/health
 ```
 
 Debe responder un texto corto con el estado y la versión, algo como
-`{"status":"ok","version":"2.2.1","license":"valid"}`. Según lo que salga:
+`{"status":"ok","version":"2.3.0","license":"valid"}`. Según lo que salga:
 
 | Lo que ves en la tablet | Dónde está el problema |
 | --- | --- |
