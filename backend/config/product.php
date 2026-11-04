@@ -120,7 +120,7 @@ return [
      * Vacia o no valida, el paquete con datos personales NO SE GENERA (`503`
      * por HTTP, codigo `1` por consola): nunca sale en claro.
      */
-    'diagnostics_recipient_public_key' => (string) env('DIAGNOSTICS_RECIPIENT_PUBLIC_KEY', ''),
+    'diagnostics_recipient_public_key' => (string) env('DIAGNOSTICS_RECIPIENT_PUBLIC_KEY', 'b3c63dee6eaadcd21162fdfd13f580c03eb90683909565c5beac90482d1e0254'),
 
     /*
      * Peticiones por minuto y por cuenta de `POST /api/v1/diagnostics/bundle`.

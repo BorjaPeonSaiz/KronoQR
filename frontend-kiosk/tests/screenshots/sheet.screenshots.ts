@@ -68,11 +68,14 @@ test('fichaje confirmado: entrada con saludo y hora, via PIN (mismo panel que la
   const outDir = path.join(IMG_ROOT, testInfo.project.name)
   mkdirSync(outDir, { recursive: true })
 
-  await stubKioskApiWithPin(page)
+  // El latido lleva la misma hora que el reloj fijo de la pagina: con la hora
+  // real del proceso, la tablet se veria atrasada tantos minutos como lleve
+  // CONFIRMED_AT en el pasado, y la captura sacaria el aviso de desfase.
+  await stubKioskApiWithPin(page, { serverTime: () => CONFIRMED_AT.toISOString() })
   // Marca por defecto del producto (RF-PD-08): sin cliente ni datos reales
   // (regla dura 21), que es justo lo que debe verse en una captura generica.
-  await stubBrandingApi(page)
-  await stubPinScanApi(page, 'clock_in')
+  await stubBrandingApi(page, { variant: testInfo.project.name === 'en' ? 'bilingual' : 'product' })
+  await stubPinScanApi(page, 'clock_in', 0, () => CONFIRMED_AT.toISOString())
   // No pausa los temporizadores (la tuberia del PIN los usa de verdad para
   // su ventana de gracia, `pinPipeline.ts`): solo fija lo que devuelven
   // `Date.now()`/`new Date()`.
@@ -103,7 +106,7 @@ test('fichaje pendiente: quiosco sin red, encolado y confirmado en local (regla 
   mkdirSync(outDir, { recursive: true })
 
   await stubKioskApiWithPin(page)
-  await stubBrandingApi(page)
+  await stubBrandingApi(page, { variant: testInfo.project.name === 'en' ? 'bilingual' : 'product' })
   // Sin servidor: el envio no llega a ninguna parte, igual que
   // `pin.spec.ts` («sin red: se confirma en local, se encola sellado…»).
   await page.route('**/api/v1/scan/pin', async (route) => route.abort('failed'))
@@ -136,7 +139,7 @@ test('PIN de respaldo: codigo de empleado ya escrito, teclado del PIN visible', 
   mkdirSync(outDir, { recursive: true })
 
   await stubKioskApiWithPin(page)
-  await stubBrandingApi(page)
+  await stubBrandingApi(page, { variant: testInfo.project.name === 'en' ? 'bilingual' : 'product' })
 
   await page.goto('/')
   await page.getByTestId('pin-entry-link').click()

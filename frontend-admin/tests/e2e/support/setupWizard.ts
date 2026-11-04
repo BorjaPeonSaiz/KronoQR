@@ -10,6 +10,7 @@
 // avanzar EXACTAMENTE como lo haria el servidor real.
 import { expect } from '@playwright/test'
 import type { Page, Route } from '@playwright/test'
+import { BILINGUAL_BRANDING, PRODUCT_BRANDING } from './admin'
 import type {
   Department,
   License,
@@ -279,6 +280,11 @@ export async function stubOnboardingApi(
       }
 
       switch (`${method} ${url.pathname}`) {
+        case 'GET /api/v1/branding':
+          // Con ingles en la cuenta, la instalacion lo ofrece (bloque 26 de la 2.2.1);
+          // sin esto el panel se queda en español, el idioma por defecto.
+          await json(route, 200, accountLocale === 'en' ? BILINGUAL_BRANDING : PRODUCT_BRANDING)
+          return
         case 'GET /api/v1/setup/status':
           await json(route, 200, publicStatus())
           return

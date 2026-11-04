@@ -1953,6 +1953,36 @@ quien use la API.** Nada de esto cambia el registro ni impide fichar:
   resuelto un fallo del histórico de errores, también antes de que se reabriera. Si comparas exportaciones de antes y de después, esas son las
   diferencias (`manifest.json` lo dice).
 
+**Al actualizar a la 2.3.0: errores de la API más claros, para quien la llame
+desde integraciones propias.** El panel, el portal y la tablet ya los tratan,
+y para ellos no cambia nada:
+
+- **Un cuerpo que el servidor no puede leer se rechaza.** Una petición con
+  `Content-Type: application/json` cuyo cuerpo no es JSON válido recibe `400`
+  (`urn:kronoqr:problem:bad-request`). Hasta la 2.2.1 alguna ruta respondía
+  `200` sin guardar nada. Un cuerpo con otro `Content-Type` recibe `415`
+  (`unsupported-media-type`); solo las rutas de subida de ficheros admiten
+  además `multipart/form-data`. Una petición sin cuerpo no se mira.
+- **`503` donde antes había un `500`.** Con Redis caído, el acceso al panel, el
+  latido de la tablet, el padrón, las correcciones, los informes y el resto de
+  la gestión responden `503`. También con PostgreSQL perdido a mitad de una
+  operación, que no escribe nada o queda entera. Quiere decir «vuelve a
+  intentarlo en un momento», no que el producto tenga un defecto. **El fichaje
+  y el portal del empleado siguen funcionando con Redis caído**, incluido el
+  CSV de su registro; solo el PDF del portal da `503` y remite al CSV.
+- **Todo error llega en `application/problem+json`**, también los `400` y `414`
+  del servidor web. `title` y `detail` van en el idioma pedido, salvo en esos
+  dos, que van en inglés y sin `detail`. Un `422` trae siempre `errors`, y un
+  `503`, su `type` real.
+- **Una baja con cese de hoy se programa.** `POST /employees/{uuid}/offboard`
+  con la fecha de hoy ya no da la baja en el acto: la persona conserva su
+  tarjeta, su PIN y su portal hasta que la tarea horaria la aplica al día
+  siguiente. Un despido con efecto inmediato lleva `apply_now: true`.
+
+Si una integración tuya daba por guardado cualquier `200`, solo reintentaba
+ante un `500` o da bajas por la API, revísala antes de actualizar. El detalle está en el contrato
+(`docs/api/openapi.yaml`).
+
 **Al actualizar a la 2.3.0: las exportaciones grandes se generan en segundo
 plano, con avance y cancelación.** Nada de esto cambia lo que contiene cada
 fichero:
@@ -2520,9 +2550,14 @@ el resultado lo dice así:
 Paquete de diagnostico CON DATOS PERSONALES generado y cifrado.
 
   Fichero:  /var/www/html/storage/app/diagnostics/kronoqr-diagnostics-2.3.0-20261101T101500Z.sealed.json
-  Cifrado:  para la clave de soporte del fabricante 3f9c1a7e5b2d4c80
+  Cifrado:  para la clave de soporte del fabricante 156a123c31a9a153
   ...
 ```
+
+La clave de soporte de la 2.3.0 es **`156a123c31a9a153`**. Si el resultado
+dice otra, la clave se ha cambiado en el `.env`: **no envíes el paquete** hasta
+confirmar con soporte que esa clave es suya, por el canal de siempre y no por el
+que pidió el cambio. Si no lo es, quita esa línea y recrea los contenedores.
 
 **Lo que sí puedes revisar es su cabecera**, que va en claro al principio del
 fichero (`less <fichero>`): qué secciones lleva (`manifest.sections`) y, de

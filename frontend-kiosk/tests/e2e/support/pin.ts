@@ -103,6 +103,12 @@ export async function stubPinScanApi(
    * vencido.
    */
   delayMs = 0,
+  /**
+   * `recorded_at` de la respuesta. Por defecto la hora REAL del proceso de
+   * pruebas. Una captura que fija el reloj de la pagina pasa la misma hora:
+   * si no, el quiosco compara las dos y anuncia un desfase que no existe.
+   */
+  recordedAt: () => string = () => new Date().toISOString(),
 ): Promise<PinScanStub> {
   const recorded: RecordedPinScan[] = []
 
@@ -157,7 +163,7 @@ export async function stubPinScanApi(
         employee_display_name: 'Lucia G.',
         work_date: body.occurred_at.slice(0, 10),
         occurred_at: body.occurred_at,
-        recorded_at: new Date().toISOString(),
+        recorded_at: recordedAt(),
         worked_minutes: 0,
       }),
     })

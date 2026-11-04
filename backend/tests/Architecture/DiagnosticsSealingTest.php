@@ -190,8 +190,8 @@ it('la puerta de release falla sin la clave publica de soporte compilada (RS-08)
     // va en el segundo argumento de `env()`, como la de licencias.
     expect(Repo::contents('Makefile'))->toContain('grep -qE "'.$pattern.'" backend/config/product.php')
         ->and(Repo::contents('backend/config/product.php'))->toContain("env('DIAGNOSTICS_RECIPIENT_PUBLIC_KEY', '")
-        // Rechaza el valor de serie vacio, que es el del arbol de desarrollo, y
-        // acepta una publica de 64 hexadecimales.
+        // Rechaza un valor de serie vacio, que es el de un arbol que se quedo sin
+        // la clave, y acepta una publica de 64 hexadecimales.
         ->and(preg_match($regex, "env('DIAGNOSTICS_RECIPIENT_PUBLIC_KEY', '')"))->toBe(0)
         ->and(preg_match($regex, "env('DIAGNOSTICS_RECIPIENT_PUBLIC_KEY', '".str_repeat('ab', 32)."')"))->toBe(1);
 

@@ -354,6 +354,44 @@ El procedimiento completo está en
    aplicación —gestor de contraseñas, sobre sellado, lo que uséis para el resto de
    credenciales críticas—.
 
+### Para tu DPO: la baja programada y la readmisión (desde la 2.3.0)
+
+La 2.3.0 permite programar una baja y readmitir a alguien en su misma ficha
+([`guia-rrhh.md`](guia-rrhh.md)). Hay dos preguntas que tu delegado de
+protección de datos tiene que valorar. Aquí está lo que hace el producto de
+serie, para que decida si le vale o si nos pide otra cosa:
+
+1. **Lo que se guarda de una persona readmitida.** Su ficha conserva todos sus
+   periodos de alta, con sus fechas, y **cada corrección de una fecha de cese,
+   con su motivo**. También conserva los contratos y las ausencias de las
+   temporadas anteriores. Todo eso se queda **mientras la persona siga en la
+   plantilla**. El plazo de conservación de la ficha cuenta **desde la última
+   baja**, no desde cada una. Cuando ese plazo vence, la purga minimiza la ficha
+   como en cualquier baja (arriba): borra los contratos y las ausencias, y
+   cambia el motivo de cada corrección por un texto fijo. Si tu DPO quiere que
+   los datos de una temporada antigua caduquen por su cuenta, aunque la persona
+   haya vuelto, pídenoslo.
+2. **El fichaje que llega después de la baja.** Un fichaje de una persona ya
+   dada de baja **se rechaza siempre**: nunca se convierte en un tramo ni
+   cuenta horas. A quién queda atribuido el rechazo depende de cómo fichó:
+   - **Con su tarjeta.** Una tarjeta auténtica identifica a su titular, así
+     que el rechazo queda **a su nombre en el registro de escaneos, sea cual
+     sea su fecha**. Solo si el fichaje es anterior a la retirada de la
+     tarjeta y no posterior al cese se marca para revisión y abre la
+     incidencia «Fichaje anterior a la retirada de la credencial».
+   - **Con su código y su PIN correcto.** Solo se le atribuye si el día cae
+     entre el alta y el cese de su último periodo, y entonces abre la misma
+     incidencia. Fuera de esas fechas, o con un PIN incorrecto, no se
+     atribuye a nadie.
+
+   Si RRHH comprueba que la persona trabajó ese día, añade el tramo a mano, con
+   su motivo. El rechazo atribuido forma parte del registro de escaneos y se
+   conserva con él. Su identificador interno, nunca su nombre, consta además en
+   el log técnico durante 90 días.
+
+Son decisiones de tu DPO, no del fabricante: si concluye que hay que cambiar
+alguna, pídenoslo y entra en una versión.
+
 ---
 
 ## 5. Guardar la prueba de que el registro no se ha manipulado

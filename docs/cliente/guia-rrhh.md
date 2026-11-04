@@ -1276,8 +1276,12 @@ para el caso de una persona entra por su nombre a su registro.
 
 ![Pantalla de exportación para la Inspección](img/es/rrhh-13-exportacion-legal.png)
 
-Se eligen las fechas y, si el requerimiento nombra a una persona, esa persona.
-En blanco, sale la plantilla completa. Qué contiene el fichero:
+Se eligen las fechas y el alcance: **toda la plantilla** o, si el requerimiento
+nombra a una persona, **una persona**. Con toda la plantilla o con más de un
+mes, la exportación **se genera en segundo plano**, como en la captura: la
+pantalla enseña por dónde va, se puede cancelar y, al terminar, ofrece
+**«Descargar»** (§6.3). Una persona en un periodo de hasta un mes se descarga
+al momento. Qué contiene el fichero:
 
 - Una fila por cada **tramo**, con entrada, salida, duración y total de la
   jornada. Un turno de noche es un único tramo, en la jornada en la que empezó.
@@ -1311,9 +1315,16 @@ los mismos parámetros que ya habías elegido: no hay que volver a rellenar nada
 Al pulsarlo, la petición entra en el bloque **«Exportaciones en segundo plano»**
 de esa misma pantalla.
 
+**Lo que pasa solo a segundo plano.** La exportación para la Inspección, la
+salida a nómina y la exportación del cuadro de impacto se piden en segundo plano
+**sin aviso previo** cuando abarcan toda la plantilla o más de un mes. La
+pantalla enseña la fase y una barra de avance, y el botón **«Cancelar la
+exportación»** la detiene: la fila queda como «Cancelada» y no se guarda ningún
+fichero.
+
 **Cómo se sigue.** Esa lista se refresca sola mientras haya algo en curso y
 enseña el estado de cada petición: «En cola», «Generando», **«Lista para
-descargar»**, «Fallida» o «Caducada». Puedes cerrar la pantalla, salir del panel
+descargar»**, «Fallida», «Cancelada» o «Caducada». Puedes cerrar la pantalla, salir del panel
 y volver más tarde: el trabajo sigue en el servidor. Solo se procesa **una
 petición tuya a la vez**; si pides otra sin que haya acabado la anterior, el
 panel te enseña la que ya está en marcha en lugar de empezar una segunda.

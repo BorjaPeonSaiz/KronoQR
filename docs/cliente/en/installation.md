@@ -108,8 +108,8 @@ brightness, the Android update window and the network — is in the runbook
 needed. **The licence is not there**: your supplier sends it to you separately
 (§4).
 
-**Which version to pick.** The most recent one in the `v2.2.x` series (this
-guide's examples use `2.2.1`; type the one you picked). **Never** one whose
+**Which version to pick.** The most recent one in the `v2.3.x` series (this
+guide's examples use `2.3.0`; type the one you picked). **Never** one whose
 title or notes say "do not use" («no usar»), nor one marked as *Pre-release*:
 they are not meant for customer installations.
 
@@ -125,7 +125,7 @@ The third one, `kronoqr-<version>.cdx.json`, is the product's component list
 (SBOM): it is not needed to install.
 
 **Where: in `/opt`.** The package is downloaded and unpacked there, and it
-creates `/opt/kronoqr-2.2.1`: that is the path you will see in the rest of this
+creates `/opt/kronoqr-2.3.0`: that is the path you will see in the rest of this
 guide and in the sample outputs. Each new version is later unpacked **next to
 it** (`/opt/kronoqr-2.3.0`…), never on top ([`operation.md`](operation.md)
 §11). `/opt` belongs to root, which is why the commands that write there carry
@@ -135,8 +135,8 @@ From the server:
 
 ```bash
 cd /opt
-sudo curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.2.1/kronoqr-2.2.1.tar.gz
-sudo curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.2.1/SHA256SUMS
+sudo curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.3.0/kronoqr-2.3.0.tar.gz
+sudo curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.3.0/SHA256SUMS
 ```
 
 > **If the server has no internet access**, download both files from another
@@ -151,7 +151,7 @@ With both in the same folder, check that the package arrived intact:
 sha256sum -c --ignore-missing SHA256SUMS
 ```
 
-It must say `kronoqr-2.2.1.tar.gz: OK`. If it says `FAILED`, do not unpack it:
+It must say `kronoqr-2.3.0.tar.gz: OK`. If it says `FAILED`, do not unpack it:
 delete it and download it again; if it fails again, tell your supplier. If it
 says `no properly formatted checksum lines found`, what you saved as
 `SHA256SUMS` is a web page rather than the file: download it again from
@@ -166,8 +166,8 @@ you did not download it.
 > check that protects against a substituted package.
 
 ```bash
-sudo tar xzf kronoqr-2.2.1.tar.gz
-cd /opt/kronoqr-2.2.1
+sudo tar xzf kronoqr-2.3.0.tar.gz
+cd /opt/kronoqr-2.3.0
 ls -A
 ```
 
@@ -394,9 +394,9 @@ Expected output:
 
 ```
 Phase 1 of 5 — checking requirements. Nothing is written yet.
-  [ok]    Compose file /opt/kronoqr-2.2.1/docker-compose.yml
-  [ok]    Version being installed: 2.2.1
-  [ok]    Configuration template /opt/kronoqr-2.2.1/.env
+  [ok]    Compose file /opt/kronoqr-2.3.0/docker-compose.yml
+  [ok]    Version being installed: 2.3.0
+  [ok]    Configuration template /opt/kronoqr-2.3.0/.env
   [ok]    Permission to talk to Docker
   [ok]    Docker 27.3.1 (24 or newer required)
   [ok]    Docker Compose v2 (2.29.7)
@@ -426,13 +426,13 @@ Phase 1 of 5 — checking requirements. Nothing is written yet.
   [ok]    Signature of the product images verified with cosign (manufacturer's release workflow)
   [ok]    APP_URL: https://fichaje.tuhotel.local
   [ok]    Name fichaje.tuhotel.local resolves from this server
-  [ok]    TLS certificate in /opt/kronoqr-2.2.1/certs
+  [ok]    TLS certificate in /opt/kronoqr-2.3.0/certs
   [ok]    The edge (uid 101) can read tls.crt
   [ok]    The edge (uid 101) can read tls.key
   [ok]    Port 80 free
   [ok]    Port 443 free
   [ok]    Writable: /var/backups/fichaje
-  [ok]    Writable: /opt/kronoqr-2.2.1
+  [ok]    Writable: /opt/kronoqr-2.3.0
   [ok]    Privileges to set the owner of the WAL archive
 
 Requirements met: 40 checks, 0 warnings.
@@ -485,7 +485,7 @@ It takes between three and fifteen minutes, depending on how long the images
 take to download. You will see the five phases. At the end:
 
 ```
-KronoQR 2.2.1 installed and verified.
+KronoQR 2.3.0 installed and verified.
 
   Admin panel:       https://fichaje.tuhotel.local/admin/
   Kiosk (tablet):    https://fichaje.tuhotel.local/kiosk/
@@ -496,7 +496,7 @@ the organisation, the site, the first administrator and the first kiosk.
 Until you finish it there is no account at all: the installer creates no
 users.
 
-DOCUMENTATION, in /opt/kronoqr-2.2.1/docs
+DOCUMENTATION, in /opt/kronoqr-2.3.0/docs
   ...
 
 BEFORE YOU LOG OUT: keep BACKUP_ENCRYPTION_KEY outside this server
@@ -511,7 +511,7 @@ curl -fsS https://fichaje.tuhotel.local/api/v1/ready
 ```
 
 Both have to answer without error: `/health` with
-`{"status":"ok","version":"2.2.1",…}` and `/ready` with `{"status":"ready"}`.
+`{"status":"ok","version":"2.3.0",…}` and `/ready` with `{"status":"ready"}`.
 
 **If the certificate comes from a CA internal to the hotel, or is
 self-signed**, the server does not have it among its own and `curl` answers
@@ -1210,7 +1210,7 @@ What to do, in this order:
    append-only and cannot be rewritten:
 
    ```bash
-   cd /opt/kronoqr-2.2.1
+   cd /opt/kronoqr-2.3.0
    sudo docker compose --env-file .env -f docker-compose.yml \
      exec -T postgres psql -U fichaje_migrator -d fichaje -c \
      "SELECT occurred_at, action, ip, payload
@@ -1283,7 +1283,7 @@ again, this time inside `tmux` (§1.4):
 Only if you are sure that **there is no data to keep**:
 
 ```bash
-cd /opt/kronoqr-2.2.1
+cd /opt/kronoqr-2.3.0
 sudo docker compose --env-file .env -f docker-compose.yml down -v --remove-orphans
 sudo rm -f .env
 sudo rm -rf /var/backups/fichaje

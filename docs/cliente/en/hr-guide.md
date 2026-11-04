@@ -1301,8 +1301,12 @@ for one person open their record from their name.
 
 ![Labour Inspectorate export screen](../img/en/rrhh-13-exportacion-legal.png)
 
-You choose the dates and, if the requirement names a person, that person. Left
-blank, the whole workforce comes out. What the file contains:
+You choose the dates and the scope: the **whole workforce** or, if the
+requirement names a person, **one person**. For the whole workforce or more
+than a month, the export **is generated in the background**, as in the
+screenshot: the screen shows how far it has got, you can cancel it and, when it
+finishes, it offers **"Download"** (§6.3). One person over a period of up to a
+month is downloaded at once. What the file contains:
 
 - One row per **entry**, with clock-in, clock-out, duration and the working
   day's total. A night shift is a single entry, on the working day it started
@@ -1337,9 +1341,15 @@ button, with the same parameters you had already chosen: nothing has to be fille
 in again. When you press it, the request goes into the **"Background exports"**
 block on that same screen.
 
+**What goes to the background on its own.** The Labour Inspectorate export, the
+payroll output and the impact dashboard export are requested in the background
+**with no prior notice** when they cover the whole workforce or more than a
+month. The screen shows the phase and a progress bar, and the **"Cancel the
+export"** button stops it: the row is left as "Cancelled" and no file is kept.
+
 **How you follow it.** That list refreshes on its own while something is running
 and shows the state of each request: "Queued", "Generating", **"Ready to
-download"**, "Failed" or "Expired". You can close the screen, leave the panel and
+download"**, "Failed", "Cancelled" or "Expired". You can close the screen, leave the panel and
 come back later: the work carries on in the server. Only **one request of
 yours** is processed at a time; if you ask for another before the previous one is done, the
 panel shows you the one already under way instead of starting a second.
