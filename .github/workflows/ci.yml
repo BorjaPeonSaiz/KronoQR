@@ -125,6 +125,11 @@ on:
         type: boolean
         required: false
         default: false
+      update_from:
+        description: "Etiqueta publicada desde la que ⑧b actualiza (p. ej. v2.2.1). Vacio = el main previo, como siempre. Para probar el salto real de una version publicada antes de etiquetar la siguiente."
+        type: string
+        required: false
+        default: ""
   schedule:
     # Dispara SOLO los jobs nocturnos: `gate-coverage`, `mutation` (y `mutation-scope`, `mutation-total`), `restore-cycle`,
     # `secrets-history`, `performance` y `performance-kiosk` (ver sus comentarios). Todos los demas de este fichero
@@ -1494,6 +1499,7 @@ jobs:
       installs: true
       coverage: false
       apk_index_stamp: ${{ inputs.apk_index_stamp }}
+      update_from: ${{ inputs.update_from }}
     if: >-
       github.event_name != 'schedule'
       && (

@@ -67,6 +67,11 @@ on:
         type: string
         required: false
         default: ""
+      update_from:
+        description: "Etiqueta publicada (vX.Y.Z) desde la que actualiza ⑧b. Vacio = el main previo (mismo input que ci.yml)."
+        type: string
+        required: false
+        default: ""
 
 # Solo lectura: estos jobs leen el codigo y suben artefactos de diagnostico.
 permissions:
@@ -892,13 +897,32 @@ jobs:
         #
         # Si la version anterior no tiene instalador, el job lo dice y termina
         # en verde: no hay nada real que probar y fingirlo seria peor.
+        #
+        # `update_from` (solo a mano, bloque final de la 2.3.0): una etiqueta
+        # publicada. El `main` previo de una rama de publicacion ya lleva el
+        # codigo de la version nueva con el VERSION de la anterior, asi que no
+        # prueba el salto que hara un cliente. Con la etiqueta, si. Una
+        # etiqueta mal escrita o inexistente FALLA: pedir un salto concreto y
+        # probar otro seria peor que no probarlo.
         id: anterior
         env:
           EVENT_BEFORE: ${{ github.event.before }}
+          UPDATE_FROM: ${{ inputs.update_from }}
         run: |
           set -euo pipefail
           ref=""
-          if [ "${GITHUB_EVENT_NAME}" = "push" ] && [ -n "${EVENT_BEFORE}" ] &&
+          if [ -n "${UPDATE_FROM}" ]; then
+            if ! printf '%s' "${UPDATE_FROM}" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "::error title=update_from no valido::Se espera una etiqueta vX.Y.Z."
+              exit 1
+            fi
+            git fetch --force origin "refs/tags/${UPDATE_FROM}:refs/tags/${UPDATE_FROM}" >/dev/null 2>&1 || true
+            if ! ref="$(git rev-parse --verify --quiet "refs/tags/${UPDATE_FROM}^{commit}")"; then
+              echo "::error title=Etiqueta inexistente::${UPDATE_FROM} no existe en el repositorio."
+              exit 1
+            fi
+          fi
+          if [ -z "${ref}" ] && [ "${GITHUB_EVENT_NAME}" = "push" ] && [ -n "${EVENT_BEFORE}" ] &&
             [ "${EVENT_BEFORE}" != "0000000000000000000000000000000000000000" ] &&
             git cat-file -e "${EVENT_BEFORE}^{commit}" 2>/dev/null; then
             ref="${EVENT_BEFORE}"
