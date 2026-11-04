@@ -73,7 +73,6 @@ interface Dictionary {
   toLabel: string
   legalExportHeading: string
   legalExportSubmit: string
-  legalExportDone: RegExp
   complianceHeading: string
   credentialHeadingInDetail: string
   correctButton: string
@@ -114,7 +113,6 @@ const DICTIONARIES: Record<Locale, Dictionary> = {
     toLabel: 'Hasta',
     legalExportHeading: 'Exportación para la Inspección de Trabajo',
     legalExportSubmit: 'Generar y descargar',
-    legalExportDone: /Exportación descargada/,
     complianceHeading: 'Perfil de cumplimiento',
     credentialHeadingInDetail: 'Tarjeta QR',
     correctButton: 'Corregir las horas',
@@ -147,7 +145,6 @@ const DICTIONARIES: Record<Locale, Dictionary> = {
     toLabel: 'To',
     legalExportHeading: 'Export for the Labour Inspectorate',
     legalExportSubmit: 'Generate and download',
-    legalExportDone: /Export downloaded/,
     complianceHeading: 'Compliance profile',
     credentialHeadingInDetail: 'QR card',
     correctButton: 'Correct the times',
@@ -517,15 +514,11 @@ test('genera la exportacion legal para Inspeccion', async ({ page }, testInfo) =
   await page.getByLabel(dict.fromLabel).fill('2026-03-01')
   await page.getByLabel(dict.toLabel).fill('2026-03-31')
 
-  const download = page.waitForEvent('download')
-
+  // Con toda la plantilla (el alcance por omision) la exportacion se pide en
+  // segundo plano (2.3.0, ADR-041): la captura es el estado final, «Lista para
+  // descargar» con su boton, que es lo que ve quien exporta.
   await page.getByRole('button', { name: dict.legalExportSubmit }).click()
-  await download
-
-  // El mismo texto vive dos veces a proposito: la region viva `role="status"`
-  // que lo anuncia (`sr-only`, WCAG 4.1.3) y el parrafo visible dentro de
-  // `#main`. Se comprueba el segundo, que es el que sale en la captura.
-  await expect(page.locator('#main').getByText(dict.legalExportDone)).toBeVisible()
+  await expect(page.getByTestId('export-job-download')).toBeVisible()
 
   await shoot(page, testInfo, 'rrhh-13-exportacion-legal')
 })
