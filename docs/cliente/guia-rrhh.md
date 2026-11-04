@@ -1315,9 +1315,16 @@ los mismos parámetros que ya habías elegido: no hay que volver a rellenar nada
 Al pulsarlo, la petición entra en el bloque **«Exportaciones en segundo plano»**
 de esa misma pantalla.
 
+**Lo que pasa solo a segundo plano.** La exportación para la Inspección, la
+salida a nómina y la exportación del cuadro de impacto se piden en segundo plano
+**sin aviso previo** cuando abarcan toda la plantilla o más de un mes. La
+pantalla enseña la fase y una barra de avance, y el botón **«Cancelar la
+exportación»** la detiene: la fila queda como «Cancelada» y no se guarda ningún
+fichero.
+
 **Cómo se sigue.** Esa lista se refresca sola mientras haya algo en curso y
 enseña el estado de cada petición: «En cola», «Generando», **«Lista para
-descargar»**, «Fallida» o «Caducada». Puedes cerrar la pantalla, salir del panel
+descargar»**, «Fallida», «Cancelada» o «Caducada». Puedes cerrar la pantalla, salir del panel
 y volver más tarde: el trabajo sigue en el servidor. Solo se procesa **una
 petición tuya a la vez**; si pides otra sin que haya acabado la anterior, el
 panel te enseña la que ya está en marcha en lugar de empezar una segunda.

@@ -56,7 +56,7 @@ final readonly class DiagnosticsRecipient
         return $recipient;
     }
 
-    /** La instalacion sin clave publica de soporte, que es la de un arbol de desarrollo. */
+    /** La instalacion sin clave publica de soporte: el valor de serie vaciado a proposito. */
     public static function uninstall(): void
     {
         config(['product.diagnostics_recipient_public_key' => '']);

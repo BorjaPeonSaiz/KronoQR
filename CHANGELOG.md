@@ -41,16 +41,22 @@ El detalle está en `docs/cliente/operacion.md` §11 («Al actualizar a la
 - **`./doctor.sh` tiene avisos nuevos** y un `[FALLA]` con Redis parado o con
   la aplicación en mantenimiento. El simulacro de restauración comprueba también
   la cadena de auditoría y se programa solo cada trimestre.
-- **Las tablets se ponen al día solas.** Un fichaje que el servidor no consigue
-  procesar ya no atasca la cola: tras 10 intentos durante una hora se descarta y
-  abre una incidencia para RRHH.
-- **Si usas la API desde integraciones propias:** un JSON mal formado recibe
-  `400` y otro `Content-Type`, `415`. Con la base de datos o Redis caídos, varias
-  rutas responden `503` donde antes daban `500`. `GET /credentials/status` y
-  `GET /employees/{uuid}/workdays` paginan.
-- **El paquete de diagnóstico con datos personales sale cifrado** para el
-  fabricante, y abrir el historial de una baja médica deja asiento en la
-  auditoría.
+- **Un fichaje que el servidor no consigue procesar ya no atasca la cola de la
+  tablet**: tras al menos 10 intentos durante una hora se descarta, como mucho 3
+  por quiosco en 24 horas. Abre una incidencia para que se complete con una
+  corrección: la de su persona si se sabe de quién era y, si no, una sin persona
+  para el administrador.
+- **Si usas la API desde integraciones propias:**
+  - un JSON mal formado recibe `400`, y otro `Content-Type`, `415`;
+  - con Redis caído, la gestión responde `503` donde antes daba `500`, mientras
+    el fichaje y el portal del empleado siguen atendiendo;
+  - una baja con cese de hoy se programa: para el efecto inmediato,
+    `apply_now: true`;
+  - `GET /credentials/status` y `GET /employees/{uuid}/workdays` paginan.
+- **El paquete de diagnóstico con datos personales sale cifrado** para la clave
+  de soporte del fabricante, `156a123c31a9a153`: si el tuyo dice otra, lee
+  `operacion.md` §12.3 antes de enviarlo. Y abrir el historial de una baja
+  médica deja asiento en la auditoría.
 - **Para tu DPO:** qué se conserva de una persona readmitida y qué pasa con el
   fichaje que llega después de una baja, en `docs/cliente/obligaciones-legales.md`
   §4.

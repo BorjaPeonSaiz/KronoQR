@@ -1990,16 +1990,24 @@ and nothing changes for them:
   without saving anything. A body with any other `Content-Type` gets `415`
   (`unsupported-media-type`); only the file-upload routes also accept
   `multipart/form-data`. A request with no body is not checked.
-- **`503` where there used to be a `500`.** If the database or Redis is down,
-  login, the tablet heartbeat, the roster, an employee's own export and the
-  correction of a shift entry answer `503`. That means "try again in a moment",
-  not a product fault. The tablet keeps its queue and resends, as always.
+- **`503` where there used to be a `500`.** With Redis down, panel sign-in, the
+  tablet heartbeat, the roster, corrections, reports and the rest of the
+  management API answer `503`. So does a PostgreSQL connection lost halfway
+  through an operation, which then writes nothing or completes entirely. That
+  means "try again in a moment", not a product fault. **Clocking and the
+  employee portal keep working with Redis down**, including the CSV of the
+  employee's record; only the portal PDF answers `503` and points to the CSV.
 - **Every error comes as `application/problem+json`**, including the `400` and
   `414` from the web server. `title` and `detail` are in the requested
-  language. A `422` always brings `errors`, and a `503` its real `type`.
+  language, except for those two, which are in English and have no `detail`. A
+  `422` always brings `errors`, and a `503` its real `type`.
+- **An offboarding dated today is scheduled.** `POST /employees/{uuid}/offboard`
+  with today's date no longer offboards at once: the person keeps their card,
+  PIN and portal until the hourly task applies it the next day. A dismissal
+  with immediate effect carries `apply_now: true`.
 
-If an integration of yours treated any `200` as "saved", or retried only on a
-`500`, review it before updating. The details are in the contract
+If an integration of yours treated any `200` as "saved", retried only on a
+`500`, or offboards people through the API, review it before updating. The details are in the contract
 (`docs/api/openapi.yaml`).
 
 **When updating to 2.3.0: large exports are generated in the background, with
@@ -2576,9 +2584,15 @@ language; in English):
 Diagnostics bundle WITH PERSONAL DATA generated and encrypted.
 
   File:      /var/www/html/storage/app/diagnostics/kronoqr-diagnostics-2.3.0-20261101T101500Z.sealed.json
-  Encrypted: for the vendor support key 3f9c1a7e5b2d4c80
+  Encrypted: for the vendor support key 156a123c31a9a153
   ...
 ```
+
+The support key of 2.3.0 is **`156a123c31a9a153`**. If the result shows a
+different one, the key has been changed in the `.env`: **do not send the
+bundle** until support confirms that key is theirs, through the usual channel
+and not the one that asked for the change. If it is not, remove that line and
+recreate the containers.
 
 **What you can check is its header**, which is in clear text at the start of
 the file (`less <file>`): which sections it carries (`manifest.sections`) and,

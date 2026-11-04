@@ -334,37 +334,6 @@ why the HR guide asks that no diagnosis and no medical reason be written in
 that note ([`hr-guide.md`](hr-guide.md) §5 bis.5): what is not written does not
 have to be kept, handed over or explained.
 
-### For your DPO: scheduled offboarding and rehiring (since 2.3.0)
-
-Version 2.3.0 lets you schedule an offboarding and rehire someone on their
-existing record ([`hr-guide.md`](hr-guide.md)). There are two questions your
-data protection officer has to assess. This is what the product does by
-default, so that they can decide whether it is enough or ask us for something
-else:
-
-1. **What is kept about a rehired person.** Their record keeps every
-   employment period, with its dates, and **every correction of a termination
-   date, with its reason**. It also keeps the contracts and absences of earlier
-   seasons. All of this is kept **for as long as the person is on the staff**.
-   The record's retention period runs **from the last offboarding**, not from
-   each one. When that period ends, the purge minimises the record as for any
-   other leaver (above): it deletes the contracts and absences, and replaces
-   the reason of each correction with a fixed text. If your DPO wants the data
-   of an old season to expire on its own, even after the person has come back,
-   ask us for it.
-2. **A clocking that arrives after the offboarding.** If a person who has
-   already been offboarded clocks in with their card, or with their code and
-   correct PIN, and the day of that clocking falls within their employment
-   period, **the clocking is rejected**. It is attributed to them **only so that
-   HR can review it**, with the incident "Clocking before the credential was
-   withdrawn". **It never becomes a shift entry and never counts hours.** If HR
-   confirms the person worked that day, they add the entry by hand, with its
-   reason. A clocking dated after the termination date, or in the gap between
-   two employment periods, is attributed to no one.
-
-These are decisions for your DPO, not for the vendor: if they conclude that
-either has to change, ask us and it goes into a release.
-
 **The reason for a support access must not name anyone.** Write the person's
 identifier, not their name; the system rejects a reason shaped like an email,
 an ID document or a phone number. 90 days after the grant ends, the reason is
@@ -394,6 +363,46 @@ configuration**. The full procedure is in
 4. **Keep the password of the `fichaje_maintenance` role** off the application
    server — password manager, sealed envelope, whatever you use for the rest of
    your critical credentials.
+
+### For your DPO: scheduled offboarding and rehiring (since 2.3.0)
+
+Version 2.3.0 lets you schedule an offboarding and rehire someone on their
+existing record ([`hr-guide.md`](hr-guide.md)). There are two questions your
+data protection officer has to assess. This is what the product does by
+default, so that they can decide whether it is enough or ask us for something
+else:
+
+1. **What is kept about a rehired person.** Their record keeps every
+   employment period, with its dates, and **every correction of a termination
+   date, with its reason**. It also keeps the contracts and absences of earlier
+   seasons. All of this is kept **for as long as the person is on the staff**.
+   The record's retention period runs **from the last offboarding**, not from
+   each one. When that period ends, the purge minimises the record as for any
+   other leaver (above): it deletes the contracts and absences, and replaces
+   the reason of each correction with a fixed text. If your DPO wants the data
+   of an old season to expire on its own, even after the person has come back,
+   ask us for it.
+2. **A clocking that arrives after the offboarding.** A clocking by a person
+   who has already been offboarded **is always rejected**: it never becomes a
+   shift entry and never counts hours. Who the rejection is attributed to
+   depends on how they clocked:
+   - **With their card.** An authentic card identifies its holder, so the
+     rejection is kept **in their name in the scan record, whatever its
+     date**. Only if the clocking is earlier than the card's withdrawal and
+     not later than the termination date is it flagged for review and opens
+     the incident "Clocking before the credential was withdrawn".
+   - **With their code and correct PIN.** It is attributed to them only if the
+     day falls between the hire date and the termination date of their last
+     employment period, and then it opens the same incident. Outside those
+     dates, or with a wrong PIN, it is attributed to no one.
+
+   If HR confirms the person worked that day, they add the entry by hand, with
+   its reason. An attributed rejection is part of the scan record and is kept
+   with it. Their internal identifier, never their name, is also in the
+   technical log for 90 days.
+
+These are decisions for your DPO, not for the vendor: if they conclude that
+either has to change, ask us and it goes into a release.
 
 ---
 
