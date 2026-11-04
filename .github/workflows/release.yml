@@ -277,7 +277,7 @@ jobs:
         run: bash .github/scripts/assert-tag-at-sha.sh "${TAG}" "${SHA}"
 
       - name: Autenticarse en GHCR (solo lectura)
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -440,7 +440,7 @@ jobs:
         # le serviria: ese seria un registro propio del cliente o del
         # fabricante, fuera de lo que este flujo soporta con solo
         # `github.token`.
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -522,7 +522,7 @@ jobs:
           cosign-release: "v3.1.3"
 
       - name: Autenticarse en GHCR
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
