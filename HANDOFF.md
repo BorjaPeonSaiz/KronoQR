@@ -7,6 +7,23 @@
 
 ## Estado y objetivo actual
 
+**KronoQR 2.3.0 publicada el 04-11-2026** (<https://github.com/BorjaPeonSaiz/KronoQR/releases/tag/v2.3.0>): PR #233 → `main` `bf36c298`, etiqueta `v2.3.0`; `release.yml` 41811203161, CI de la etiqueta, carga y simulacro en verde. ⑧b en verde desde la 2.2.1 y desde la 2.2.0. Clave de soporte `156a123c31a9a153` de serie en `config/product.php`.
+
+**Objetivo actual (05-11-2026, orden del propietario):** dejar la 2.3.0 funcionando en local y lista para desplegar en la demo, que sigue en la 2.2.1 y la actualiza el propietario; después, las líneas de «versión desplegada» del README (§3.1/§6), que aún dicen 2.2.0.
+
+**Puesta a punto local (05-11-2026, rama `chore/puesta-a-punto-local-2.3.0`):** las tres SPA funcionan por `https://localhost/{admin,portal,kiosk}/` (antes, página en blanco); `doctor` sin fallos (7 avisos propios de desarrollo); copia y `make restore-drill` en verde con la cadena verificada; 18 pantallas del panel, portal y quiosco sin errores de consola; `make load-test INSTANCES=1 DURATION=20s` con todo el registro en verde.
+- **El rojo de esa carga es solo RNF-P-02** (2,5 s en PHP de desarrollo con bind mount); la de la etiqueta salió verde. `make test-unit` también falla solo por duración (22 s de 6, 5 294 en verde), y `SourceDiscoveryTest` y `TestDiscoveryTest`, por el bind mount.
+- **`.env` local:** `BACKUP_DB_USERNAME=fichaje_backup` y rol creado con `03-backup-role.sh`. El asistente de puesta en marcha quedó cerrado en la base local; licencia y quiosco, omitidos.
+- **Sin licencia no hay Reverb en `/live`** (`license_absent`, sondeo cada 15 s). Saludo por nginx comprobado, pero la presencia en tiempo real con licencia no se ha probado en local.
+- **Producto, solo en esta rama:** `GET /auth/me` a la zona `api` y la guarda del router ya no convierte una sesión sin leer en «Sin permiso». No es regresión (ya estaba en la 2.2.1), pero la `v2.3.0` publicada lo lleva: en la demo llega solo con una 2.3.1.
+- **Paquete `v2.3.0` comprobado:** `SHA256SUMS` y firma cosign correctos; imagen php descargada sin credenciales.
+
+**Verificación final de la 2.3.0 (tarea 6 del bloque final, en curso, solo registrar):** pasos 1 a 4 de 14; registros en `docs/verificacion/2.3.0-verificacion-final-tanda-{1,2,3}.md`. La tanda 3 solo tiene la cabecera. Van 56 hallazgos: 0 🔴, 8 🟠, 51 sin destino.
+- **Criterio de salida sin cumplir:** V23-1-RV-1 (🟠 del revisor: el portal no enseña `closed_by`) y los hallazgos sin destino, que reparte el propietario entre 2.3.1 y 2.4.0.
+- **Otros 🟠:** V23-1-QA-1 (`TagScanner`), V23-2-QA-2 (guarda de RN-05 al anular, sin prueba), V23-1-DV-2 (destino 2.4.0) y cuatro intermitentes (V23-2-KI-1, PO-1, PA-1 y QA-1).
+- **Doc 07:** Gestión de defectos baja a 1 si la verificación deja un hallazgo sin destino o se publicó con un 🔴/🟠 abierto. Decidirlo en el cierre.
+- **Dependabot:** #221 a #227 abiertas desde antes de publicar, sin revisar; #149 sigue aparcada.
+
 **KronoQR 2.2.0 publicada el 09-10-2026** (<https://github.com/BorjaPeonSaiz/KronoQR/releases/tag/v2.2.0>): PR #131
 `chore/release-2.2.0` → `main` `7fb3d5e2`, etiqueta `v2.2.0`, `release.yml` 37935103938 en verde (imágenes en GHCR fijadas por
 digest, públicas sin credenciales; paquete, SBOM y `SHA256SUMS`). `load-test.yml` de la etiqueta en rojo solo por R5-QA-02 (8
@@ -297,7 +314,7 @@ Lo que conviene saber del bloque 5:
 - `package.sh` deja fuera del paquete los runbooks internos `fallo-de-ci.md` y `triaje-hallazgos-seguridad.md` (I10). Ningún documento que viaja puede enlazarlos: lo comprueban `ClientDocumentationTest` y `check-package-links.sh`.
 - La guía de RRHH §5.4 (es/en) explica «Este tramo terminó en pausa» y RN-05 (ADR-058).
 
-**Siguiente acción (03-11-2026):** **plan de la 2.3.0 integrado entero salvo el bloque final**: B33 parcial (#228, `d91d991c`), B34 (#229, `095c195e`), B35 (#230, `6bf0da3a`) y B32 con la 33.12 (#231, `main` `d239aefa`). Doc 07 cerrado para la 2.3.0: §6 sin filas «pendiente» ni destinos 2.3.0 abiertos, Gestión de defectos en 2 con condición (baja a 1 si la verificación final deja un hallazgo sin destino o se publica con un 🔴/🟠 abierto), total SAMM 1,87. **Lo siguiente es el bloque final (`chore/release-2.3.0`), y solo con orden del propietario.** Antes de publicar, **el propietario tiene que generar el par de claves de diagnóstico** (`php tools/diagnostics-opener/generate-keypair.php --keyring=$HOME/.kronoqr/diagnostics`; `release-gate` lo exige). Lo que queda anotado para después está en «Pendiente» (bloques 32, 34 y 35).
+**Cierre del plan (03-11-2026):** plan de la 2.3.0 integrado entero: B33 parcial (#228, `d91d991c`), B34 (#229, `095c195e`), B35 (#230, `6bf0da3a`) y B32 con la 33.12 (#231, `main` `d239aefa`). Doc 07 cerrado para la 2.3.0: §6 sin filas «pendiente» ni destinos 2.3.0 abiertos, Gestión de defectos en 2 con condición (baja a 1 si la verificación final deja un hallazgo sin destino o se publica con un 🔴/🟠 abierto), total SAMM 1,87. Lo anotado para después está en «Pendiente» (bloques 32, 34 y 35). El bloque final se publicó el 04-11-2026; la siguiente acción está al principio de este fichero.
 
 **B17 a B26 y B24 integrados** (orden del 15-10-2026: un PR por bloque en verde):
 - B17 (#161), B18 (#162), B19 (#167), B20 (#168) y B21 (#169).

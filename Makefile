@@ -1648,9 +1648,11 @@ backup-verify: ## Verifica la ultima copia: huella, descifrado y lectura del ind
 # Necesita ver el destino de copias, que en desarrollo es un volumen: se copia
 # a un directorio temporal, se ensaya alli y no se toca nada del entorno.
 # El simulacro verifica ademas la cadena de audit_log con la imagen de la APLICACION (V5-DV-02). La
-# imagen de desarrollo no lleva el codigo (va montado): aqui se omite por omision. Para verificarla:
+# imagen de desarrollo no lleva el codigo (va montado), asi que se usa la publicada de `VERSION`,
+# que se descarga sin credenciales. No vale --skip-audit-chain: restore-drill.sh la rechaza en
+# cuanto la base tiene cadena. Para otra imagen:
 #   make restore-drill DRILL_CHAIN="--php-image kronoqr/app:ci"   (tras `make build-ci-images IMAGES=app`)
-DRILL_CHAIN ?= --skip-audit-chain
+DRILL_CHAIN ?= --php-image ghcr.io/borjapeonsaiz/kronoqr/php:$(shell cat VERSION)
 restore-drill: ## Simulacro de restauracion en contenedor limpio (RNF-D-05, RQ-09)
 	@destino=$${TMPDIR:-/tmp}/kronoqr-drill; \
 	rm -rf "$$destino"; mkdir -p "$$destino"; \

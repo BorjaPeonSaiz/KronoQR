@@ -66,6 +66,13 @@ export function registerAuthGuard(router: Router): void {
       return { name: 'login', query: { redirect: to.fullPath } }
     }
 
+    // `restore()` no pudo leer la cuenta (red, 429, 503) y el token sigue vivo: no se sabe
+    // que permisos hay, que no es lo mismo que no tenerlos. Se deja pasar, la pantalla
+    // enseña su propio error y la API sigue decidiendo. La siguiente navegacion reintenta.
+    if (session.status === 'unknown') {
+      return true
+    }
+
     // Contrasena temporal (RF-ID-10): hasta cambiarla, la unica pantalla es la del
     // cambio. Cerrar sesion no es una ruta, asi que sigue disponible en el marco.
     if (session.passwordChangeRequired) {

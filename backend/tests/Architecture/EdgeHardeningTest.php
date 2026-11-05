@@ -239,3 +239,15 @@ it('lleva el padron y el latido del quiosco a zonas propias con la distincion de
     // `pair/confirm` lo hace el administrador desde el panel, fuera de la VLAN: sigue en `api`.
     expect($plantilla)->not->toMatch('/location [^\n]*\/api\/v1\/kiosk\/pair/');
 })->group('RS-02', 'RNF-P-06');
+
+it('saca la lectura de la sesion de la zona del acceso y deja el acceso en ella', function (): void {
+    $plantilla = Repo::contents('infra/docker/nginx/templates/kronoqr.conf.template');
+
+    // El panel pide /auth/me en cada carga: en la zona `auth` cinco recargas daban 429.
+    expect(preg_match('/location = \/api\/v1\/auth\/me \{(.*?)\n  \}/s', $plantilla, $lectura))->toBe(1);
+    expect($lectura[1] ?? '')->toContain('limit_req zone=api ')
+        ->and($lectura[1] ?? '')->toContain('$kronoqr_admin_allowed');
+
+    expect(preg_match('/location \^~ \/api\/v1\/auth\/ \{(.*?)\n  \}/s', $plantilla, $acceso))->toBe(1);
+    expect($acceso[1] ?? '')->toContain('limit_req zone=auth ');
+})->group('RS-02');

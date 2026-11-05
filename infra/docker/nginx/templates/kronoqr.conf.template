@@ -419,6 +419,20 @@ server {
     include /etc/nginx/snippets/php-fpm.conf;
   }
 
+  #--- Lectura de la sesion: zona general ------------------------------------
+  # Exacta (`=`): gana a `^~ /api/v1/auth/`. El panel la pide en cada carga, asi que
+  # con la zona de abajo cinco recargas en un minuto daban 429. No prueba contraseñas
+  # y la aplicacion la limita ademas por token (`throttle:management`).
+  location = /api/v1/auth/me {
+    if ($kronoqr_admin_allowed = 0) {
+      return 403;
+    }
+    error_page 403 @kronoqr_admin_forbidden;
+    limit_req zone=api burst=60 nodelay;
+    include /etc/nginx/snippets/api-error-pages.conf;
+    include /etc/nginx/snippets/php-fpm.conf;
+  }
+
   #--- Autenticacion del panel: 5 r/m ----------------------------------------
   # PP-10: con ADMIN_INTERNAL_CIDR definida, fuera de su rango 403 antes de
   # llegar a PHP-FPM; vacia, no filtra.

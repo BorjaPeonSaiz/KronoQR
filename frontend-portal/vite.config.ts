@@ -19,8 +19,8 @@ const appVersion =
 
 // Ruta bajo la que se sirve esta SPA. En produccion Nginx la publica en
 // `/portal/` —detras del mismo candado por CIDR que su API (RF-ID-08)— y la
-// imagen de entrega construye con KRONOQR_BASE=/portal/. En desarrollo el
-// valor es `/` y no cambia nada.
+// imagen de entrega construye con KRONOQR_BASE=/portal/; compose.dev.yaml fija
+// lo mismo. En las pruebas E2E vale `/`.
 const base = process.env['KRONOQR_BASE'] ?? '/'
 
 export default defineConfig({
