@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Console\Commands\Quality\Support;
 
+use PhpToken;
 use Symfony\Component\Finder\Finder;
 
 /**
@@ -20,6 +21,11 @@ use Symfony\Component\Finder\Finder;
  * la pila levantada. La contrapartida esta declarada: una etiqueta compuesta en
  * tiempo de ejecucion no se ve. Por eso lo que no encaja no se descarta, se
  * devuelve en `malformed` y el comando lo enseña.
+ *
+ * Pest se lee con el tokenizador de PHP y no como texto: las
+ * pruebas de las herramientas de calidad llevan fuentes de prueba dentro de
+ * cadenas, y solo el tokenizador distingue una llamada de lo que la cita. Ver
+ * {@see pestTags()}.
  */
 final class TagScanner
 {
@@ -36,9 +42,6 @@ final class TagScanner
      * que la prueba se repite por variante.
      */
     private const string DECLARATION = '/\b(?:it|test|describe)\s*\(\s*(?|\'(?<name>[^\'\n]*)\'|"(?<name>[^"\n]*)"|`(?<name>[^`\n]*)`)/u';
-
-    /** `->group('RN-05', 'RF-AT-08')` y `#[Group('RN-05')]`. */
-    private const string PEST_TAG = '/(?:->\s*group|#\[\s*Group)\s*\(\s*(?<args>[^)]*)\)/u';
 
     /** `{ tag: ['@RF-KI-03'] }` y `{ tag: '@RF-KI-03' }`. */
     private const string PLAYWRIGHT_TAG = '/\btag\s*:\s*(?<args>\[[^\]]*\]|[\'"][^\'"\n]*[\'"])/u';
@@ -258,25 +261,21 @@ final class TagScanner
      */
     private function readChain(string $tool, string $file, string $source): array
     {
-        $expression = $tool === 'playwright' ? self::PLAYWRIGHT_TAG : self::PEST_TAG;
-
-        preg_match_all($expression, $source, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE);
-
         $tests = [];
         $malformed = [];
 
-        foreach ($matches as $match) {
-            $classified = $this->classify($match['args'][0]);
+        foreach ($tool === 'playwright' ? self::playwrightTags($source) : self::pestTags($source) as $tag) {
+            $classified = $this->classifyAll($tag['values']);
 
-            foreach ($classified['malformed'] as $tag) {
-                $malformed[] = $this->malformedTag($file, $tag);
+            foreach ($classified['malformed'] as $value) {
+                $malformed[] = $this->malformedTag($file, $value);
             }
 
             if ($classified['requirements'] === []) {
                 continue;
             }
 
-            $offset = $match[0][1];
+            $offset = $tag['offset'];
             $skip = self::skipArguments($source, $offset);
 
             if ($skip !== null && ! self::isConditional($skip)) {
@@ -297,6 +296,114 @@ final class TagScanner
         }
 
         return ['tests' => $tests, 'malformed' => $malformed];
+    }
+
+    /**
+     * Las etiquetas de Playwright, con el sitio donde empiezan.
+     *
+     * @return list<array{offset: int, values: list<string>}>
+     */
+    private static function playwrightTags(string $source): array
+    {
+        preg_match_all(self::PLAYWRIGHT_TAG, $source, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE);
+
+        $tags = [];
+
+        foreach ($matches as $match) {
+            preg_match_all(self::QUOTED, $match['args'][0], $quoted);
+
+            $tags[] = ['offset' => $match[0][1], 'values' => $quoted['value']];
+        }
+
+        return $tags;
+    }
+
+    /**
+     * Las etiquetas de Pest y PHPUnit, con el sitio donde empiezan.
+     *
+     * Una etiqueta es una **llamada**. Leido como texto, un `->group('RL-04')`
+     * citado en una cadena o en un comentario hacia figurar RL-04 como cubierto
+     * sin que exista la prueba, y la matriz se entrega como evidencia de que
+     * cada obligacion legal tiene una. El tokenizador deja cada cadena y cada
+     * comentario en un solo token, asi que lo que llevan dentro no se ve.
+     *
+     * @return list<array{offset: int, values: list<string>}>
+     */
+    private static function pestTags(string $source): array
+    {
+        $tokens = array_values(array_filter(
+            PhpToken::tokenize($source),
+            static fn (PhpToken $token): bool => ! $token->isIgnorable(),
+        ));
+
+        $tags = [];
+
+        foreach ($tokens as $index => $token) {
+            if (self::isTagCall($tokens, $index)) {
+                $tags[] = ['offset' => $tokens[$index - 1]->pos, 'values' => self::stringArguments($tokens, $index + 1)];
+            }
+        }
+
+        return $tags;
+    }
+
+    /**
+     * ¿Es `$tokens[$index]` el nombre de una etiqueta? O `->group(` colgado de
+     * una llamada, o `#[Group(`.
+     *
+     * Lo de «colgado de una llamada» deja fuera `$coleccion->group('RL-04')`, el
+     * metodo de un objeto cualquiera en el cuerpo de una prueba. Es el mismo
+     * criterio de la puerta de pruebas sin etiqueta: lo que cuenta es la cadena
+     * de la declaracion, nunca lo que el cuerpo haga.
+     *
+     * @param  list<PhpToken>  $tokens
+     */
+    private static function isTagCall(array $tokens, int $index): bool
+    {
+        $token = $tokens[$index];
+        $previous = $tokens[$index - 1] ?? null;
+
+        if (! $token->is(T_STRING) || ! $previous instanceof PhpToken || ($tokens[$index + 1] ?? null)?->text !== '(') {
+            return false;
+        }
+
+        return match ($token->text) {
+            'group' => $previous->is(T_OBJECT_OPERATOR) && ($tokens[$index - 2] ?? null)?->text === ')',
+            'Group' => $previous->is(T_ATTRIBUTE),
+            default => false,
+        };
+    }
+
+    /**
+     * Las cadenas literales de la lista de argumentos que abre `$tokens[$open]`.
+     *
+     * @param  list<PhpToken>  $tokens
+     * @return list<string>
+     */
+    private static function stringArguments(array $tokens, int $open): array
+    {
+        $depth = 0;
+        $values = [];
+
+        for ($index = $open; isset($tokens[$index]); $index++) {
+            $token = $tokens[$index];
+
+            $depth += match ($token->text) {
+                '(' => 1,
+                ')' => -1,
+                default => 0,
+            };
+
+            if ($depth === 0) {
+                break;
+            }
+
+            if ($token->is(T_CONSTANT_ENCAPSED_STRING)) {
+                $values[] = substr($token->text, 1, -1);
+            }
+        }
+
+        return $values;
     }
 
     /**
@@ -354,19 +461,6 @@ final class TagScanner
      * mientras alguien cree haberla escrito. El criterio es
      * {@see RequirementTag}, el mismo que el de la puerta de pruebas sin
      * etiqueta.
-     *
-     * @return array{requirements: list<string>, malformed: list<string>}
-     */
-    private function classify(string $arguments): array
-    {
-        preg_match_all(self::QUOTED, $arguments, $matches);
-
-        return $this->classifyAll($matches['value']);
-    }
-
-    /**
-     * Lo mismo, sobre identificadores ya sueltos: es la forma en la que llegan
-     * los de k6, que van todos dentro de una misma cadena.
      *
      * @param  list<string>  $values
      * @return array{requirements: list<string>, malformed: list<string>}

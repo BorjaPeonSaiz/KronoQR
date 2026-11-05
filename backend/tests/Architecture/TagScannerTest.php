@@ -15,10 +15,6 @@ use Tests\Support\FakeTestSource;
  * devuelve en `malformed` para que el comando lo enseñe. Estas pruebas fijan
  * ese contrato, porque un extractor que se traga lo que no entiende convierte
  * la matriz de trazabilidad en un recuento de etiquetas.
- *
- * Los fixtures se construyen con FakeTestSource y no se escriben a mano: el
- * escaner lee tests/ como texto, asi que un `->group('RN-05')` literal en este
- * fichero haria figurar RN-05 como cubierto por una prueba inexistente.
  */
 
 /** Crea un arbol temporal con un fichero de prueba dentro y devuelve su raiz. */
@@ -78,6 +74,84 @@ it('lee las etiquetas de Playwright', function (): void {
     $root = scannerFixture('flujo.spec.ts', FakeTestSource::playwright('ficha', 'RF-KI-03'));
 
     expect(array_keys(scanOf($root, 'playwright')->byRequirement()))->toBe(['RF-KI-03']);
+})->group('RQ-13');
+
+/*
+ * Una etiqueta es codigo, no texto (V23-1-QA-1 de la 2.3.0).
+ *
+ * Con la lectura por expresion regular, un fixture de una prueba del escaner
+ * hacia figurar su requisito como cubierto: nueve entradas de la matriz eran
+ * pruebas que no existen, y un requisito legal sin ninguna prueba habria pasado
+ * `--check` con solo citarlo en un comentario.
+ */
+it('no cuenta lo que parece una etiqueta y no es una llamada', function (string $fragmento): void {
+    $root = scannerFixture('LookalikeTest.php', "<?php\n".$fragmento."\n");
+
+    $scan = scanOf($root);
+
+    expect($scan->byRequirement())->toBe([])
+        ->and($scan->malformed)->toBe([]);
+})->with([
+    'cadena con comillas dobles' => [<<<'PHP'
+        $fuente = "it('x')->group('RL-04');";
+        PHP],
+    'cadena con comillas simples' => [<<<'PHP'
+        $fuente = 'it("x")->group("RL-04");';
+        PHP],
+    'cadena con una variable dentro' => [<<<'PHP'
+        $fuente = "{$prueba}->group('RL-04');";
+        PHP],
+    'heredoc' => ["\$fuente = <<<FUENTE\nit('x')->group('RL-04');\nFUENTE;"],
+    'nowdoc' => ["\$fuente = <<<'FUENTE'\nit('x')->group('RL-04');\nFUENTE;"],
+    'comentario de linea' => ["// it('x')->group('RL-04');"],
+    'comentario con almohadilla' => ["# it('x')->group('RL-04');"],
+    'comentario de bloque' => ["/* it('x')->group('RL-04'); */"],
+    'docblock' => ["/**\n * it('x')->group('RL-04');\n */"],
+    'atributo en una cadena' => [<<<'PHP'
+        $fuente = "#[Group('RL-04')]";
+        PHP],
+    'atributo en un comentario' => ["// #[Group('RL-04')]"],
+    'texto fuera de las etiquetas de PHP' => ["?>\nit('x')->group('RL-04');"],
+    'errata citada en un comentario' => ["// la letra O de ->group('RN-O5')"],
+    'metodo de un objeto cualquiera en el cuerpo' => ["\$coleccion->group('RL-04');"],
+    'estatico de una clase cualquiera' => ["Route::group('RL-04');"],
+])->group('RQ-13');
+
+it('sigue contando la etiqueta de verdad, con su linea, junto a una cadena y un comentario que la imitan', function (): void {
+    $root = scannerFixture('MixedLookalikeTest.php', <<<'PHP'
+        <?php
+        // it('x')->group('RL-04');
+        $fuente = "it('y')->group('RL-05');";
+        it('la de verdad', function (): void {})->group('RN-05');
+        PHP);
+
+    $tests = scanOf($root)->byRequirement();
+
+    expect(array_keys($tests))->toBe(['RN-05'])
+        ->and($tests['RN-05'][0]->line)->toBe(4);
+})->group('RQ-13');
+
+it('lee la etiqueta de verdad por entre comentarios, en varias lineas y con coma final', function (string $fuente, array $requisitos): void {
+    $root = scannerFixture('LayoutTest.php', "<?php\n".$fuente."\n");
+
+    expect(array_keys(scanOf($root)->byRequirement()))->toBe($requisitos);
+})->with([
+    'comentario antes de la flecha' => ["it('a') // nota\n    ->group('RN-05');", ['RN-05']],
+    'comentario despues de la flecha' => ["it('a')-> /* nota */ group('RN-05');", ['RN-05']],
+    'una por linea y coma final' => ["it('a')->group(\n    'RF-AT-01',\n    'RN-05',\n);", ['RF-AT-01', 'RN-05']],
+    'con espacio antes del parentesis' => ["it('a')->group ('RN-05');", ['RN-05']],
+    'argumento comentado, que no cuenta' => ["it('a')->group('RN-05' /* , 'RL-04' */);", ['RN-05']],
+    'detras de with y de otra llamada' => ["it('a')->with([1])->skip(false)->group('RN-05');", ['RN-05']],
+    'atributo con espacios' => ["#[ Group( 'RN-05' ) ]\nfunction algo(): void {}", ['RN-05']],
+])->group('RQ-13');
+
+it('sigue apartando una errata cuando es una etiqueta de verdad', function (): void {
+    $root = scannerFixture('RealTypoTest.php', <<<'PHP'
+        <?php
+        it('a', function (): void {})->group('RN-O5');
+        PHP);
+
+    expect(implode(' ', scanOf($root)->malformed))->toContain('RN-O5');
 })->group('RQ-13');
 
 it('NO cuenta como cubierto un requisito cuya prueba esta saltada', function (): void {

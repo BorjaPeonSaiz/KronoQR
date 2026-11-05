@@ -1,9 +1,16 @@
 // La regla vive en web-kit (con su prueba completa). Aqui solo se comprueba que
 // la configuracion de esta aplicacion la aplica y declara sus excepciones.
 import { ESLint } from 'eslint'
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 
 const eslint = new ESLint({ cwd: process.cwd() })
+
+// ESLint arranca en frio (carga la configuracion y los plugins) en la primera
+// llamada y con la CPU cargada supera los 5000 ms por defecto (V23-2-PO-1). Se
+// precalienta fuera de las pruebas: las comprobaciones siguen siendo las mismas.
+beforeAll(async () => {
+  await eslint.lintText('export {}\n', { filePath: 'src/warmup.ts' })
+}, 60_000)
 
 async function hasStorageError(code: string, filePath: string): Promise<boolean> {
   const [result] = await eslint.lintText(code, { filePath })

@@ -62,6 +62,7 @@ function performedAt(correction: WorkDayCorrection): string {
 interface MarksView {
   clockIn: string
   clockOut: string
+  closedBy: string
   worked: string
 }
 
@@ -76,6 +77,12 @@ function marksView(marks: ShiftMarks | null): MarksView | null {
       marks.clocked_out_at === null
         ? t('myRecords.history.openMark')
         : instant(marks.clocked_out_at),
+    // Abierto: no termino de ninguna forma. Las correcciones anteriores a la
+    // 2.3.0 no lo apuntaban (ADR-058). Mismo significado que en el panel.
+    closedBy:
+      marks.clocked_out_at === null
+        ? t('myRecords.history.openMark')
+        : t(`myRecords.history.closedBy.${marks.closed_by ?? 'unknown'}`),
     worked: duration(marks.worked_minutes),
   }
 }
@@ -165,6 +172,9 @@ const items = computed<CorrectionView[]>(() =>
                   </th>
                   <th scope="col" class="py-1 pr-3">{{ t('myRecords.history.fields.in') }}</th>
                   <th scope="col" class="py-1 pr-3">{{ t('myRecords.history.fields.out') }}</th>
+                  <th scope="col" class="py-1 pr-3">
+                    {{ t('myRecords.history.fields.closedBy') }}
+                  </th>
                   <th scope="col" class="py-1 pr-3">{{ t('myRecords.history.fields.worked') }}</th>
                 </tr>
               </thead>
@@ -183,6 +193,7 @@ const items = computed<CorrectionView[]>(() =>
                     {{ item.before?.clockIn ?? t('myRecords.history.noEntryBefore') }}
                   </td>
                   <td class="py-1 pr-3">{{ item.before?.clockOut ?? '—' }}</td>
+                  <td class="py-1 pr-3">{{ item.before?.closedBy ?? '—' }}</td>
                   <td class="py-1 pr-3">{{ item.before?.worked ?? '—' }}</td>
                 </tr>
                 <tr class="text-kq-text">
@@ -193,6 +204,7 @@ const items = computed<CorrectionView[]>(() =>
                     {{ item.after?.clockIn ?? t('myRecords.history.noEntryAfter') }}
                   </td>
                   <td class="py-1 pr-3">{{ item.after?.clockOut ?? '—' }}</td>
+                  <td class="py-1 pr-3">{{ item.after?.closedBy ?? '—' }}</td>
                   <td class="py-1 pr-3">{{ item.after?.worked ?? '—' }}</td>
                 </tr>
               </tbody>

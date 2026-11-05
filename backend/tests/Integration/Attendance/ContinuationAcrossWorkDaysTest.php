@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 use App\Modules\Attendance\Application\Command\AddShiftEntryCommand;
 use App\Modules\Attendance\Application\Command\CorrectShiftEntryCommand;
+use App\Modules\Attendance\Application\Command\VoidShiftEntryCommand;
 use App\Modules\Attendance\Application\Port\WorkDayRepository;
 use App\Modules\Attendance\Application\UseCase\AddShiftEntryHandler;
 use App\Modules\Attendance\Application\UseCase\CorrectShiftEntryHandler;
+use App\Modules\Attendance\Application\UseCase\VoidShiftEntryHandler;
 use App\Modules\Attendance\Domain\Exception\EntryDoesNotContinueWorkDay;
 use App\Modules\Attendance\Domain\Model\WorkDay;
 use App\Modules\Attendance\Domain\ValueObject\ClockingAction;
@@ -151,6 +153,121 @@ it('rechaza mover con una correccion un tramo de la jornada del 14 detras de la 
     )))->toThrow(EntryDoesNotContinueWorkDay::class);
 
     expect(DB::table('shift_entries')->where('uuid', $tarde)->value('status'))->toBe('closed');
+})->group('RN-05', 'RF-PA-04', 'RN-13');
+
+// --- Anular: el tramo siguiente pasa a medirse contra otro anterior (V23-2-QA-2)
+
+/**
+ * Jornada del 14 con tres tramos en pausa: de 22:00 a 00:00, de 02:00 a 03:00
+ * del 15 y de 05:00 a 07:00 del 15. Cada uno continua el anterior.
+ *
+ * Con `$conJornadaDelQuince`, un tramo de la jornada del 15, de 00:30 a 01:30,
+ * entra despues en el hueco entre los dos primeros. Es lo que hace un alta
+ * tardia o la cola offline, y ningun tramo de la jornada del 14 cambia por ello.
+ *
+ * @return array{employee: string, user: int, madrugada: string, vuelta: string, quince: ?string}
+ */
+function interrupcionAlAnularEscenario(bool $conJornadaDelQuince): array
+{
+    $site = WorkforceFixtures::site('Hotel de la anulacion interrumpida');
+    $employee = WorkforceFixtures::employee($site);
+    $repositorio = app(WorkDayRepository::class);
+    $politica = ClockingPolicyFactory::standard();
+
+    $catorce = WorkDay::start($employee, $site, WorkDate::fromIsoDate('2026-03-14', Instants::madrid()));
+    $catorce->clockIn(Str::uuid7()->toString(), Instants::inMadrid('2026-03-14 22:00'), ScanOrigin::QR_KIOSK);
+    $catorce->clockOut(Instants::inMadrid('2026-03-15 00:00'), ScanOrigin::QR_KIOSK, $politica, ClockingAction::BREAK_START);
+    $madrugada = $catorce->clockIn(Str::uuid7()->toString(), Instants::inMadrid('2026-03-15 02:00'), ScanOrigin::QR_KIOSK);
+    $catorce->clockOut(Instants::inMadrid('2026-03-15 03:00'), ScanOrigin::QR_KIOSK, $politica, ClockingAction::BREAK_START);
+    $vuelta = $catorce->clockIn(Str::uuid7()->toString(), Instants::inMadrid('2026-03-15 05:00'), ScanOrigin::QR_KIOSK);
+    $catorce->clockOut(Instants::inMadrid('2026-03-15 07:00'), ScanOrigin::QR_KIOSK, $politica);
+    $repositorio->save($catorce);
+
+    $tramoDelQuince = null;
+
+    if ($conJornadaDelQuince) {
+        $quince = WorkDay::start($employee, $site, WorkDate::fromIsoDate('2026-03-15', Instants::madrid()));
+        $tramoDelQuince = $quince->clockIn(Str::uuid7()->toString(), Instants::inMadrid('2026-03-15 00:30'), ScanOrigin::QR_KIOSK)->uuid();
+        $quince->clockOut(Instants::inMadrid('2026-03-15 01:30'), ScanOrigin::QR_KIOSK, $politica);
+        $repositorio->save($quince);
+    }
+
+    return [
+        'employee' => $employee,
+        'user' => ManagementUsers::withRole(UserRole::RRHH)->id,
+        'madrugada' => $madrugada->uuid(),
+        'vuelta' => $vuelta->uuid(),
+        'quince' => $tramoDelQuince,
+    ];
+}
+
+function interrupcionAnulacion(string $tramo, int $user): void
+{
+    app(VoidShiftEntryHandler::class)->handle(new VoidShiftEntryCommand(
+        shiftEntryUuid: $tramo,
+        reason: CorrectionReason::of(CorrectionReasonCode::ERROR_DE_ESCANEO_DUPLICADO),
+        performedByUserId: $user,
+    ));
+}
+
+it('rechaza anular un tramo si el siguiente quedaria detras de otra jornada, sin escribir nada', function (): void {
+    // Sin el tramo de las 02:00, la vuelta de las 05:00 se mediria contra la
+    // salida de las 00:00: 5 h, dentro de la cota y tras una pausa. Lo unico que
+    // lo impide es el tramo de la jornada del 15, de 00:30 a 01:30.
+    $escenario = interrupcionAlAnularEscenario(true);
+    $antes = [
+        DB::table('shift_corrections')->count(),
+        DB::table('audit_log')->count(),
+        DB::table('daily_totals')->count(),
+    ];
+
+    try {
+        interrupcionAnulacion($escenario['madrugada'], $escenario['user']);
+        throw new RuntimeException('Se esperaba EntryDoesNotContinueWorkDay.');
+    } catch (EntryDoesNotContinueWorkDay $rechazo) {
+        expect($rechazo->mark->value)->toBe('clocked_in_at')
+            ->and($rechazo->translationKey)->toBe('attendance.errors.next_entry_would_not_continue_work_day')
+            ->and($rechazo->concernsNextEntry)->toBeTrue()
+            ->and($rechazo->parameters)->toBe(['work_date' => '2026-03-14', 'hours' => '12'])
+            ->and($rechazo->getMessage())->toContain('lies between the previous mark 2026-03-14T23:00:00+00:00');
+    }
+
+    expect(DB::table('shift_entries')->where('uuid', $escenario['madrugada'])->value('status'))->toBe('closed')
+        ->and([
+            DB::table('shift_corrections')->count(),
+            DB::table('audit_log')->count(),
+            DB::table('daily_totals')->count(),
+        ])->toBe($antes);
+})->group('RN-05', 'RF-PA-04', 'RN-13');
+
+it('admite la misma anulacion si ninguna otra jornada se interpuso', function (): void {
+    $escenario = interrupcionAlAnularEscenario(false);
+
+    interrupcionAnulacion($escenario['madrugada'], $escenario['user']);
+
+    expect(DB::table('shift_entries')->where('uuid', $escenario['madrugada'])->value('status'))->toBe('voided');
+})->group('RN-05', 'RF-PA-04', 'RN-13');
+
+it('admite la misma anulacion si el tramo interpuesto ya no esta vigente', function (): void {
+    $escenario = interrupcionAlAnularEscenario(true);
+    interrupcionAnulacion((string) $escenario['quince'], $escenario['user']);
+
+    interrupcionAnulacion($escenario['madrugada'], $escenario['user']);
+
+    expect(DB::table('shift_entries')->where('uuid', $escenario['madrugada'])->value('status'))->toBe('voided');
+})->group('RN-05', 'RF-PA-04', 'RN-13');
+
+it('deja arreglar el dato anulando de atras hacia delante aunque otra jornada se interponga', function (): void {
+    // Regla de RN-05: anular el ultimo siempre se puede.
+    $escenario = interrupcionAlAnularEscenario(true);
+
+    interrupcionAnulacion($escenario['vuelta'], $escenario['user']);
+    interrupcionAnulacion($escenario['madrugada'], $escenario['user']);
+
+    expect(DB::table('shift_entries')
+        ->whereIn('uuid', [$escenario['vuelta'], $escenario['madrugada']])
+        ->where('status', 'voided')
+        ->count())->toBe(2);
 })->group('RN-05', 'RF-PA-04', 'RN-13');
 
 it('pregunta por tramos de otra jornada que pisan el hueco, no por los de la misma', function (): void {

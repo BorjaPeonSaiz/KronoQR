@@ -23,7 +23,7 @@ import { expect, test } from '@playwright/test'
 import type {} from '@/sw/testHooks'
 import { expectNoBlockingViolations } from './support/axe'
 import { stubKioskApi, stubScanApi } from './support/kiosk'
-import { announceOnline, readQueue, stubBatchApi } from './support/offlineQueue'
+import { announceOnline, blockCamera, readQueue, stubBatchApi } from './support/offlineQueue'
 
 /** Deja la señal ANTES de que arranque cualquier script de la pagina (ver la cabecera). */
 async function enableTestHooks(page: Page): Promise<void> {
@@ -38,6 +38,22 @@ async function simulateUpdateAvailable(page: Page): Promise<void> {
 
 async function hasApplied(page: Page): Promise<boolean> {
   return page.evaluate(() => window.__kronoqrTest?.hasAppliedUpdate() ?? false)
+}
+
+/**
+ * Reinicia la tablet con el fichaje ya encolado y sin camara, para que la cola
+ * solo cambie cuando la prueba lo decida (V23-2-QA-1). El video simulado repite
+ * la tarjeta: con el reloj detenido, un segundo escaneo llegaba a la cola en
+ * mitad de `runFor` y la guarda de la regla dura 19 no dejaba actualizar, como
+ * debe. `blockCamera` actua en la navegacion siguiente, de ahi la recarga.
+ */
+async function restartWithoutCamera(page: Page): Promise<void> {
+  await page.route('**/api/v1/scan/batch', async (route) => route.abort('failed'))
+  await blockCamera(page)
+  await page.reload()
+
+  await expect(page.getByTestId('connection-status')).toHaveAttribute('data-pending', /^[1-9]/)
+  await expect.poll(() => page.evaluate(() => window.__kronoqrTest !== undefined)).toBe(true)
 }
 
 /** 04:00 en Madrid en enero (CET, sin horario de verano): dentro de 03:00-05:00. */
@@ -110,10 +126,8 @@ test(
 
     await page.goto('/')
     await expect.poll(() => readQueue(page).then((rows) => rows.length)).toBeGreaterThan(0)
+    await restartWithoutCamera(page)
 
-    // La confirmacion en pantalla cuenta como interaccion en curso (RF-KI-07): la
-    // puerta solo se abre cuando se ha retirado.
-    await expect(page.getByTestId('scan-confirmation')).toBeHidden()
     await page.clock.install({ time: INSIDE_WINDOW })
     await simulateUpdateAvailable(page)
     await page.clock.runFor(0)
@@ -219,10 +233,8 @@ test(
     await page.goto('/')
     await expect.poll(() => readQueue(page).then((rows) => rows.length)).toBeGreaterThan(0)
     await minimumVersionStored(page)
+    await restartWithoutCamera(page)
 
-    // La confirmacion en pantalla cuenta como interaccion en curso (RF-KI-07): la
-    // puerta solo se abre cuando se ha retirado.
-    await expect(page.getByTestId('scan-confirmation')).toBeHidden()
     await page.clock.install({ time: OUTSIDE_WINDOW })
     await simulateUpdateAvailable(page)
     await page.clock.runFor(60_000)

@@ -13,6 +13,39 @@ lo siga no aparece aqui, y el generador lo avisa por la salida de error.
 Ninguna version se publica sin su entrada: `make changelog-check VERSION=1.2.3`
 falla si no la encuentra, y la CI ejecuta esa comprobacion al etiquetar.
 
+## [2.3.1] - 2026-11-05
+
+**Una versión de corrección: conviene instalarla aunque no notes ningún fallo.**
+El detalle está en `docs/cliente/operacion.md` §11 («Al actualizar a la 2.3.1»).
+
+- **Avisos de seguridad de Symfony corregidos**, publicados el 04-11-2026.
+- **El panel ya no enseña «Sin permiso» sin motivo** al recargar varias veces en
+  un minuto o tras un corte de red.
+- **El portal enseña cómo terminó un tramo corregido**, para que la persona vea
+  qué cambió en su registro.
+- **Sin migraciones ni cambios de configuración.** La parada es la de siempre, y
+  se actualiza desde la 2.2.0, la 2.2.1 o la 2.3.0.
+
+### Corregido
+
+- el escaner de etiquetas lee Pest con el tokenizador (V23-1-QA-1) (quality)
+- el historial de correcciones enseña cómo terminó el tramo y la prueba de ESLint se precalienta (portal)
+- Symfony con los avisos de seguridad del 04-11-2026 corregidos (deps)
+- recargar o perder la red ya no enseña «sin permiso» (panel)
+- las tres SPA funcionan por las URL de make up y el simulacro verifica la cadena (dev)
+
+### Interno
+
+- 2.3.1, versión, ejemplos y notas para el hotel (release)
+- la E2E de actualizacion deja de depender del video de la camara (V23-2-QA-1) (kiosk)
+- ESLint se precalienta antes de la regla de almacenamiento (V23-2-PA-1) (admin)
+- tope propio para la cola de 500 filas ilegibles (V23-2-KI-1) (kiosk)
+- la anulacion comprueba otras jornadas de verdad (V23-2-QA-2) (attendance)
+- dependencias pendientes de Dependabot para la 2.3.1 (deps)
+- ⑧b espera el desenlace del fichaje por PIN, no el estado provisional (ci)
+- matriz regenerada y estado de la puesta a punto local
+- registros de la 2.3.0 y estado tras publicar (verificacion)
+
 ## [2.3.0] - 2026-11-04
 
 **Antes de actualizar desde la 2.2.0 o la 2.2.1, lo que cambia para el hotel.**

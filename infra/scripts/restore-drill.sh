@@ -126,7 +126,7 @@ FUENTE_WAL=""
 # La imagen del contenedor limpio de los modos container y database, FIJADA POR DIGEST (ADR-053):
 # la misma base que la Dockerfile del producto (infra/docker/postgres/Dockerfile) —una prueba de
 # arquitectura exige que coincidan— y no un tag movil que pudo cambiar desde la copia.
-IMAGEN_PREDETERMINADA="postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24"
+IMAGEN_PREDETERMINADA="postgres:17-alpine@sha256:266d3c257594e195b309ae9d1805e54c788f1d7b375f56bf6c367aac6c917e7b"
 IMAGEN="${DRILL_POSTGRES_IMAGE:-}"
 MODO="container"
 IMAGEN_PHP="${DRILL_PHP_IMAGE:-}"

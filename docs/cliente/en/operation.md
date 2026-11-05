@@ -1591,6 +1591,19 @@ portal stay as they were. If nobody uses English, untick it there and the
 selector disappears ([`configuration.md`](configuration.md) §2.3). There is no
 need to touch `APP_SUPPORTED_LOCALES` in the `.env`: it is only a fallback.
 
+**When updating to 2.3.1: a corrective release.** It adds no migrations and
+changes no configuration, and the downtime is the usual one. You can update from
+**2.2.0, 2.2.1 or 2.3.0**. If you are coming from 2.2.x, also read the 2.3.0 notes
+below: `update.sh` goes through it and everything they describe applies.
+What changes:
+
+- **Dependencies with their security advisories fixed** (Symfony, published on
+  04-11-2026). That is why it is worth updating even if you notice no fault.
+- **The panel no longer shows "No permission" for no reason** after several
+  reloads within a minute or after a network outage.
+- **The portal shows how a corrected entry ended.** If HR corrects only that, the
+  person can now see what changed in their record.
+
 **When updating to 2.3.0: the downtime.** The same as every update (above):
 around one minute of `503`, which the tablet's queue covers. Within that
 window, 2.3.0 adds filling in "how it ended" for each shift (below), which on an

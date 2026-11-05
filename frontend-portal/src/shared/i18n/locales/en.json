@@ -187,13 +187,19 @@
         "moment": "Shift version",
         "in": "Clock in",
         "out": "Clock out",
+        "closedBy": "How it ended",
         "worked": "Time worked"
       },
       "before": "Before",
       "after": "After",
       "noEntryBefore": "The shift did not exist",
       "noEntryAfter": "Shift voided",
-      "openMark": "No clock out"
+      "openMark": "No clock out",
+      "closedBy": {
+        "clock_out": "Clock-out",
+        "break_start": "Break",
+        "unknown": "Not recorded"
+      }
     },
     "correctionAction": {
       "created": "Shift added",

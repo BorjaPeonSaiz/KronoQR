@@ -43,3 +43,4 @@
 2.2.0 2026_10_09_100000_revoke_application_writes_on_migrations_table
 2.2.1 2026_10_16_100400_preserve_locales_on_existing_installations
 2.3.0 2026_11_02_100000_purge_error_event_resolutions_by_age
+2.3.1 -
