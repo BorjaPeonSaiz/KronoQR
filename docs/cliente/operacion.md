@@ -1574,6 +1574,19 @@ como estaban. Si nadie usa el inglés, desmárcalo ahí y desaparece el selector
 ([`configuracion.md`](configuracion.md) §2.3). No hace falta tocar
 `APP_SUPPORTED_LOCALES` del `.env`: es solo un respaldo.
 
+**Al actualizar a la 2.3.1: una versión de corrección.** No añade migraciones
+ni cambia la configuración, y la parada es la de siempre. Se actualiza desde la
+**2.2.0, la 2.2.1 o la 2.3.0**. Si vienes de la 2.2.x, léete además las notas de
+la 2.3.0 de más abajo: `update.sh` pasa por ella y se aplica todo lo que cuentan.
+Lo que cambia:
+
+- **Dependencias con avisos de seguridad corregidos** (Symfony, publicados el
+  04-11-2026). Por eso conviene actualizar aunque no notes ningún fallo.
+- **El panel ya no enseña «Sin permiso» sin motivo** al recargar varias veces en
+  un minuto o tras un corte de red.
+- **El portal enseña cómo terminó un tramo corregido.** Si RRHH corrige solo eso,
+  la persona ya ve qué cambió en su registro.
+
 **Al actualizar a la 2.3.0: la parada.** La misma de cada actualización
 (arriba): alrededor de un minuto de `503`, que cubre la cola de la tablet. La
 2.3.0 añade dentro de esa ventana el relleno de «cómo terminó» cada tramo (más

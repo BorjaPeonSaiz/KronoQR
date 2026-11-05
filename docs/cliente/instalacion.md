@@ -108,7 +108,7 @@ que también cubre el emparejamiento de la primera tablet.
 contraseña. **La licencia no está ahí**: te la envía tu proveedor aparte (§4).
 
 **Qué versión elegir.** La más reciente de la serie `v2.3.x` (en esta guía, los
-ejemplos usan la `2.3.0`; escribe la que hayas elegido). **Nunca** una cuyo
+ejemplos usan la `2.3.1`; escribe la que hayas elegido). **Nunca** una cuyo
 título o notas digan «no usar», ni una marcada como *Pre-release*: no son para
 instalaciones de cliente.
 
@@ -124,17 +124,17 @@ El tercero, `kronoqr-<versión>.cdx.json`, es la lista de componentes del
 producto (SBOM): no hace falta para instalar.
 
 **Dónde: en `/opt`.** El paquete se descarga y se descomprime ahí, y crea
-`/opt/kronoqr-2.3.0`: es la ruta que verás en el resto de esta guía y en las
+`/opt/kronoqr-2.3.1`: es la ruta que verás en el resto de esta guía y en las
 salidas de ejemplo. Cada versión nueva se descomprime después **al lado**
-(`/opt/kronoqr-2.3.0`…), nunca encima ([`operacion.md`](operacion.md) §11).
+(`/opt/kronoqr-2.3.1`…), nunca encima ([`operacion.md`](operacion.md) §11).
 `/opt` es de root, y por eso las órdenes que escriben ahí llevan `sudo`.
 
 Desde el servidor:
 
 ```bash
 cd /opt
-sudo curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.3.0/kronoqr-2.3.0.tar.gz
-sudo curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.3.0/SHA256SUMS
+sudo curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.3.1/kronoqr-2.3.1.tar.gz
+sudo curl -fLO https://github.com/BorjaPeonSaiz/KronoQR/releases/download/v2.3.1/SHA256SUMS
 ```
 
 > **Si el servidor no tiene salida a internet**, descarga los dos ficheros
@@ -149,7 +149,7 @@ Con los dos en la misma carpeta, comprueba que el paquete llegó entero:
 sha256sum -c --ignore-missing SHA256SUMS
 ```
 
-Tiene que decir `kronoqr-2.3.0.tar.gz: OK`. Si dice `FAILED`, no lo
+Tiene que decir `kronoqr-2.3.1.tar.gz: OK`. Si dice `FAILED`, no lo
 descomprimas: bórralo y vuelve a descargarlo; si vuelve a fallar, avisa a tu
 proveedor. Si dice `no properly formatted checksum lines found`, lo que
 descargaste como `SHA256SUMS` es una página web y no el fichero: descárgalo de
@@ -164,8 +164,8 @@ no lo has descargado.
 > comprobación que protege de un paquete sustituido.
 
 ```bash
-sudo tar xzf kronoqr-2.3.0.tar.gz
-cd /opt/kronoqr-2.3.0
+sudo tar xzf kronoqr-2.3.1.tar.gz
+cd /opt/kronoqr-2.3.1
 ls -A
 ```
 
@@ -389,9 +389,9 @@ Salida esperada:
 
 ```
 Fase 1 de 5 — comprobando requisitos. Todavia no se escribe nada.
-  [ok]    Fichero de compose /opt/kronoqr-2.3.0/docker-compose.yml
-  [ok]    Version que se instala: 2.3.0
-  [ok]    Plantilla de configuracion /opt/kronoqr-2.3.0/.env
+  [ok]    Fichero de compose /opt/kronoqr-2.3.1/docker-compose.yml
+  [ok]    Version que se instala: 2.3.1
+  [ok]    Plantilla de configuracion /opt/kronoqr-2.3.1/.env
   [ok]    Permiso para hablar con Docker
   [ok]    Docker 27.3.1 (se exige 24 o superior)
   [ok]    Docker Compose v2 (2.29.7)
@@ -421,13 +421,13 @@ Fase 1 de 5 — comprobando requisitos. Todavia no se escribe nada.
   [ok]    Firma de las imagenes del producto verificada con cosign (workflow de publicacion del fabricante)
   [ok]    APP_URL: https://fichaje.tuhotel.local
   [ok]    El nombre fichaje.tuhotel.local resuelve desde este servidor
-  [ok]    Certificado TLS en /opt/kronoqr-2.3.0/certs
+  [ok]    Certificado TLS en /opt/kronoqr-2.3.1/certs
   [ok]    El borde (uid 101) puede leer tls.crt
   [ok]    El borde (uid 101) puede leer tls.key
   [ok]    Puerto 80 libre
   [ok]    Puerto 443 libre
   [ok]    Se puede escribir en /var/backups/fichaje
-  [ok]    Se puede escribir en /opt/kronoqr-2.3.0
+  [ok]    Se puede escribir en /opt/kronoqr-2.3.1
   [ok]    Privilegios para asignar el propietario del archivo de WAL
 
 Requisitos cumplidos: 40 comprobaciones, 0 avisos.
@@ -478,7 +478,7 @@ Tarda entre tres y quince minutos, según lo que tarde en descargar las
 imágenes. Verás las cinco fases. Al terminar:
 
 ```
-KronoQR 2.3.0 instalado y verificado.
+KronoQR 2.3.1 instalado y verificado.
 
   Panel de gestion:    https://fichaje.tuhotel.local/admin/
   Quiosco (tablet):    https://fichaje.tuhotel.local/kiosk/
@@ -489,7 +489,7 @@ que crea la organizacion, el centro, el primer administrador y el primer
 quiosco. Hasta que lo termines no hay ninguna cuenta: el instalador no crea
 usuarios.
 
-DOCUMENTACION, en /opt/kronoqr-2.3.0/docs
+DOCUMENTACION, en /opt/kronoqr-2.3.1/docs
   ...
 
 ANTES DE CERRAR LA SESION: custodia BACKUP_ENCRYPTION_KEY fuera de este
@@ -504,7 +504,7 @@ curl -fsS https://fichaje.tuhotel.local/api/v1/ready
 ```
 
 Las dos tienen que responder sin error: `/health` con
-`{"status":"ok","version":"2.3.0",…}` y `/ready` con `{"status":"ready"}`.
+`{"status":"ok","version":"2.3.1",…}` y `/ready` con `{"status":"ready"}`.
 
 **Si el certificado es de una CA interna del hotel, o autofirmado**, el
 servidor no la tiene entre las suyas y `curl` contesta
@@ -1187,7 +1187,7 @@ Qué hacer, en este orden:
    puede reescribir:
 
    ```bash
-   cd /opt/kronoqr-2.3.0
+   cd /opt/kronoqr-2.3.1
    sudo docker compose --env-file .env -f docker-compose.yml \
      exec -T postgres psql -U fichaje_migrator -d fichaje -c \
      "SELECT occurred_at, action, ip, payload
@@ -1257,7 +1257,7 @@ esta vez dentro de `tmux` (§1.4):
 Solo si estás seguro de que **no hay datos que conservar**:
 
 ```bash
-cd /opt/kronoqr-2.3.0
+cd /opt/kronoqr-2.3.1
 sudo docker compose --env-file .env -f docker-compose.yml down -v --remove-orphans
 sudo rm -f .env
 sudo rm -rf /var/backups/fichaje
