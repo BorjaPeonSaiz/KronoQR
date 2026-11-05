@@ -187,13 +187,19 @@
         "moment": "Versión del tramo",
         "in": "Entrada",
         "out": "Salida",
+        "closedBy": "Cómo terminó",
         "worked": "Tiempo trabajado"
       },
       "before": "Antes",
       "after": "Después",
       "noEntryBefore": "No existía el tramo",
       "noEntryAfter": "Tramo anulado",
-      "openMark": "Sin salida"
+      "openMark": "Sin salida",
+      "closedBy": {
+        "clock_out": "Salida",
+        "break_start": "Pausa",
+        "unknown": "Sin dato"
+      }
     },
     "correctionAction": {
       "created": "Tramo añadido",

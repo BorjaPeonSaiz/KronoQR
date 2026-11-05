@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest'
 import CorrectionHistory from '@/features/my-records/CorrectionHistory.vue'
 import es from '@/shared/i18n/locales/es.json'
+import en from '@/shared/i18n/locales/en.json'
 import type { WorkDayCorrection } from '@/shared/api/types'
 import { correction } from './support/fixtures'
 import { mountView } from './support/harness'
@@ -171,12 +172,60 @@ describe('CorrectionHistory, reloj de 24 h (V2-PO-2)', () => {
   })
 })
 
+describe('CorrectionHistory, cómo terminó el tramo (V23-1-RV-1, RF-ID-05, RL-05, ADR-058)', () => {
+  const base = {
+    clocked_in_at: '2026-03-14T05:00:00.000000Z',
+    clocked_out_at: '2026-03-14T11:00:00.000000Z',
+    worked_minutes: 360,
+  }
+
+  it('una correccion que solo cambia a pausa enseña «Salida» antes y «Pausa» despues', async () => {
+    const wrapper = await mountHistory([
+      correction({
+        before: { ...base, version: 1, closed_by: 'clock_out' },
+        after: { ...base, version: 2, closed_by: 'break_start' },
+      }),
+    ])
+    const rows = wrapper.findAll('tbody tr')
+
+    expect(rows[0]?.text()).toContain(es.myRecords.history.closedBy.clock_out)
+    expect(rows[1]?.text()).toContain(es.myRecords.history.closedBy.break_start)
+    expect(wrapper.find('thead').text()).toContain(es.myRecords.history.fields.closedBy)
+  })
+
+  it('una version anterior a la 2.3.0 dice «Sin dato» y un tramo abierto dice «Sin salida»', async () => {
+    const wrapper = await mountHistory([
+      correction({
+        before: { ...base, version: 1, clocked_out_at: null, closed_by: null, worked_minutes: 0 },
+        after: { ...base, version: 2, closed_by: null },
+      }),
+    ])
+    const rows = wrapper.findAll('tbody tr')
+
+    expect(rows[0]?.text()).toContain(es.myRecords.history.openMark)
+    expect(rows[1]?.text()).toContain(es.myRecords.history.closedBy.unknown)
+  })
+
+  it('en ingles usa los textos en ingles', async () => {
+    const wrapper = await mountView(CorrectionHistory, {
+      locale: 'en',
+      props: {
+        corrections: [correction({ after: { ...base, version: 2, closed_by: 'break_start' } })],
+        timeZone: 'Europe/Madrid',
+      },
+    })
+
+    expect(wrapper.text()).toContain(en.myRecords.history.closedBy.break_start)
+    expect(wrapper.text()).toContain(en.myRecords.history.fields.closedBy)
+  })
+})
+
 describe('CorrectionHistory, tabla accesible (V7-QA-2)', () => {
   it('ninguna cabecera de columna esta vacia: la primera dice que es la version del tramo', async () => {
     const wrapper = await mountHistory([correction()])
     const headers = wrapper.findAll('thead th')
 
-    expect(headers).toHaveLength(4)
+    expect(headers).toHaveLength(5)
 
     for (const header of headers) {
       expect(header.text().trim()).not.toBe('')
