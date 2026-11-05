@@ -1251,7 +1251,7 @@ services:
 
   loki:
     profiles: [observability]
-    image: grafana/loki:3.7.8
+    image: grafana/loki:3.7.9
     # Sin entrypoint propio: la imagen no tiene shell. LOG_RETENTION_HOURS lo valida el servicio
     # `retention-guard` (dependencia de abajo) antes de que este arranque.
     entrypoint: ["/usr/bin/loki"]
@@ -1279,7 +1279,7 @@ services:
   # backend ni arranca, y el fichaje no depende de que este contenedor viva).
   tempo:
     profiles: [observability]
-    image: grafana/tempo:2.10.8
+    image: grafana/tempo:2.10.10
     entrypoint: ["/tempo"]
     command: ["-config.file=/etc/tempo/tempo.yaml", "-config.expand-env=true"]
     depends_on:
@@ -1311,7 +1311,7 @@ services:
   # TLS: un solo contenedor para las dos sondas HTTP.
   blackbox-exporter:
     profiles: [observability]
-    image: prom/blackbox-exporter:v0.29.0
+    image: prom/blackbox-exporter:v0.29.1
     # Sin root (S3, R4-SC-09): solo hace sondas HTTP, le basta `nobody`. Sin `user:` la imagen
     # corria como uid 0.
     user: "65534:65534"

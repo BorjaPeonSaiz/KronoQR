@@ -522,7 +522,7 @@ services:
 
   #--- 11 · Correo de desarrollo ----------------------------------------------
   mailpit:
-    image: axllent/mailpit:v1.31
+    image: axllent/mailpit:v1.32
     container_name: kronoqr-mailpit
     environment:
       MP_MAX_MESSAGES: "500"
@@ -695,7 +695,7 @@ services:
 
   #--- 15 · Logs estructurados ------------------------------------------------
   loki:
-    image: grafana/loki:3.7.8
+    image: grafana/loki:3.7.9
     container_name: kronoqr-loki
     # Sin entrypoint propio: la imagen no tiene shell. LOG_RETENTION_HOURS lo valida el servicio
     # `retention-guard` (dependencia de abajo) antes de que este arranque.
@@ -724,7 +724,7 @@ services:
   # OTEL_EXPORTER_OTLP_ENDPOINT no tendria a donde apuntar y la traza completa
   # del fetch del quiosco a la consulta SQL no se podria seguir en Grafana.
   tempo:
-    image: grafana/tempo:2.10.8
+    image: grafana/tempo:2.10.10
     container_name: kronoqr-tempo
     entrypoint: ["/tempo"]
     command: ["-config.file=/etc/tempo/tempo.yaml", "-config.expand-env=true"]
@@ -760,7 +760,7 @@ services:
   # exportador sirve la comprobacion de caducidad del certificado TLS que anade
   # la tarea 3.2.
   blackbox-exporter:
-    image: prom/blackbox-exporter:v0.29.0
+    image: prom/blackbox-exporter:v0.29.1
     container_name: kronoqr-blackbox-exporter
     command:
       - --config.file=/etc/blackbox_exporter/blackbox.yml
