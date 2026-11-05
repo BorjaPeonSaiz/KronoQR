@@ -142,6 +142,26 @@ describe('rutas de la aplicacion', () => {
     expect(router.currentRoute.value.name).toBe('forbidden')
   })
 
+  it('no enseña «sin permiso» si no se ha podido leer la cuenta, y reintenta al navegar', async () => {
+    const session = useSessionStore()
+
+    session.token = 'un-token'
+    session.status = 'unknown'
+    const restore = vi.spyOn(session, 'restore').mockResolvedValue()
+
+    const router = createTestRouter()
+
+    registerAuthGuard(router)
+    await router.push('/employees')
+
+    expect(router.currentRoute.value.name).toBe('employees')
+
+    await router.push('/credentials')
+
+    expect(router.currentRoute.value.name).toBe('credentials')
+    expect(restore).toHaveBeenCalledTimes(2)
+  })
+
   it('lleva a un auditor a la exportacion para la Inspeccion, que es lo unico que alcanza', async () => {
     // El `auditor` no tiene ni plantilla ni credenciales: su token lleva
     // solo `reports:legal` (bloque 25: ya no lleva `attendance:read` ni
