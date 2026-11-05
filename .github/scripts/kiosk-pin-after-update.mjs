@@ -162,7 +162,9 @@ async function clockInWithPin(page, employee, label) {
     await page.getByRole('button', { name: digit, exact: true }).click()
   }
   await page.getByTestId('pin-confirm').click()
-  const confirmation = page.getByTestId('scan-confirmation')
+  // `verifying` («Comprobando…») sale en el mismo panel antes del desenlace: esperar solo a que
+  // el panel se vea leia ese estado si el servidor tardaba. Un fichaje colgado sigue fallando aqui.
+  const confirmation = page.locator('[data-testid="scan-confirmation"]:not([data-kind="verifying"])')
   await confirmation.waitFor({ state: 'visible', timeout: 20_000 })
   const kind = await confirmation.getAttribute('data-kind')
   if (kind !== 'accepted') {
