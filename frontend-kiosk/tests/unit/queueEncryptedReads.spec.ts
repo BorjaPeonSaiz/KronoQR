@@ -18,6 +18,12 @@ import type { QueueCipher } from '@/features/offline/infrastructure/queueCipher'
 
 const PAYLOAD = 'FH1.a3.7QK2mXpR9vLdN4tZbYcF1w.k9Xm2pQrT5vN8wLa'
 
+// 500 filas sobre fake-indexeddb tardan 0,3 s en una maquina libre y mas de los
+// 5000 ms de serie con todos los workers ocupados (V23-2-KI-1). Esta prueba
+// comprueba quien sale de la cola, no cuanto tarda: el tope solo evita que la
+// carga de la maquina la ponga en rojo.
+const LARGE_QUEUE_TIMEOUT_MS = 30_000
+
 let counter = 0
 function names(): { db: string; keys: string } {
   counter += 1
@@ -79,42 +85,46 @@ describe('coste: los metadatos no descifran', () => {
 })
 
 describe('bloqueo: las filas ilegibles no impiden salir a las legibles', () => {
-  it('500 ilegibles delante de una legible: la legible sale, se avisa UNA vez y las ilegibles se conservan', async () => {
-    const n = names()
-    // 500 filas cifradas que ya no se pueden abrir (bytes que no son un sobre valido).
-    const handle = openKioskDatabase(n.db)
-    await handle.scans.bulkPut(
-      Array.from({ length: 500 }, (_unused, index) => ({
-        kind: 'qr' as const,
-        scan_id: id(index + 1),
-        occurred_at: `2026-08-14T04:${String(Math.floor(index / 60)).padStart(2, '0')}:${String(index % 60).padStart(2, '0')}.000Z`,
-        intent: 'auto' as const,
-        device_id: 'kiosk-1',
-        attempts: 0,
-        next_attempt_at: 0,
-        enqueued_at: 1,
-        enc: { v: 1 as const, iv: 'AAAAAAAAAAAAAAAA', ct: 'AAAAAAAAAAAAAAAAAAAAAA==' },
-      })),
-    )
-    handle.close()
+  it(
+    '500 ilegibles delante de una legible: la legible sale, se avisa UNA vez y las ilegibles se conservan',
+    { timeout: LARGE_QUEUE_TIMEOUT_MS },
+    async () => {
+      const n = names()
+      // 500 filas cifradas que ya no se pueden abrir (bytes que no son un sobre valido).
+      const handle = openKioskDatabase(n.db)
+      await handle.scans.bulkPut(
+        Array.from({ length: 500 }, (_unused, index) => ({
+          kind: 'qr' as const,
+          scan_id: id(index + 1),
+          occurred_at: `2026-08-14T04:${String(Math.floor(index / 60)).padStart(2, '0')}:${String(index % 60).padStart(2, '0')}.000Z`,
+          intent: 'auto' as const,
+          device_id: 'kiosk-1',
+          attempts: 0,
+          next_attempt_at: 0,
+          enqueued_at: 1,
+          enc: { v: 1 as const, iv: 'AAAAAAAAAAAAAAAA', ct: 'AAAAAAAAAAAAAAAAAAAAAA==' },
+        })),
+      )
+      handle.close()
 
-    const cipher = createQueueCipher({ keyStore: createDexieQueueKeyStore(n.keys) })
-    const onUnreadable = vi.fn()
-    const queue = createScanQueue({
-      openStorage: () => createDexieQueueStorage(openKioskDatabase(n.db), { cipher }),
-      sleep: async () => undefined,
-      onUnreadable,
-    })
-    await queue.enqueue(scan(900))
+      const cipher = createQueueCipher({ keyStore: createDexieQueueKeyStore(n.keys) })
+      const onUnreadable = vi.fn()
+      const queue = createScanQueue({
+        openStorage: () => createDexieQueueStorage(openKioskDatabase(n.db), { cipher }),
+        sleep: async () => undefined,
+        onUnreadable,
+      })
+      await queue.enqueue(scan(900))
 
-    const claimed = await queue.claim(50, { ignoreSchedule: true })
+      const claimed = await queue.claim(50, { ignoreSchedule: true })
 
-    expect(claimed.map((row) => row.scan_id)).toEqual([id(900)])
-    expect(onUnreadable).toHaveBeenCalledTimes(1)
-    // Se conservan en disco y cuentan: nada se pierde.
-    expect(await createDexieQueueStorage(openKioskDatabase(n.db)).count()).toBe(501)
-    expect(queue.stats().size).toBe(501)
-  })
+      expect(claimed.map((row) => row.scan_id)).toEqual([id(900)])
+      expect(onUnreadable).toHaveBeenCalledTimes(1)
+      // Se conservan en disco y cuentan: nada se pierde.
+      expect(await createDexieQueueStorage(openKioskDatabase(n.db)).count()).toBe(501)
+      expect(queue.stats().size).toBe(501)
+    },
+  )
 
   it('con TODAS ilegibles el drenaje no gira en vacio: la cabeza publicada no es una ilegible', async () => {
     const n = names()
