@@ -19,7 +19,7 @@
         "laravel/tinker": "^3.0",
         "open-telemetry/exporter-otlp": "^1.4",
         "open-telemetry/sdk": "^1.0",
-        "pragmarx/google2fa": "^8.0",
+        "pragmarx/google2fa": "^9.1",
         "promphp/prometheus_client_php": "^2.15",
         "spatie/browsershot": "^5.0",
         "spatie/laravel-pdf": "^2.12",
