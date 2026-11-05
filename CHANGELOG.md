@@ -36,6 +36,7 @@ El detalle está en `docs/cliente/operacion.md` §11 («Al actualizar a la 2.3.1
 
 ### Interno
 
+- laravel/framework 13.39, Pest 5.3 y Alertmanager 0.34.2 (deps)
 - 2.3.1, versión, ejemplos y notas para el hotel (release)
 - la E2E de actualizacion deja de depender del video de la camara (V23-2-QA-1) (kiosk)
 - ESLint se precalienta antes de la regla de almacenamiento (V23-2-PA-1) (admin)

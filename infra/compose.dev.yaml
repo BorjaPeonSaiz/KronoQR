@@ -603,7 +603,7 @@ services:
   # la superficie pasa de "todo el `.env`" a "las quince variables que este
   # binario declara usar", que es el umbral que se puede razonar y auditar.
   alertmanager:
-    image: prom/alertmanager:v0.34.1
+    image: prom/alertmanager:v0.34.2
     container_name: kronoqr-alertmanager
     entrypoint: ["/etc/alertmanager/render-config.sh"]
     command:
