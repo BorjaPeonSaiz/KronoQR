@@ -533,6 +533,52 @@ it('rechaza anular un tramo intermedio si la vuelta de despues deja de continuar
     }
 })->group('RN-05', 'RF-PA-04', 'RN-13');
 
+it('rechaza anular un tramo si el siguiente quedaria detras de otra jornada, sin escribir nada', function (): void {
+    // RN-05 (ADR-058). Jornada del 14 en Madrid: 22:00-00:00, 02:00-03:00 y
+    // 05:00-07:00, las dos primeras en pausa. Despues se da de alta en la
+    // jornada del 15 un tramo de 00:30 a 01:30. Sin el de las 02:00, la vuelta
+    // de las 05:00 quedaria a 5 h de la salida anterior, dentro de la cota,
+    // pero detras de esa otra jornada.
+    $contexto = contextoDeCorreccion();
+    $tramos = [];
+
+    foreach ([
+        ['2026-03-14', '2026-03-14T21:00:00Z', '2026-03-14T23:00:00Z', true],
+        ['2026-03-14', '2026-03-15T01:00:00Z', '2026-03-15T02:00:00Z', true],
+        ['2026-03-14', '2026-03-15T04:00:00Z', '2026-03-15T06:00:00Z', false],
+        ['2026-03-15', '2026-03-14T23:30:00Z', '2026-03-15T00:30:00Z', false],
+    ] as [$jornada, $entrada, $salida, $pausa]) {
+        $tramos[] = Api::as($contexto['token'])
+            ->post('/api/v1/shift-entries', [
+                'employee_uuid' => $contexto['employee'],
+                'work_date' => $jornada,
+                'clocked_in_at' => $entrada,
+                'clocked_out_at' => $salida,
+                'ends_in_break' => $pausa,
+                'reason_code' => 'OLVIDO_FICHAJE_ENTRADA',
+            ])
+            ->assertValidResponse(201)
+            ->json('shift_entry_uuid');
+    }
+
+    $antes = [DB::table('shift_corrections')->count(), DB::table('audit_log')->count()];
+
+    Api::as($contexto['token'])
+        ->post('/api/v1/shift-entries/'.$tramos[1].'/void', [
+            'reason_code' => 'ERROR_DE_ESCANEO_DUPLICADO',
+        ])
+        ->assertValidRequest()
+        ->assertValidResponse(422)
+        ->assertJsonPath('type', 'urn:kronoqr:problem:correction-would-change-work-date')
+        ->assertJsonPath('cause', 'next_entry_not_continued')
+        ->assertJsonPath('errors.clocked_in_at.0', 'El tramo siguiente dejaría de continuar la jornada del 2026-03-14: '
+            .'empieza otro día y su entrada quedaría a 12 h o más de la salida anterior (el descanso mínimo entre '
+            .'jornadas) o detrás de un tramo de otra jornada. Corrige o anula antes ese tramo.');
+
+    expect(DB::table('shift_entries')->where('status', 'voided')->count())->toBe(0)
+        ->and([DB::table('shift_corrections')->count(), DB::table('audit_log')->count()])->toBe($antes);
+})->group('RN-05', 'RF-PA-04', 'RN-13');
+
 it('rechaza anular el tramo que abre la jornada si el siguiente empieza otro dia, sin escribir nada', function (): void {
     // RN-05 (2.3.0). Turno de 22:00 a 02:00 de Madrid y vuelta de 02:30 a 06:00:
     // sin el turno, la jornada del 14 quedaria abierta por un tramo del 15.

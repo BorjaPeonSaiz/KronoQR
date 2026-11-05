@@ -543,14 +543,7 @@ it('da el hueco que un tramo de otro dia dice continuar, y ninguno si no continu
         ->and($jornada->continuationGapFor(ShiftEntryTimes::closed(
             Instants::inMadrid('2026-03-14 18:00'),
             Instants::inMadrid('2026-03-14 20:00'),
-        )))->toBeNull()
-        // Al anular el segundo, la vuelta... no hay siguiente: ninguno.
-        ->and($jornada->continuationGapAfterVoiding('shift-entry-2'))->toBeNull();
-
-    $anulandoElPrimero = $jornada->continuationGapAfterVoiding('shift-entry-1');
-
-    // Sin anterior, el segundo no continua nada que medir.
-    expect($anulandoElPrimero)->toBeNull();
+        )))->toBeNull();
 
     // Corregir el segundo: el hueco se mide contra el primero.
     $corrigiendo = $jornada->continuationGapFor(ShiftEntryTimes::closed(
@@ -561,6 +554,74 @@ it('da el hueco que un tramo de otro dia dice continuar, y ninguno si no continu
     expect($corrigiendo?->start)->toEqual(Instants::inMadrid('2026-03-15 00:00'))
         ->and($corrigiendo?->end)->toEqual(Instants::inMadrid('2026-03-15 01:30'));
 })->group('RN-05', 'RF-PA-04');
+
+it('da el hueco que pasaria a continuar el tramo siguiente al anular el intermedio', function (): void {
+    // Sin el tramo de 18:00 a 23:00, la vuelta de las 02:00 del 15 se mide
+    // contra la salida de las 15:00 del 14: ese hueco es el que el caso de uso
+    // pregunta al repositorio (ADR-058).
+    $jornada = continuacionJornadaConVuelta('2026-03-15 02:00');
+
+    $hueco = $jornada->continuationGapAfterVoiding('shift-entry-2');
+
+    expect($hueco?->start)->toEqual(Instants::inMadrid('2026-03-14 15:00'))
+        ->and($hueco?->end)->toEqual(Instants::inMadrid('2026-03-15 02:00'));
+})->group('RN-05', 'RF-PA-04', 'RN-13');
+
+it('mide al anular el hueco del tramo que venia justo detras, no el de los siguientes', function (): void {
+    $jornada = WorkDayFactory::new()
+        ->onWorkDate('2026-03-14')
+        ->withShift(ShiftEntryFactory::new()->workedBetween(
+            Instants::inMadrid('2026-03-14 08:00'),
+            Instants::inMadrid('2026-03-14 15:00'),
+        )->endingInBreak())
+        ->withShift(ShiftEntryFactory::new()->workedBetween(
+            Instants::inMadrid('2026-03-14 18:00'),
+            Instants::inMadrid('2026-03-14 23:00'),
+        )->endingInBreak())
+        ->withShift(ShiftEntryFactory::new()->workedBetween(
+            Instants::inMadrid('2026-03-15 00:30'),
+            Instants::inMadrid('2026-03-15 01:30'),
+        )->endingInBreak())
+        ->withShift(ShiftEntryFactory::new()->workedBetween(
+            Instants::inMadrid('2026-03-15 02:00'),
+            Instants::inMadrid('2026-03-15 03:00'),
+        ))
+        ->build();
+
+    $hueco = $jornada->continuationGapAfterVoiding('shift-entry-2');
+
+    expect($hueco?->start)->toEqual(Instants::inMadrid('2026-03-14 15:00'))
+        ->and($hueco?->end)->toEqual(Instants::inMadrid('2026-03-15 00:30'));
+})->group('RN-05', 'RF-PA-04', 'RN-13');
+
+it('no da hueco al anular si ningun tramo pasaria a continuar otro', function (string $anulado): void {
+    $jornada = continuacionJornadaConVuelta('2026-03-15 02:00');
+
+    expect($jornada->continuationGapAfterVoiding($anulado))->toBeNull();
+})->with([
+    'el ultimo: no tiene siguiente' => ['shift-entry-3'],
+    'el primero: al siguiente no le queda anterior' => ['shift-entry-1'],
+])->group('RN-05', 'RF-PA-04', 'RN-13');
+
+it('no da hueco al anular un tramo cuyo siguiente empieza el dia de la jornada', function (): void {
+    $jornada = WorkDayFactory::new()
+        ->onWorkDate('2026-03-14')
+        ->withShift(ShiftEntryFactory::new()->workedBetween(
+            Instants::inMadrid('2026-03-14 06:00'),
+            Instants::inMadrid('2026-03-14 07:00'),
+        ))
+        ->withShift(ShiftEntryFactory::new()->workedBetween(
+            Instants::inMadrid('2026-03-14 12:00'),
+            Instants::inMadrid('2026-03-14 14:00'),
+        ))
+        ->withShift(ShiftEntryFactory::new()->workedBetween(
+            Instants::inMadrid('2026-03-14 21:00'),
+            Instants::inMadrid('2026-03-14 23:00'),
+        ))
+        ->build();
+
+    expect($jornada->continuationGapAfterVoiding('shift-entry-2'))->toBeNull();
+})->group('RN-05', 'RF-PA-04', 'RN-13');
 
 // --- Solo una pausa continua la jornada, y como mucho hasta el dia siguiente (2.3.0)
 
