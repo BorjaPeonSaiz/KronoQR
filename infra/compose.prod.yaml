@@ -1166,7 +1166,7 @@ services:
   # entorno de un binario de terceros que solo necesita quince variables.
   alertmanager:
     profiles: [observability]
-    image: prom/alertmanager:v0.34.1
+    image: prom/alertmanager:v0.34.2
     entrypoint: ["/etc/alertmanager/render-config.sh"]
     command:
       - --config.file=/alertmanager/alertmanager.yml

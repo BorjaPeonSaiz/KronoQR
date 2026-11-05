@@ -47,6 +47,11 @@ updates:
     cooldown:
       default-days: 7
     labels: ["dependencies", "backend"]
+    # La 2.7 arrastra symplify/rule-doc-generator-contracts, abandonado, y `composer audit`
+    # falla por eso. Rector es informativo: se queda en la 2.5 hasta que lo sustituyan.
+    ignore:
+      - dependency-name: "driftingly/rector-laravel"
+        versions: [">2.5.0"]
     groups:
       composer-menores-y-parches:
         update-types: ["minor", "patch"]
