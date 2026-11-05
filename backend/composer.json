@@ -11,7 +11,7 @@
         "ext-pgsql": "*",
         "ext-redis": "*",
         "ext-sodium": "*",
-        "endroid/qr-code": "^5.0",
+        "endroid/qr-code": "^6.1",
         "laravel/framework": "^13.12",
         "laravel/horizon": "^5.0",
         "laravel/reverb": "^1.0",
