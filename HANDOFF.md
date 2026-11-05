@@ -9,11 +9,15 @@
 
 **KronoQR 2.3.0 publicada el 04-11-2026** (<https://github.com/BorjaPeonSaiz/KronoQR/releases/tag/v2.3.0>): PR #233 → `main` `bf36c298`, etiqueta `v2.3.0`; `release.yml` 41811203161, CI de la etiqueta, carga y simulacro en verde. ⑧b en verde desde la 2.2.1 y desde la 2.2.0. Clave de soporte `156a123c31a9a153` de serie en `config/product.php`.
 
-**Objetivo actual (05-11-2026, orden del propietario):** publicar la 2.3.1 y llevarla a la demo, que sigue en la 2.2.1 y la actualiza el propietario; después, las líneas de «versión desplegada» del README (§3.1/§6), que aún dicen 2.2.0.
+**Objetivo actual (05-11-2026, orden del propietario):** llevar la 2.3.1 a la demo y cerrar la verificación final.
 
-**2.3.1 lista para etiquetar (05-11-2026, orden del propietario):** versión de parche sin migraciones (`2.3.1 -` en `infra/versions.txt`), integrada en #234, #237 y #240. Falta solo la etiqueta `v2.3.1`, **con orden del propietario**, y después actualizar la demo y el README. CI manual completa de `95acfb20` en verde (run 42073824754: ⑧, ⑧b desde `v2.2.1`, cobertura y mutación completa). En local, sobre `main`: panel, portal y quiosco sin errores, copia y simulacro con la cadena verificada. Hasta publicar, `make restore-drill` necesita `DRILL_CHAIN="--php-image ghcr.io/borjapeonsaiz/kronoqr/php:2.3.0"`: el valor por omisión apunta a la imagen 2.3.1.
+**KronoQR 2.3.1 publicada el 05-11-2026** (<https://github.com/BorjaPeonSaiz/KronoQR/releases/tag/v2.3.1>): `main` `0bf869a4`, etiqueta `v2.3.1`, `release.yml` 42101845628 en verde al segundo intento (el primero cayó por un 502 de la API de GitHub). Versión de parche sin migraciones (`2.3.1 -`), integrada en #234, #237, #240, #241 y #242. CI manual completa en verde (run 42073824754: ⑧, ⑧b desde `v2.2.1`, cobertura y mutación completa). Paquete comprobado: `SHA256SUMS`, firma cosign e imágenes sin credenciales.
+- **Siguiente:** el propietario actualiza la demo (sigue en la 2.2.1) y después las líneas de «versión desplegada» del README. Abrir ciclo en `infra/versions.txt` (`2.3.2 *` o `2.4.0 *`) antes de añadir una migración.
 - **Trae:** avisos de Symfony, `/auth/me`, portal con `closed_by`, Dependabot #221 a #227, #235, #236 y #238 (cerradas) y #241, `laravel/framework` 13.39, Pest 5.3 y los 🟠 V23-1-RV-1, V23-1-QA-1, V23-2-QA-1, V23-2-QA-2, V23-2-KI-1, V23-2-PO-1 y V23-2-PA-1, más V23-2-PO-2. Queda V23-1-DV-2 (2.4.0). `endroid/qr-code` 6 genera el mismo SVG byte a byte que la 5. #149 sigue aparcada hasta la tablet.
 - **`rector-laravel` se queda en la 2.5:** la 2.7 trae un paquete abandonado que hace fallar `composer audit`; `dependabot.yml` lo ignora.
+- **Incidencias sin abrir:** la herramienta deniega crearlas. Causas: 502 de `release.yml`, fórmula del simulacro (corregida en `fix/simulacro-fila-borrada`) y prueba del PIN (`0b0f161d`).
+- **`baseUrl`:** los tres `tsconfig.json` lo usan y TypeScript 7 lo retira; quitarlo y pasar `vue-tsc`.
+- **`main` local:** estaba 1 044 commits atrasado; al cambiar a él el árbol volvió a la 2.2.1 hasta avanzarlo. Actualizarlo antes de cambiar de rama.
 - **Anotado por `qa-testing`:** `AppShellView.spec.ts` y `roleCatalog.spec.ts` del panel fallaron 1 de 6 pasadas con la máquina cargada, sin causa conocida; mutantes vivos en `gapAt` (`WorkDay.php:1078`) y `:1175`; V23-1-QA-2 y V23-2-KI-2 siguen abiertos; un `tag:` comentado en Playwright y `foo()->group()` dentro de una prueba aún cuentan en `TagScanner`.
 - **Sin hacer:** incidencia de la prueba del PIN de ⑧b (crearla se denegó; detalle en `0b0f161d`).
 
