@@ -11,6 +11,13 @@
 
 **Objetivo actual (05-11-2026, orden del propietario):** dejar la 2.3.0 funcionando en local y lista para desplegar en la demo, que sigue en la 2.2.1 y la actualiza el propietario; después, las líneas de «versión desplegada» del README (§3.1/§6), que aún dicen 2.2.0.
 
+**Puesta a punto local (05-11-2026, rama `chore/puesta-a-punto-local-2.3.0`):** las tres SPA funcionan por `https://localhost/{admin,portal,kiosk}/` (antes, página en blanco); `doctor` sin fallos (7 avisos propios de desarrollo); copia y `make restore-drill` en verde con la cadena verificada; 18 pantallas del panel, portal y quiosco sin errores de consola; `make load-test INSTANCES=1 DURATION=20s` con todo el registro en verde.
+- **El rojo de esa carga es solo RNF-P-02** (2,5 s en PHP de desarrollo con bind mount); la de la etiqueta salió verde. `make test-unit` también falla solo por duración (22 s de 6, 5 294 en verde), y `SourceDiscoveryTest` y `TestDiscoveryTest`, por el bind mount.
+- **`.env` local:** `BACKUP_DB_USERNAME=fichaje_backup` y rol creado con `03-backup-role.sh`. El asistente de puesta en marcha quedó cerrado en la base local; licencia y quiosco, omitidos.
+- **Sin licencia no hay Reverb en `/live`** (`license_absent`, sondeo cada 15 s). Saludo por nginx comprobado, pero la presencia en tiempo real con licencia no se ha probado en local.
+- **Producto, solo en esta rama:** `GET /auth/me` a la zona `api` y la guarda del router ya no convierte una sesión sin leer en «Sin permiso». No es regresión (ya estaba en la 2.2.1), pero la `v2.3.0` publicada lo lleva: en la demo llega solo con una 2.3.1.
+- **Paquete `v2.3.0` comprobado:** `SHA256SUMS` y firma cosign correctos; imagen php descargada sin credenciales.
+
 **Verificación final de la 2.3.0 (tarea 6 del bloque final, en curso, solo registrar):** pasos 1 a 4 de 14; registros en `docs/verificacion/2.3.0-verificacion-final-tanda-{1,2,3}.md`. La tanda 3 solo tiene la cabecera. Van 56 hallazgos: 0 🔴, 8 🟠, 51 sin destino.
 - **Criterio de salida sin cumplir:** V23-1-RV-1 (🟠 del revisor: el portal no enseña `closed_by`) y los hallazgos sin destino, que reparte el propietario entre 2.3.1 y 2.4.0.
 - **Otros 🟠:** V23-1-QA-1 (`TagScanner`), V23-2-QA-2 (guarda de RN-05 al anular, sin prueba), V23-1-DV-2 (destino 2.4.0) y cuatro intermitentes (V23-2-KI-1, PO-1, PA-1 y QA-1).
