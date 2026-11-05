@@ -22,7 +22,7 @@ use Symfony\Component\Finder\Finder;
  * tiempo de ejecucion no se ve. Por eso lo que no encaja no se descarta, se
  * devuelve en `malformed` y el comando lo enseña.
  *
- * Pest se lee con el tokenizador de PHP y no como texto (V23-1-QA-1): las
+ * Pest se lee con el tokenizador de PHP y no como texto: las
  * pruebas de las herramientas de calidad llevan fuentes de prueba dentro de
  * cadenas, y solo el tokenizador distingue una llamada de lo que la cita. Ver
  * {@see pestTags()}.
