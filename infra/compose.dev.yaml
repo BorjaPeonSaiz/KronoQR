@@ -447,6 +447,9 @@ services:
     container_name: kronoqr-node-kiosk
     environment:
       FRONTEND_NAME: kiosk
+      # Mismo prefijo que en la imagen de entrega: Nginx publica la SPA en /kiosk/ y
+      # sin esto los modulos de Vite salen de la raiz y dan 404 (pagina en blanco).
+      KRONOQR_BASE: /kiosk/
       # El proxy /api de Vite apunta al Nginx del entorno por la red de
       # Compose: `localhost` dentro del contenedor es el propio contenedor (AX7-04).
       KRONOQR_DEV_API_TARGET: https://nginx:8443
@@ -476,6 +479,9 @@ services:
     container_name: kronoqr-node-admin
     environment:
       FRONTEND_NAME: admin
+      # Mismo prefijo que en la imagen de entrega: Nginx publica la SPA en /admin/ y
+      # sin esto los modulos de Vite salen de la raiz y dan 404 (pagina en blanco).
+      KRONOQR_BASE: /admin/
       # El proxy /api de Vite apunta al Nginx del entorno por la red de
       # Compose: `localhost` dentro del contenedor es el propio contenedor (AX7-04).
       KRONOQR_DEV_API_TARGET: https://nginx:8443
@@ -498,6 +504,9 @@ services:
     container_name: kronoqr-node-portal
     environment:
       FRONTEND_NAME: portal
+      # Mismo prefijo que en la imagen de entrega: Nginx publica la SPA en /portal/ y
+      # sin esto los modulos de Vite salen de la raiz y dan 404 (pagina en blanco).
+      KRONOQR_BASE: /portal/
       # El proxy /api de Vite apunta al Nginx del entorno por la red de
       # Compose: `localhost` dentro del contenedor es el propio contenedor (AX7-04).
       KRONOQR_DEV_API_TARGET: https://nginx:8443
@@ -738,17 +747,10 @@ services:
       - app
       - observability
     restart: unless-stopped
-    healthcheck:
-      # start_period a 30s y no a los 15s del resto: medido en esta maquina,
-      # el ingester de Tempo en modo monolitico tarda unos 30s en marcarse
-      # listo tras arrancar (espera fija tras unirse al ring), y con un
-      # start_period mas corto el contenedor pasaria por "unhealthy" en cada
-      # arranque sin que haya nada roto.
-      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://127.0.0.1:3200/ready || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+    # Sin healthcheck, como en compose.prod.yaml: la imagen no trae shell ni
+    # wget, asi que cualquier sonda desde dentro sale siempre "unhealthy" sin
+    # que haya nada roto. Para mirarlo a mano: curl 127.0.0.1:3200/ready. El
+    # primer GET da 503 durante 15 s: esa espera empieza con la primera consulta.
 
   #--- 17 · Sonda de uptime del borde ------------------------------------
   # blackbox-exporter (tarea 3.1, §8.1): Prometheus scrapea /metrics de la

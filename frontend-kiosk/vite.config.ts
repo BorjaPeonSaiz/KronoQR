@@ -60,7 +60,7 @@ function readAppVersion(mode: string): string {
 
 // Ruta bajo la que se sirve el quiosco. En produccion Nginx lo publica en
 // `/kiosk/` y la imagen de entrega construye con KRONOQR_BASE=/kiosk/
-// (infra/docker/nginx/Dockerfile). En desarrollo y en las pruebas E2E vale `/`.
+// (infra/docker/nginx/Dockerfile); compose.dev.yaml fija lo mismo. En las E2E vale `/`.
 //
 // AQUI IMPORTA MAS QUE EN LAS OTRAS DOS SPA porque es una PWA: `start_url`,
 // `scope` y el respaldo de navegacion del service worker tienen que salir de
