@@ -92,6 +92,23 @@ it('bloquea cuando un requisito de una fase ejecutada no tiene ninguna prueba', 
     expect($output)->toContain('RN-05');
 })->group('RQ-13');
 
+it('bloquea cuando un requisito solo se cita en una cadena o en un comentario', function (string $fragmento): void {
+    // V23-1-QA-1: un requisito legal sin ninguna prueba pasaba `--check`.
+    useCatalog("- { id: RL-04, fase: 0, titulo: Las correcciones conservan el original }\n");
+    useTests("<?php\n".$fragmento."\n");
+    config(['quality.current_phase' => 0]);
+
+    [$exit, $output] = Commands::run('qa:traceability --check');
+
+    expect($exit)->toBe(1)
+        ->and($output)->toContain('RL-04');
+})->with([
+    'en una cadena' => [<<<'PHP'
+        $fuente = "it('x')->group('RL-04');";
+        PHP],
+    'en un comentario' => ["// it('x')->group('RL-04');"],
+])->group('RQ-13');
+
 it('no bloquea por requisitos de fases que todavia no se han ejecutado', function (): void {
     // Un bloqueo que salta por trabajo que nadie ha empezado se acaba
     // desactivando, y con el se va el que si sirve.

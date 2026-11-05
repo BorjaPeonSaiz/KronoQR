@@ -111,12 +111,6 @@ it('reconoce una prueba de Pest sin etiqueta y no la confunde con una que la lle
     'con un atributo en una clase anonima del cuerpo' => ["it('a', function () { new class { #[Override] public function f(): void {} }; })->group('RN-05');", []],
 ])->group('RQ-13');
 
-/*
- * La etiqueta se monta al ejecutar y no va escrita en la fuente:
- * `qa:traceability` lee este fichero como texto, y la errata escrita dentro
- * de un group le pareceria una etiqueta mal escrita de esta prueba, que hoy
- * bloquea.
- */
 it('no da por etiquetada la prueba de Pest cuyo unico requisito no es un requisito del catalogo', function (string $etiqueta): void {
     $fuente = "<?php\nit('a', function () {})->group('".$etiqueta."');";
 

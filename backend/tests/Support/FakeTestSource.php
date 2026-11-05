@@ -6,19 +6,12 @@ namespace Tests\Support;
 
 /**
  * Construye codigo de prueba de mentira para los fixtures de las pruebas de
- * `qa:traceability`, SIN que la llamada a la etiqueta aparezca nunca escrita de
- * forma literal en un fichero de tests/.
+ * `qa:traceability`: la forma de cada etiqueta, en un solo sitio.
  *
- * Por que hace falta esta gimnasia. El escaner lee tests/ COMO TEXTO: no
- * distingue una prueba real de un ejemplo dentro de un heredoc. Un
- * `->group('RN-05')` escrito literalmente en un fixture haria figurar RN-05
- * como cubierto en la matriz de trazabilidad por una prueba que no existe.
- *
- * Es exactamente el fallo que esas pruebas comprueban, cometido al comprobarlo:
- * la matriz se entrega como evidencia de que cada obligacion legal esta
- * verificada, y un fixture es una prueba que nunca se ejecuta. Concatenando el
- * nombre del metodo, la cadena `->group(` no existe en ningun fichero de
- * tests/ salvo en las etiquetas de verdad.
+ * Hasta la 2.3.1 esta clase ademas evitaba escribir la etiqueta de forma
+ * literal, porque el escaner leia tests/ como texto. Ya no hace falta: el
+ * escaner tokeniza PHP y lo que hay dentro de una cadena no cuenta
+ * (V23-1-QA-1).
  *
  * Vive en tests/Support/ y no dentro de una suite a proposito: phpunit.xml solo
  * recoge Unit, Integration, Feature, Contract y Architecture, asi que este
