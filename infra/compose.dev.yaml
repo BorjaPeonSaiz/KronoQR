@@ -522,7 +522,7 @@ services:
 
   #--- 11 · Correo de desarrollo ----------------------------------------------
   mailpit:
-    image: axllent/mailpit:v1.32
+    image: axllent/mailpit:v1.33
     container_name: kronoqr-mailpit
     environment:
       MP_MAX_MESSAGES: "500"
@@ -603,7 +603,7 @@ services:
   # la superficie pasa de "todo el `.env`" a "las quince variables que este
   # binario declara usar", que es el umbral que se puede razonar y auditar.
   alertmanager:
-    image: prom/alertmanager:v0.34.2
+    image: prom/alertmanager:v0.35.0
     container_name: kronoqr-alertmanager
     entrypoint: ["/etc/alertmanager/render-config.sh"]
     command:
