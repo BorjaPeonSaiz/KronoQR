@@ -133,7 +133,7 @@ informe y comprobar que se está hablando de los mismos datos.
 
 ### Qué requisito cubre
 
-`RF-PD-05`, [ADR-019](adr/ADR-019-la-licencia-nunca-bloquea-el-registro.md) y la
+`RF-PD-05`, [ADR-019](../adr/ADR-019-la-licencia-nunca-bloquea-el-registro.md) y la
 **regla dura 15**. Es la promesa central del producto: *el registro de jornada
 nunca es rehén de la relación comercial*.
 

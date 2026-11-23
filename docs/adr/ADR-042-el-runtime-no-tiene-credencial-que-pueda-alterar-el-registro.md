@@ -11,7 +11,7 @@
 
 ## Contexto
 
-La condición 1 de [ADR-010](ADR-010-auditoria-solo-append-encadenada.md) dice que la aplicación **no puede** modificar `audit_log`: la garantía no es que no lo haga, sino que el motor se lo impide. La verificación de la 2.1.0 (hallazgo AUD-1, [tanda 4](../verificacion/2.1.0-tanda-4.md), reclasificado 🔴 CRÍTICO en la [tanda 7](../verificacion/2.1.0-tanda-7.md)) demostró que esa frase era falsa por dos vías:
+La condición 1 de [ADR-010](ADR-010-auditoria-solo-append-encadenada.md) dice que la aplicación **no puede** modificar `audit_log`: la garantía no es que no lo haga, sino que el motor se lo impide. La verificación de la 2.1.0 (hallazgo AUD-1, [tanda 4](https://github.com/BorjaPeonSaiz/KronoQR/blob/v2.3.1/docs/verificacion/2.1.0-tanda-4.md), reclasificado 🔴 CRÍTICO en la [tanda 7](https://github.com/BorjaPeonSaiz/KronoQR/blob/v2.3.1/docs/verificacion/2.1.0-tanda-7.md)) demostró que esa frase era falsa por dos vías:
 
 1. **Por el entorno.** Los contenedores `app`, `horizon`, `reverb` y `scheduler` —y `nginx`— recibían `env_file: .env` completo. Con él llegaban `DB_MIGRATION_PASSWORD` y `BACKUP_DB_PASSWORD`, las dos del rol `fichaje_migrator`, que es `SUPERUSER` porque es el rol de arranque del clúster y PostgreSQL no permite degradarlo ([ADR-033](ADR-033-tres-roles-de-base-de-datos-no-dos.md)).
 2. **Por la conexión.** El propio runtime usaba ese rol: `compliance:ensure-audit-partitions`, programado a diario, resolvía `pgsql_migrator` para crear la partición anual de `audit_log` (`ComplianceServiceProvider.php:189`). Crear una partición es DDL y exige ser propietario de la tabla madre.
