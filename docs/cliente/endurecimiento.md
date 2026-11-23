@@ -366,22 +366,14 @@ Fuera del producto, y enteramente tuyo. Lo mínimo:
 ## 4. Los secretos: dónde vive cada uno
 
 El instalador los genera **en tu servidor**, los escribe en el `.env` en `0600`
-y **no imprime ninguno**. El fabricante no los conoce y no puede recuperarlos.
-
-| Secreto | Dónde vive | ¿Sale del servidor? |
-| --- | --- | --- |
-| Clave de la aplicación, claves de firma del QR, contraseñas de base de datos, credenciales del servidor de tiempo real, clave de sellado del PIN | `.env`, `0600` de `root` | **No** |
-| Contraseña de administración de Grafana | `.env`, generada por el instalador | **No** |
-| `BACKUP_ENCRYPTION_KEY` | `.env` **y una copia custodiada fuera** | **Sí, y es obligatorio** |
-| Contraseña del rol de mantenimiento de base de datos | **No existe** hasta la purga anual: se crea para esa operación y se retira al terminar | No |
-| Token de una tablet | En la propia tablet (§6) | No |
-| Token de un acceso de soporte | Se muestra **una sola vez** al concederlo | Se entrega a soporte por el canal del contrato |
-
-**`BACKUP_ENCRYPTION_KEY` es la única que hay que sacar del servidor**, y hay
-que hacerlo el día de la instalación: si se pierde la máquina y la clave estaba
-solo ahí, las copias cifradas son bytes sin valor y el registro horario —que
-hay que conservar cuatro años— se ha perdido. El procedimiento, con dónde
-custodiarla y qué no hacer con ella, está en [`operacion.md`](operacion.md) §9.
+de `root` y **no imprime ninguno**. El fabricante no los conoce y no puede
+recuperarlos. Lo único que sale del servidor es una copia custodiada de los que
+el inventario marca —**`BACKUP_ENCRYPTION_KEY` la primera, y el día de la
+instalación**: sin ella las copias son bytes sin valor—; el token de una tablet
+vive en la tablet (§6) y el de un acceso de soporte se muestra una sola vez. El
+inventario, secreto a secreto, está en
+[`../runbooks/rotacion-secretos.md`](../runbooks/rotacion-secretos.md) §0, y
+el procedimiento de custodia, en [`operacion.md`](operacion.md) §9.
 
 **Nunca escribas un secreto en un fichero nuevo del servidor.** Cuando
 necesites generar uno:
@@ -404,18 +396,13 @@ cuando cambie quién tiene acceso, no por calendario.
 
 ## 5. Las copias
 
-Tres cosas, y ninguna es opcional:
-
-1. **Fuera del servidor.** Una copia en el mismo disco que la base de datos no
-   es una copia. Si `BACKUP_PATH` apunta a un recurso de red, tiene que estar
-   montado **antes** de levantar los servicios.
-2. **Cifradas, y con la clave custodiada aparte** (§4).
-3. **Probadas.** Una copia que nadie ha restaurado nunca es una hipótesis.
-   Simulacro **trimestral**, siguiendo
-   [`../runbooks/restaurar-backup.md`](../runbooks/restaurar-backup.md).
-
-El calendario, qué copia cada trabajo, cuánto se conserva y cómo se verifica
-están en [`operacion.md`](operacion.md). Si apagas la observabilidad,
+Tres cosas, y ninguna es opcional: **fuera del servidor**, en otro disco físico
+o en otra máquina, y montado antes de levantar los servicios si es un recurso de
+red ([`instalacion.md`](instalacion.md) §6, «`BACKUP_PATH`»); **cifradas, y con
+la clave custodiada aparte** (§4); y **probadas**, con un simulacro
+**trimestral** según
+[`../runbooks/restaurar-backup.md`](../runbooks/restaurar-backup.md): una copia
+que nadie ha restaurado nunca es una hipótesis. Si apagas la observabilidad,
 **comprobar que la copia de anoche se hizo pasa a ser una tarea manual tuya**
 (§9).
 
@@ -556,7 +543,8 @@ mirando que llega el resumen de la noche siguiente.
   responde a la única pregunta que le van a hacer: quién.
 - **Revisa las cuentas al dar bajas.** Cuando alguien deja el hotel o cambia de
   puesto, su cuenta de gestión se retira ese mismo día. Ponlo en la lista de
-  salida de personal, junto a las llaves y al correo.
+  salida de personal, junto a las llaves y al correo. Cómo se da de baja:
+  [`../runbooks/cuentas-de-gestion.md`](../runbooks/cuentas-de-gestion.md) §2.
 - **Accesos de soporte: con motivo, con alcance y con caducidad.** El fabricante
   **no tiene acceso a tu instalación**. Cuando el paquete de diagnóstico no
   basta, concedes un acceso temporal: lo concedes tú, caduca solo (72 horas como
@@ -677,7 +665,7 @@ está.
 | 14 | Restauración probada de verdad | Simulacro de [`../runbooks/restaurar-backup.md`](../runbooks/restaurar-backup.md) | **Trimestral** |
 | 15 | Correo cifrado de forma obligatoria | `sudo grep '^MAIL_SCHEME=' .env` | Entrega |
 | 16 | Segundo factor obligatorio en las cuentas de gestión | `grep '^IDENTITY_2FA_REQUIRED_ROLES=' .env` ya no incluye `responsable_departamento`: una cuenta de esos roles sin segundo factor no puede entrar | Trimestral |
-| 17 | Ninguna cuenta de quien ya no está | Repasa con RRHH la lista de Panel → **Cuentas** (filtro «Activa») contra la de personal, y da de baja al resto desde la misma pantalla, con motivo. Repasa también Panel → **Departamentos**: cada responsable tiene que seguir siéndolo. La baja tiene efecto en la petición siguiente —también para las sesiones ya abiertas—, no borra el historial de esa cuenta y queda registrada con su autor y su motivo. Sin panel, la vía de recuperación es la consola: `identity:list-users` e `identity:deactivate-user <correo> --reason="<motivo>"`. Ninguna cuenta se toca por SQL ([`operacion.md`](operacion.md) §9) | Trimestral y en cada baja |
+| 17 | Ninguna cuenta de quien ya no está | Repasa con RRHH la lista de Panel → **Cuentas** (filtro «Activa») contra la de personal, y da de baja al resto desde la misma pantalla, con motivo. Repasa también Panel → **Departamentos**: cada responsable tiene que seguir siéndolo. La baja tiene efecto en la petición siguiente —también para las sesiones ya abiertas—, no borra el historial de esa cuenta y queda registrada con su autor y su motivo. Sin panel, la vía de recuperación es la consola: `identity:list-users` e `identity:deactivate-user <correo> --reason="<motivo>"`. Ninguna cuenta se toca por SQL ([`cuentas-de-gestion.md`](../runbooks/cuentas-de-gestion.md)) | Trimestral y en cada baja |
 | 18 | Ningún acceso de soporte vivo sin motivo | Panel → «Soporte» → «Accesos de soporte» | Mensual |
 | 19 | Todas las tablets en modo quiosco y ancladas | Recorrido físico: reiniciar una y comprobar que arranca sola en la PWA | Trimestral |
 | 20 | Quioscos vinculados = puestos que existen | `docker compose exec app php artisan kiosk:health` | Trimestral |

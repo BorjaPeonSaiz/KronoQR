@@ -850,59 +850,29 @@ shown. Detail in [`configuration.md`](configuration.md) §2.2.
 
 ## 2. Installer exit codes: what to do with each one
 
-The operation scripts (`install.sh`, `update.sh`, `doctor.sh`,
-`backup.sh`, `restore.sh`, `restore-drill.sh`) use **the same table**
-([`operation.md`](operation.md) §8). It lets you write a cron
-job or a runbook without reading every script. **What follows is what each
-code means in `install.sh`**; in the others the same number means the same in
-general, but the concrete case changes (in `doctor.sh`, for example, `3` is
-"no installation to diagnose" and `6` "the diagnosis found a failure"): it is
-in that §8.
-
-| Code | Meaning | What to do |
-| --- | --- | --- |
-| `0` | Correct. | Nothing. Carry on at step 1.5. |
-| `1` | **Incorrect usage.** An argument that does not exist. Nothing touched. | `./install.sh --help`. |
-| `2` | **Requirements not met. NOTHING written.** The server is exactly as it was. | Read the "What to do" line of each `[FAIL]`, fix it and run again. |
-| `3` | **There is a previous installation. NOTHING written.** | The installer **does not reinstall on top**: it would destroy the working-time record. To update, `./update.sh` (see [`../../runbooks/actualizacion-cliente.md`](../../runbooks/actualizacion-cliente.md), in Spanish). To see how it is, `./doctor.sh`. |
-| `4` | **Failed and undid everything it had done.** The server is back as it was. | The message says the cause. Fix it and run the installer again: it is safe. |
-| `5` | **Failed and could NOT undo everything.** Requires intervention. | The message lists **exactly what is left** and which command removes it. Do it and run again. It is the only code that needs someone in front of it. |
-| `6` | **Installed, but the final verification did not pass.** The services are up and **nothing has been undone**. The data is safe. | **It is not the certificate or the server name**: phase 5 probes `https://127.0.0.1` without checking the certificate. It exits with `6` for one of three causes, and the message says which: `/api/v1/health` or `/api/v1/ready` did not answer correctly (almost always PostgreSQL or Redis down or not started: §5, "…I installed fine but `/api/v1/ready` returns 503"); `product:doctor` gave at least one `[FAILURE]` (it is printed just above, each with its "What to do"); or the image does not carry `product:doctor`, which is a broken package (tell the manufacturer). Fix the cause and check with `sudo ./doctor.sh`. **Do not run `install.sh` again**: the installation exists and it would exit with `3`. |
-| `7` | **The cosign signature of a product image is not valid.** It can only happen if you have cosign installed (§7.1). Nothing has been installed: in phase 1 nothing had been written yet, and later what was written is undone, as with `4`. | **First, `IMAGE_REGISTRY`**: if it is misspelt, the registry answers `denied` and cosign cannot read the signature, which counts as an invalid signature. Check it with the `docker pull` in §1.2 and run again. If the image downloads fine and it still exits with `7`, **do not install**: tell the manufacturer with the cosign detail the script prints. Do not use `--skip-signature-check` to get past the step. |
-| `129`, `130`, `143` | **Interrupted before writing anything** (phases 1 and 2): `129` is a dropped SSH session, `130` a Ctrl+C and `143` a `kill`. NOTHING written. | Run it again, preferably inside `tmux` (§1.4). From phase 3 on, an interruption does **not** exit with these codes: it is treated as a failure, what was done is undone and it exits with `4` (or `5` if something could not be undone). |
+`install.sh` ends with a code from **the common table** of the operation
+scripts, which says in which phase it stopped and what was written. The full
+table, with the concrete case of `install.sh` and what to do with each code, is
+in [`operation.md`](operation.md) §8. The essentials when installing: with `0`,
+carry on at step 1.5; `2`, `3` and `129`/`130`/`143` have written nothing; `4`
+has undone everything and can be repeated; `5` is the only one that needs
+manual intervention; and with `6` **the installation exists**: do not run
+`install.sh` again, check with `sudo ./doctor.sh`.
 
 ---
 
 ## 3. What the installer generates, and what happens if you lose it
 
-Every secret is generated **on your server** with `openssl` and **is not
-transmitted to anyone**. The vendor does not know them and cannot recover
-them.
-
-| Secret | What for | If you lose it |
-| --- | --- | --- |
-| `APP_KEY` | Encrypts sessions and encrypted data | Sessions and that data can no longer be read |
-| `QR_SIGNING_KEY_CURRENT` (+ its `_ID`) | Signs the QR codes on the cards | **Every card has to be reprinted** |
-| `DB_PASSWORD` | The application's role in PostgreSQL | Rotated; see `../../runbooks/rotacion-secretos.md` (in Spanish) |
-| `DB_MIGRATION_PASSWORD` | Migration role, owner of the database. Only the one-shot `migrate` and `restore` services receive it | Same |
-| `BACKUP_DB_PASSWORD` | Backup role `fichaje_backup`, **read-only**. Only the `scheduler` receives it | Same. The daily backup fails until it is rotated |
-| `REVERB_APP_ID` / `_KEY` / `_SECRET` | Live presence in the panel | Rotated; only affects real time |
-| `BACKUP_ENCRYPTION_KEY` | Encrypts and authenticates the backups | **The backups can no longer be restored.** Keep it outside the server |
-| `BACKUP_WAL_KEY` | Encrypts and authenticates the archived WAL (since 2.2.0). **It is not a new secret**: it is **derived** from `BACKUP_ENCRYPTION_KEY` and only PostgreSQL receives it | Nothing extra to keep safe: it is recomputed from `BACKUP_ENCRYPTION_KEY` (§6, "`BACKUP_PATH`") |
-| `IDENTITY_PIN_SEALING_SECRET_KEY` | Opens the PINs the kiosk seals without network | PIN clock-ins queued without network could not be opened |
-| `GRAFANA_ADMIN_PASSWORD` | Access to the dashboard | Rotated in Grafana |
-
-The `.env` file is left with `0600` permissions. **No secret is printed on
-screen or left in the installer log**, and that is checked on every release.
-
-**One database role receives NO password**: `fichaje_maintenance`, the only
-one that can drop expired partitions of the audit log. It is born without a
-credential on purpose, and is given one **at the moment** of the annual purge.
-The procedure is in [`operation.md`](operation.md).
-
-**The licence key is not a secret** and is not in that table: it is a signed
-statement of what you have contracted, it opens nothing, and losing it has no
-consequence. You ask your provider for another one.
+Every secret is generated **on your server** with `openssl`, left in the
+`.env` with `0600` permissions, **never printed or transmitted to anyone**, and
+the vendor does not know them and cannot recover them. Two consequences worth
+knowing today: without `BACKUP_ENCRYPTION_KEY` the backups cannot be restored
+(which is why it is kept outside the server, §1.6), and without
+`QR_SIGNING_KEY_CURRENT` every card has to be reprinted. The full inventory —
+what each secret is for, what happens if you lose it, which ones are kept
+outside and how it is rotated— is in
+[`../../runbooks/rotacion-secretos.md`](../../runbooks/rotacion-secretos.md)
+§0 (in Spanish).
 
 ---
 
@@ -915,21 +885,11 @@ Paste the key your provider gave you into `LICENSE_KEY` in the `.env`
 docker compose exec app php artisan license:activate "KQL1...."
 ```
 
-> **If you do not have it at hand, install anyway.** Without an activated
-> licence the system installs, starts and **records working time normally**:
-> the only things that will not be available are the plan's accessory sections
-> — reports by period, Impact and adoption, payroll export, your own branding
-> (logo and colour), the weekly email summary and real-time presence updates,
-> which fall back to refreshing every few seconds. You activate it when you have it
-> and they appear on their own, without restarting anything.
->
-> **And an expired licence never blocks clocking in or access to the record
-> either.** That would leave you in breach of the law because of something we
-> did.
-
-Check how it stands at any time with
-`docker compose exec app php artisan license:show`. Everything else about the
-licence is in [`configuration.md`](configuration.md), section 3 bis.
+**If you do not have it at hand, install anyway.** Without a licence the
+system installs, starts and **records working time normally**; only the plan's
+accessory features are missing, and they appear on their own when you activate
+it. What is degraded, what is never degraded and how to check it is in
+[`configuration.md`](configuration.md), section 3 bis.
 
 ---
 
@@ -1162,7 +1122,7 @@ Sign in with it before it expires (72 hours by default,
 the second factor and then to set a password of your own. It is the console
 because there is not yet another administration account that could do it from
 the panel; as soon as there is one, the normal route is Panel → **Accounts**
-([`operation.md`](operation.md) §9).
+([`cuentas-de-gestion.md`](../../runbooks/cuentas-de-gestion.md), in Spanish).
 
 Creating another account is **not** the recommended way out: two accounts for the
 same person split in two the answer to "who corrected this working day?". If one
@@ -1576,6 +1536,39 @@ filling its own disk.
    [`../../runbooks/perdida-total-del-servidor.md`](../../runbooks/perdida-total-del-servidor.md):
    it needs these copies and the key of §1.6 (`BACKUP_ENCRYPTION_KEY`), also
    **outside the server**.
+
+**What counts as "off the server", and how the product warns you when it is
+not.** The promise of losing at most 15 minutes of records holds **as long as
+the backups and the WAL leave the server**. They count as off the server if
+`BACKUP_PATH` is a network share (NFS, SMB/CIFS) or is on a **different
+physical disk**; a partition or logical volume of the same disk does not count
+(if the disk dies, both die). A different disk protects against the disk
+failing, **not against theft or fire**: the ideal is a different machine and,
+if possible, another building. The product cannot take the backups out for you
+(it sends nothing anywhere), but it **warns you** when `BACKUP_PATH` and its
+`wal/` share a disk with the Docker and PostgreSQL data:
+
+- `./doctor.sh` checks it from the server and is **the complete check**: it
+  resolves the **physical disk** behind each path (through partitions, LVM
+  logical volumes and software RAID) and compares disks. It needs `sudo` to see
+  the Docker disk; without it, or with ZFS, it says it could not check;
+- the nightly backup publishes a coarser measurement and `product:doctor` reads
+  it in the **`backup.offsite`** check, in the backups section. From inside the
+  container only the **filesystem** is visible, not the disk: a network share
+  shows green; a destination on a different filesystem gives a soft warning
+  ("it cannot be known whether it is a different physical disk") that points to
+  `./doctor.sh`.
+
+It is **always a warning, never a failure**: it does not change the exit code
+or block `install.sh` or `update.sh`. If you already take the backups out
+yourself (sync to another machine, tape, an EU cloud), nothing is broken, and
+the warning will keep appearing because the product cannot see that. To clear
+it: mount the destination before starting, at the `BACKUP_PATH` path (for
+example, an NFS volume at `/var/backups/fichaje`); restart with
+`docker compose up -d` and run a backup
+(`docker compose exec scheduler php artisan backup:run`); and run
+`sudo ./doctor.sh`, which must say the backups are not on the same physical
+disk as the data, or that they are on a network share.
 
 **Everything stored here is encrypted and authenticated** (since 2.2.0): the
 daily dump, the weekly physical copy and also the **archived WAL**

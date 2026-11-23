@@ -43,7 +43,7 @@ en el repositorio**. Al cambiar la versión desplegada, actualizar README §3.1 
 `03-backup-role.sh`); asistente cerrado en la base local, sin licencia ni quiosco. Sin licencia no hay Reverb en `/live`
 (`license_absent`, sondeo cada 15 s): la presencia en tiempo real con licencia no se ha probado en local.
 
-**Limpieza de documentación (23-11-2026, rama `docs/limpieza-documentacion`, sin integrar):**
+**Limpieza de documentación (23-11-2026, PR #254, `main` `05d74e1a`):**
 
 - registros de verificación de la 2.1.0 a la 2.2.1 retirados del árbol (siguen en la etiqueta `v2.3.1`; índice en
   [docs/verificacion/README.md](docs/verificacion/README.md));
@@ -60,7 +60,8 @@ en el repositorio**. Al cambiar la versión desplegada, actualizar README §3.1 
 
 ## Siguiente acción
 
-1. Integrar `docs/limpieza-documentacion` (PR con merge commit; CI en verde).
+1. Integrar `docs/fuente-unica-guias-cliente`: una sola fuente para secretos, copias, licencia y códigos de salida en las
+   guías de cliente (lo repetido pasa a resumen y enlace). La limpieza se integró en #254 (`05d74e1a`).
 2. Cuando el propietario actualice la demo a la 2.3.1: README §3.1 y §6.
 3. **Abrir ciclo** en `VERSION` e `infra/versions.txt` (`2.3.2 *` o `2.4.0 *`) **antes** de añadir cualquier migración.
 4. Seguir la verificación final de la 2.3.0 desde el paso 5 (tanda 3) y llevar al propietario el reparto de los hallazgos sin
@@ -114,6 +115,8 @@ lo obliga) y la incidencia del fichaje anterior al alta.
   (algunas las citan pruebas o scripts: cambiarlas a la vez).
 - FK `SET NULL`/`CASCADE` sin índice a propósito (`*_by_user_id`, `employees.department_id`…): revisar si alguna empieza a
   borrarse en lote.
+- `lang/*/doctor.php` y `infra/scripts/lib/messages-doctor.sh` remiten a `operacion.md` «Las copias tienen que salir del servidor»,
+  que desde el 24-11-2026 es un resumen: apuntarlos a `instalacion.md` §6 («`BACKUP_PATH`»), con `BackupOffsiteDoctorCheckTest`.
 - **Por comprobar si siguen abiertos** (restos de septiembre que el recorte del 23-11-2026 no pudo verificar; detalle en
   `git show 663221ee:HANDOFF.md`): pausa sin vuelta sin incidencia (3.5); elemento de lote con 503 `ClockOutBeforeClockIn`
   que se reintentaría siempre (3.6, quizá resuelto por ADR-061); semana de resumen semanal fallida que no se recupera sola

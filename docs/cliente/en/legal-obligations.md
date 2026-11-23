@@ -475,7 +475,7 @@ restored, but:
   for your DPO to assess ([`operation.md`](operation.md) §11, 2.2.0 notes).
 - **2.1.0 backups** still within their period are encrypted but not
   authenticated: restoring them requires asking explicitly and it is recorded
-  in the audit log ([`operation.md`](operation.md) §18).
+  in the audit log ([`restaurar-backup.md`](../../runbooks/restaurar-backup.md) §6.8, in Spanish).
 - **Run the quarterly restore drill**
   ([`restaurar-backup.md`](../../runbooks/restaurar-backup.md), in Spanish). A
   backup that has never been restored is a hypothesis.
@@ -578,9 +578,10 @@ built so that no commercial decision can leave you non-compliant:
   contracted, and they can clock in from day one. If the product prevented
   you, that person would be working without a record and the infringement
   would be **yours**.
-- What does happen is warnings, a cutback of **accessory** features — the
-  reports by period and the real-time presence update — and an entry in the
-  audit log with the date from which you are out of contract.
+- What does happen is warnings, a cutback of **accessory** features
+  —management material, not the record; the list is in
+  [`configuration.md`](configuration.md) §3 bis.3— and an entry in the audit
+  log with the date from which you are out of contract.
 
 **None of this exempts you from the part that remains yours**: paying for the
 licence if you have contracted it, and keeping the record for four years even
@@ -588,9 +589,9 @@ if the commercial relationship ends. For the latter, the product includes a
 full data export that you can run at any time and take with you (§7 quater).
 
 > If you ever find that **you cannot clock in or cannot access the record** and
-> the cause is the licence, **that is not by design**: it is a malfunction.
-> Notify the vendor, attaching the output of
-> `docker compose exec app php artisan license:show` and of `GET /api/v1/health`.
+> the cause is the licence, **that is not by design**: it is a malfunction, and
+> your IT knows what to send the vendor ([`configuration.md`](configuration.md)
+> §4, "…I want to check that the licence is not blocking anything").
 
 ---
 
