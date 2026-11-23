@@ -363,12 +363,12 @@ kronoqr/
 ├── docs/
 │   ├── 01…07-*.md                # Especificación, stack y plan, agentes, credencial,
 │   │                             #   presentación al cliente, guía visual, seguridad
-│   ├── adr/                      # 57 registros de decisión de arquitectura
+│   ├── adr/                      # 62 registros de decisión de arquitectura
 │   ├── api/openapi.yaml          # Contrato de la API (fuente de verdad)
 │   ├── cliente/                  # Documentación entregable al cliente (es/en)
-│   ├── runbooks/                 # 33 procedimientos de operación e incidentes
+│   ├── runbooks/                 # 37 procedimientos de operación e incidentes
 │   ├── seguridad/                # Revisión ASVS y paquete del revisor
-│   ├── verificacion/             # Verificaciones de la 2.1.0 y la 2.2.0 y plan de correcciones
+│   ├── verificacion/             # Plan de verificación, verificación en curso y plan vigente
 │   └── trazabilidad-pruebas.md   # Matriz requisito → prueba (generada)
 │
 ├── plan implementacion/          # Detalle tarea a tarea de cada fase
@@ -490,7 +490,7 @@ Los cuatro roles de gestión (`admin`, `rrhh`, `auditor` y `responsable_departam
 - **Umbrales y medidas de la 2.2.0**: PHPStan nivel 9 sin baseline; cobertura del dominio 95,99 % (umbral 90 %) y del backend 93,3 % (umbral 75 %); MSI 88,22 % sobre el dominio (umbral 80 %); 0 hallazgos en ShellCheck, Semgrep y gitleaks. Medidas en la CI manual completa del commit publicado.
 - **Pipeline de CI** en ocho etapas: lint y tipos → arquitectura → unitarias y mutación de lo cambiado → trazabilidad → integración y contrato → seguridad → frontend → E2E → instalación limpia desde el paquete de entrega y actualización desde la versión anterior.
 - **Seguridad**: modelo de amenazas STRIDE, revisión interna OWASP ASVS, autoevaluación OWASP SAMM 2.0 con evidencia ([`docs/07-seguridad-madurez-y-amenazas.md`](docs/07-seguridad-madurez-y-amenazas.md)), SBOM CycloneDX por versión y política de divulgación en [`SECURITY.md`](SECURITY.md).
-- **Verificación pre-release** ([`docs/verificacion/`](docs/verificacion/)): la de la 2.1.0, con los agentes en modo solo lectura, terminó en **NO-GO** (7 bloqueantes, 91 altos y 181 medios con todas las herramientas en verde). De ella salió el plan de correcciones de la 2.2.0, ejecutado en 25 bloques con su rama, sus revisiones y su CI completa; una re-verificación a mitad del plan añadió los bloques 15 a 22. La [verificación final](docs/verificacion/2.2.0-verificacion-final-resumen.md) sobre `main` cerró con 0 críticos y 0 altos de seguridad y 0 bloqueantes del revisor. **Queda pendiente**, y lo dice el propio informe: la prueba en tablet real, la validación jurídica, la revisión externa de seguridad y los hallazgos altos no de seguridad diferidos a la 2.2.x.
+- **Verificación pre-release** (registros en la etiqueta [`v2.3.1`](https://github.com/BorjaPeonSaiz/KronoQR/tree/v2.3.1/docs/verificacion)): la de la 2.1.0, con los agentes en modo solo lectura, terminó en **NO-GO** (7 bloqueantes, 91 altos y 181 medios con todas las herramientas en verde). De ella salió el plan de correcciones de la 2.2.0, ejecutado en 25 bloques con su rama, sus revisiones y su CI completa; una re-verificación a mitad del plan añadió los bloques 15 a 22. La [verificación final](https://github.com/BorjaPeonSaiz/KronoQR/blob/v2.3.1/docs/verificacion/2.2.0-verificacion-final-resumen.md) sobre `main` cerró con 0 críticos y 0 altos de seguridad y 0 bloqueantes del revisor. **Queda pendiente**, y lo dice el propio informe: la prueba en tablet real, la validación jurídica, la revisión externa de seguridad y los hallazgos altos no de seguridad diferidos a la 2.2.x.
 - **Versionado** SemVer con `CHANGELOG.md` generado desde commits convencionales; la publicación se dispara al etiquetar `vX.Y.Z`.
 
 ---
@@ -506,11 +506,11 @@ Los cuatro roles de gestión (`admin`, `rrhh`, `auditor` y `responsable_departam
 | [05 · Presentación al cliente](docs/05-presentacion-cliente.md) | Lo que se promete al cliente |
 | [06 · Guía visual](docs/06-guia-visual.md) | Tokens de diseño, contrastes WCAG y tipografía |
 | [07 · Seguridad, madurez y amenazas](docs/07-seguridad-madurez-y-amenazas.md) | OWASP SAMM, Microsoft SDL, ATT&CK y riesgos aceptados |
-| [ADR](docs/adr/) | Las 58 decisiones arquitectónicas |
+| [ADR](docs/adr/) | Las 62 decisiones arquitectónicas |
 | [Contrato OpenAPI](docs/api/openapi.yaml) | Fuente de verdad de la API `/api/v1` |
 | [Documentación de cliente](docs/cliente/) | Instalación, configuración, operación, endurecimiento, guías de RRHH y del portal, obligaciones legales |
-| [Runbooks](docs/runbooks/) | 33 procedimientos de operación e incidentes |
-| [Verificación](docs/verificacion/) | Verificación pre-release de la 2.1.0, plan de correcciones, re-verificación y verificación final de la 2.2.0 |
+| [Runbooks](docs/runbooks/) | 37 procedimientos de operación e incidentes |
+| [Verificación](docs/verificacion/) | Plan de verificación, procedimientos manuales, verificación de la 2.3.0 y plan de correcciones vigente. Los registros de la 2.1.0 a la 2.2.1 están en la etiqueta `v2.3.1` |
 | [CHANGELOG](CHANGELOG.md) | Historial de versiones |
 | [CLAUDE.md](CLAUDE.md) | Reglas duras del proyecto y convenciones para contribuir |
 | [SECURITY.md](SECURITY.md) | Cómo reportar una vulnerabilidad |

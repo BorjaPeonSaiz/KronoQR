@@ -542,7 +542,7 @@ return [
             'delivered' => 'Delivery recorded: :uuid',
             'responsible' => 'Responsible: :email',
             'moment' => 'At: :at',
-            'reminder' => 'Remember to hand over the portal PIN and the instructions sheet as well: docs/runbooks/alta-nuevo-empleado.md',
+            'reminder' => 'Remember to hand over the portal PIN and the instructions sheet as well: docs/cliente/en/hr-guide.md §2',
             'by_retired' => '--by was removed in 2.3.0: the delivery is signed by the account in --responsible (its uuid or its email), which confirms who it is. Nothing has been recorded.',
             'confirm' => 'Record the delivery of card :uuid with this signature?',
         ],
