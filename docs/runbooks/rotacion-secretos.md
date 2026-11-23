@@ -9,7 +9,8 @@ empezar:
 
 | Situación | Ritmo | Prioridad |
 | --- | --- | --- |
-| **Rotación programada** | Anual, o según la política del cliente | Que nadie se quede sin fichar |
+| **Cambio de quién tiene acceso** (sale alguien de IT, cambia el proveedor) | En cuanto se produzca | Que nadie se quede sin fichar |
+| **Rotación por calendario** | Solo si la política del hotel la exige (por ejemplo, anual); el producto no la impone | Que nadie se quede sin fichar |
 | **Sospecha de compromiso** | El mismo día | Cerrar la puerta, aunque cueste servicio |
 
 **Impacto en el fichaje:** ninguno si se sigue el orden de cada sección. Los dos

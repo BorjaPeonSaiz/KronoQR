@@ -389,7 +389,7 @@ same way: the backup key, for instance, is not rotated without keeping the
 previous one, because **a backup can only be decrypted with the key it was made
 with**. It is all in
 [`../../runbooks/rotacion-secretos.md`](../../runbooks/rotacion-secretos.md)
-(in Spanish). Rotate when who has access changes, not by the calendar.
+(in Spanish). Rotate when who has access changes or you suspect a compromise; by the calendar, only if your policy requires it.
 
 > **Closes:** leakage of the installation's credentials, and irrecoverable loss
 > of the backups. · **Owner:** the vendor (generating them properly and not

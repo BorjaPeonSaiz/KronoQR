@@ -386,7 +386,8 @@ openssl rand -base64 32
 clave de copia, por ejemplo, no se rota sin conservar la anterior, porque **una
 copia solo se descifra con la clave con la que se hizo**. Todo está en
 [`../runbooks/rotacion-secretos.md`](../runbooks/rotacion-secretos.md). Rota
-cuando cambie quién tiene acceso, no por calendario.
+cuando cambie quién tiene acceso o sospeches un compromiso; por calendario, solo si
+tu política lo exige.
 
 > **Cierra:** filtración de credenciales de la instalación, y pérdida
 > irrecuperable de las copias. · **Dueño:** fabricante (generarlos bien y no
