@@ -54,9 +54,9 @@ en el repositorio**. Al cambiar la versión desplegada, actualizar README §3.1 
 - notas «Al actualizar desde la 2.1.0» y «a la 2.2.0» retiradas de `docs/cliente/operacion.md` y `en/operation.md` (el paquete
   no actualiza desde antes de la 2.2.0), salvo la de las bajas con cese futuro, que siguen citando RRHH y el doc 07;
 - enlace roto de `lang/*/console.php` (alta-nuevo-empleado) corregido; este HANDOFF reducido de 1 202 líneas a lo vigente.
-- **Fuera de la rama, sin decidir si se publican (repositorio público):** `docs/08-guia-comercial.md` (commit `a3751972`, solo en
-  el `main` local, sin mensaje), `docs/publicaciones-redes.md` y `docs/cliente/README.md` (índice del manual de uso) sin seguir,
-  y el cambio del doc 05 §1/§6 («garantiza» → «facilita») sin commitear.
+- **Material comercial fuera del repositorio** (decisión del propietario, 23-11-2026: el repositorio es público): la guía
+  comercial y las publicaciones para redes viven en la carpeta privada de datos del propietario, no en `docs/`. Con la
+  limpieza entran el índice del manual de uso (`docs/cliente/README.md`) y el doc 05 §1/§6 («garantiza» → «facilita»).
 
 ## Siguiente acción
 
