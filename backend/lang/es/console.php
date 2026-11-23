@@ -542,7 +542,7 @@ return [
             'delivered' => 'Entrega registrada: :uuid',
             'responsible' => 'Responsable: :email',
             'moment' => 'Momento: :at',
-            'reminder' => 'Recuerda entregar tambien el PIN del portal y la hoja de instrucciones: docs/runbooks/alta-nuevo-empleado.md',
+            'reminder' => 'Recuerda entregar tambien el PIN del portal y la hoja de instrucciones: docs/cliente/guia-rrhh.md §2',
             'by_retired' => '--by se retiro en la 2.3.0: la entrega la firma la cuenta de --responsible (su uuid o su correo), que confirma quien es. No se ha registrado nada.',
             'confirm' => '¿Registrar la entrega de la tarjeta :uuid con esta firma?',
         ],

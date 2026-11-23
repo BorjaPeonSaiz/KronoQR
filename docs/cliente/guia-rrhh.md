@@ -673,7 +673,7 @@ corregir».
 misma tablet son la señal de que esa tablet lleva una versión de la aplicación
 anterior a la del servidor: **hay que actualizarla recargando la aplicación**,
 con su cola vacía
-([`operacion.md`](operacion.md) §11, «Al actualizar a la 2.2.0: las tablets»).
+([`operacion.md`](operacion.md) §11.1, «Qué hacer si una tablet no cambia sola tras actualizar el servidor»).
 Es un arreglo de un minuto para IT y evita que mañana haya otra.
 
 ---

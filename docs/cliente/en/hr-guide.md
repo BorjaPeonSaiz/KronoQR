@@ -685,7 +685,7 @@ there was nothing to correct".
 **If it repeats, tell IT the kiosk's name.** Several discards from the same
 tablet are the sign that it runs an app version older than the server's: **it
 has to be updated by reloading the app**, with its queue empty
-([`operation.md`](operation.md) §11, "When updating to 2.2.0: the tablets").
+([`operation.md`](operation.md) §11.1, "What to do if a tablet does not change by itself after updating the server").
 It is a one-minute fix for IT and prevents another one tomorrow.
 
 ---
