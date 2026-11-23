@@ -1648,30 +1648,9 @@ Generado por el administrador del cliente con un clic o un comando. Contiene ver
 
 ---
 
-## 12. Runbooks a redactar
+## 12. Runbooks
 
-| Runbook | Cuándo se usa |
-|---|---|
-| `quiosco-no-responde.md` | Alerta de latido perdido |
-| `cola-offline-atascada.md` | Cola de dispositivo por encima del umbral |
-| `divergencia-proyeccion.md` | La reconciliación detecta discrepancia |
-| `turno-abierto-prolongado.md` | Alerta de turno abierto más de 12 h. Destinatario RRHH: **no es una avería, es trabajo de gestión sobre el registro** |
-| `renovacion-certificado-tls.md` | Certificado a menos de 21 días de expirar |
-| `espacio-en-disco.md` | Espacio libre por debajo del 20 % |
-| `rotura-cadena-auditoria.md` | **Incidente de seguridad.** Incluye preservación de evidencia |
-| [`restaurar-backup.md`](runbooks/restaurar-backup.md) | Recuperación y simulacro trimestral. **Escrito** en la tarea 1.18, junto con las alertas de copia que responde |
-| `rotacion-secretos.md` | Rotación programada o compromiso |
-| `alta-nuevo-quiosco.md` | Emparejamiento por código y vinculación |
-| `alta-nuevo-empleado.md` | Alta, emisión, impresión y entrega **con la antelación necesaria** |
-| `tarjeta-perdida-o-rota.md` | Revocación, reemisión y reimpresión en el día |
-| `rotacion-clave-qr.md` | Reimpresión progresiva sin dejar a nadie sin fichar |
-| [`requerimiento-inspeccion.md`](runbooks/requerimiento-inspeccion.md) | **Cómo generar la exportación legal en menos de 1 hora.** El más importante y el que nadie escribe hasta que hace falta. **Escrito** en la tarea 1.17, junto con el comando `compliance:legal-export` en el que se apoya |
-| `patron-anomalo-credencial.md` | Cómo revisar una incidencia `anomalous_pattern` sin convertir un indicio en una acusación |
-| `solicitud-derechos-rgpd.md` | Acceso, rectificación, portabilidad |
-| `brecha-de-seguridad.md` | Procedimiento de 72 h |
-| `actualizacion-cliente.md` | Procedimiento y vuelta atrás |
-| [`incidencia-sin-acceso.md`](runbooks/incidencia-sin-acceso.md) | Cómo diagnosticar con el paquete que envía el cliente. **Escrito** en la tarea 5.9, junto con el paquete y `product:doctor` en los que se apoya |
-| `errores-en-el-panel.md` | Cómo lee el IT del cliente el histórico de `error_events` y qué hacer con cada severidad |
+Todos los runbooks que este apartado pedía redactar están escritos. El índice, por alerta y por situación, es [`docs/runbooks/README.md`](runbooks/README.md); `AlertCatalogueTest` comprueba que cada alerta enlaza el suyo.
 
 ---
 

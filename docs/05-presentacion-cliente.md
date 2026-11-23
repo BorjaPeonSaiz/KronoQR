@@ -6,9 +6,12 @@
 
 ## 1. Qué es, en una frase
 
-**KronoQR es un sistema de fichaje optimizado para hostelería: cada empleado escanea su tarjeta con código QR en una tablet situada en el centro, y el sistema construye automáticamente el registro horario que la ley obliga a llevar.**
+**KronoQR es un sistema de fichaje optimizado para hostelería: cada empleado escanea su tarjeta con código QR en una tablet situada en el centro, y el sistema ayuda al hotel a llevar el registro diario de jornada.**
 
-No es una hoja de cálculo mejorada ni una app de control. Es el registro oficial de la jornada de su plantilla, con el nivel de fiabilidad, trazabilidad y conservación que exige la normativa laboral española.
+No es una hoja de cálculo mejorada ni una app de control. Reúne los fichajes,
+conserva el historial de correcciones y facilita la consulta y exportación del
+registro. La configuración y el uso correctos siguen siendo responsabilidad
+del hotel, que debe validarlos con su asesoría.
 
 ---
 
@@ -211,13 +214,13 @@ Seis perfiles: administrador, RRHH, responsable de departamento, auditor, emplea
 
 ---
 
-## 6. Qué garantiza en materia legal
+## 6. Cómo facilita la gestión de las obligaciones legales
 
 > Este apartado describe cómo el producto facilita el cumplimiento. No sustituye al asesoramiento jurídico ni a las obligaciones que corresponden al hotel como empresa.
 
 ### 6.1 Registro de jornada (art. 34.9 del Estatuto de los Trabajadores)
 
-| La ley exige | Cómo lo cumple KronoQR |
+| La ley exige | Cómo lo facilita KronoQR |
 |---|---|
 | Registro **diario** con hora de inicio y fin | Cada tramo queda registrado con su hora exacta |
 | Conservación **4 años** | Retención configurada y purga controlada al vencimiento, con informe |

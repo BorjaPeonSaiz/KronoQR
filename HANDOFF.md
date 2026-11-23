@@ -1,1202 +1,358 @@
 # HANDOFF
 
-> **Resumido el 02-09-2026.** El diario completo de sesiones (Fase 1 → tarea 5.5, ~1600 líneas) vive en
-> el historial de git: `git show 9b1593d:HANDOFF.md`. Este fichero conserva solo lo vigente. Al añadir
-> sesiones nuevas, mantener la disciplina: estado, pendiente, trampas — sin volcados de verificación ni
-> listados de ficheros que git ya sabe.
+> **Resumido el 23-11-2026.** El HANDOFF completo hasta el 23-11-2026 (publicaciones 2.2.0 a 2.3.1, bloques de correcciones,
+> restos de las fases 3 a 5) está en `git show 663221ee:HANDOFF.md`; el diario anterior (Fase 1 → tarea 5.5) en
+> `git show 9b1593d:HANDOFF.md`. Este fichero conserva solo lo vigente. Disciplina al añadir: estado, pendiente, trampas y
+> siguiente acción; sin volcados de verificación, sin listados de ficheros que git ya sabe y sin historial de la conversación.
+> El porqué de cada decisión va a Engram, no aquí.
 
 ## Estado y objetivo actual
 
-**KronoQR 2.3.0 publicada el 04-11-2026** (<https://github.com/BorjaPeonSaiz/KronoQR/releases/tag/v2.3.0>): PR #233 → `main` `bf36c298`, etiqueta `v2.3.0`; `release.yml` 41811203161, CI de la etiqueta, carga y simulacro en verde. ⑧b en verde desde la 2.2.1 y desde la 2.2.0. Clave de soporte `156a123c31a9a153` de serie en `config/product.php`.
+**KronoQR 2.3.1 publicada el 05-11-2026** (<https://github.com/BorjaPeonSaiz/KronoQR/releases/tag/v2.3.1>): `main` `0bf869a4`,
+etiqueta `v2.3.1`, `release.yml` 42101845628 en verde al segundo intento (el primero cayó por un 502 de la API de GitHub).
+Versión de parche sin migraciones (`2.3.1 -` en `infra/versions.txt`). CI manual completa en verde (⑧, ⑧b desde `v2.2.1`,
+cobertura y mutación completa). Paquete comprobado: `SHA256SUMS`, firma cosign e imágenes sin credenciales.
 
-**Objetivo actual (05-11-2026, orden del propietario):** llevar la 2.3.1 a la demo y cerrar la verificación final.
+- Trae los 🟠 V23-1-RV-1 (`closed_by` en el portal), V23-1-QA-1, V23-2-QA-1/2, V23-2-KI-1, V23-2-PO-1/2 y V23-2-PA-1, `/auth/me`
+  en la zona `api`, Dependabot #221 a #227, #235, #236, #238 y #241, `laravel/framework` 13.39 y Pest 5.3. V23-1-DV-2 va a la 2.4.0.
+- **`rector-laravel` se queda en la 2.5:** la 2.7 trae un paquete abandonado que hace fallar `composer audit`; `dependabot.yml`
+  lo ignora. **#149** (`vite-plugin-pwa` 2.0) sigue aparcada hasta la tablet real (bloque 31 de la 2.4.0).
+- Después de la publicación se integró #243 (`main` `663221ee`): el simulacro de la fila borrada nunca elige la primera fila.
 
-**KronoQR 2.3.1 publicada el 05-11-2026** (<https://github.com/BorjaPeonSaiz/KronoQR/releases/tag/v2.3.1>): `main` `0bf869a4`, etiqueta `v2.3.1`, `release.yml` 42101845628 en verde al segundo intento (el primero cayó por un 502 de la API de GitHub). Versión de parche sin migraciones (`2.3.1 -`), integrada en #234, #237, #240, #241 y #242. CI manual completa en verde (run 42073824754: ⑧, ⑧b desde `v2.2.1`, cobertura y mutación completa). Paquete comprobado: `SHA256SUMS`, firma cosign e imágenes sin credenciales.
-- **Siguiente:** el propietario actualiza la demo (sigue en la 2.2.1) y después las líneas de «versión desplegada» del README. Abrir ciclo en `infra/versions.txt` (`2.3.2 *` o `2.4.0 *`) antes de añadir una migración.
-- **Trae:** avisos de Symfony, `/auth/me`, portal con `closed_by`, Dependabot #221 a #227, #235, #236 y #238 (cerradas) y #241, `laravel/framework` 13.39, Pest 5.3 y los 🟠 V23-1-RV-1, V23-1-QA-1, V23-2-QA-1, V23-2-QA-2, V23-2-KI-1, V23-2-PO-1 y V23-2-PA-1, más V23-2-PO-2. Queda V23-1-DV-2 (2.4.0). `endroid/qr-code` 6 genera el mismo SVG byte a byte que la 5. #149 sigue aparcada hasta la tablet.
-- **`rector-laravel` se queda en la 2.5:** la 2.7 trae un paquete abandonado que hace fallar `composer audit`; `dependabot.yml` lo ignora.
-- **Incidencias sin abrir:** la herramienta deniega crearlas. Causas: 502 de `release.yml`, fórmula del simulacro (corregida en `fix/simulacro-fila-borrada`) y prueba del PIN (`0b0f161d`).
-- **`baseUrl`:** los tres `tsconfig.json` lo usan y TypeScript 7 lo retira; quitarlo y pasar `vue-tsc`.
-- **`main` local:** estaba 1 044 commits atrasado; al cambiar a él el árbol volvió a la 2.2.1 hasta avanzarlo. Actualizarlo antes de cambiar de rama.
-- **Anotado por `qa-testing`:** `AppShellView.spec.ts` y `roleCatalog.spec.ts` del panel fallaron 1 de 6 pasadas con la máquina cargada, sin causa conocida; mutantes vivos en `gapAt` (`WorkDay.php:1078`) y `:1175`; V23-1-QA-2 y V23-2-KI-2 siguen abiertos; un `tag:` comentado en Playwright y `foo()->group()` dentro de una prueba aún cuentan en `TagScanner`.
-- **Sin hacer:** incidencia de la prueba del PIN de ⑧b (crearla se denegó; detalle en `0b0f161d`).
+**KronoQR 2.3.0 publicada el 04-11-2026** (PR #233 → `main` `bf36c298`). Plan de correcciones de la 2.3.0 integrado entero
+(bloques 0-23, 25, 32-35); lo recortado el 28-10-2026 tiene destino 2.4.0 (ver «Pendiente → 2.4.0»). Doc 07 cerrado para la
+2.3.0 con SAMM 1,87. Clave de soporte `156a123c31a9a153` de serie en `config/product.php`.
 
-**Puesta a punto local (05-11-2026, PR #234):** las tres SPA funcionan por `https://localhost/{admin,portal,kiosk}/` (antes, página en blanco); `doctor` sin fallos (7 avisos propios de desarrollo); copia y `make restore-drill` en verde con la cadena verificada; 18 pantallas del panel, portal y quiosco sin errores de consola; `make load-test INSTANCES=1 DURATION=20s` con todo el registro en verde.
-- **El rojo de esa carga es solo RNF-P-02** (2,5 s en PHP de desarrollo con bind mount); la de la etiqueta salió verde. `make test-unit` también falla solo por duración (22 s de 6, 5 294 en verde), y `SourceDiscoveryTest` y `TestDiscoveryTest`, por el bind mount.
-- **`.env` local:** `BACKUP_DB_USERNAME=fichaje_backup` y rol creado con `03-backup-role.sh`. El asistente de puesta en marcha quedó cerrado en la base local; licencia y quiosco, omitidos.
-- **Sin licencia no hay Reverb en `/live`** (`license_absent`, sondeo cada 15 s). Saludo por nginx comprobado, pero la presencia en tiempo real con licencia no se ha probado en local.
-- **Producto, solo en esta rama:** `GET /auth/me` a la zona `api` y la guarda del router ya no convierte una sesión sin leer en «Sin permiso». No es regresión (ya estaba en la 2.2.1), pero la `v2.3.0` publicada lo lleva: en la demo llega solo con una 2.3.1.
-- **Paquete `v2.3.0` comprobado:** `SHA256SUMS` y firma cosign correctos; imagen php descargada sin credenciales.
+**Objetivo actual (orden del propietario del 05-11-2026):** llevar la 2.3.1 a la demo y cerrar la verificación final de la 2.3.0.
 
-**Verificación final de la 2.3.0 (tarea 6 del bloque final, en curso, solo registrar):** pasos 1 a 4 de 14; registros en `docs/verificacion/2.3.0-verificacion-final-tanda-{1,2,3}.md`. La tanda 3 solo tiene la cabecera. Van 56 hallazgos: 0 🔴, 8 🟠, 51 sin destino.
-- **Criterio de salida sin cumplir:** V23-1-RV-1 (🟠 del revisor: el portal no enseña `closed_by`) y los hallazgos sin destino, que reparte el propietario entre 2.3.1 y 2.4.0.
-- **Otros 🟠:** V23-1-QA-1 (`TagScanner`), V23-2-QA-2 (guarda de RN-05 al anular, sin prueba), V23-1-DV-2 (destino 2.4.0) y cuatro intermitentes (V23-2-KI-1, PO-1, PA-1 y QA-1).
-- **Doc 07:** Gestión de defectos baja a 1 si la verificación deja un hallazgo sin destino o se publicó con un 🔴/🟠 abierto. Decidirlo en el cierre.
-- **Dependabot:** #221 a #227 abiertas desde antes de publicar, sin revisar; #149 sigue aparcada.
+**Verificación final de la 2.3.0 (solo registrar, en curso):** pasos 1 a 4 de 14; registros en
+`docs/verificacion/2.3.0-verificacion-final-tanda-{1,2,3}.md` (la tanda 3 solo tiene la cabecera); método en
+[docs/verificacion/plan-verificacion.md](docs/verificacion/plan-verificacion.md). Van 56 hallazgos: 0 🔴, 8 🟠, 51 sin destino.
 
-**KronoQR 2.2.0 publicada el 09-10-2026** (<https://github.com/BorjaPeonSaiz/KronoQR/releases/tag/v2.2.0>): PR #131
-`chore/release-2.2.0` → `main` `7fb3d5e2`, etiqueta `v2.2.0`, `release.yml` 37935103938 en verde (imágenes en GHCR fijadas por
-digest, públicas sin credenciales; paquete, SBOM y `SHA256SUMS`). `load-test.yml` de la etiqueta en rojo solo por R5-QA-02 (8
-instancias frente a la línea base de 3: «no comparable»). Etiquetas `v2.1.0` (`9282af6`) y `v2.0.0` repuestas con `release.yml`
-desactivado. El CHANGELOG 2.2.0 abre con un resumen para el hotel escrito a mano. **Ciclo abierto: 2.2.1** (`VERSION` 2.2.1 y
-`2.2.1 *` en `infra/versions.txt`); una versión de parche no obliga a regenerar las capturas, una menor sí.
+- Los 🟠 que quedan: V23-1-DV-2 (2.4.0) y los intermitentes no resueltos (ver «CI y pruebas»).
+- **Criterio de salida sin cumplir:** los hallazgos sin destino, que reparte el propietario entre 2.3.x y 2.4.0.
+- **Doc 07:** Gestión de defectos baja de 2 a 1 si la verificación deja un hallazgo sin destino o se publicó con un 🔴/🟠
+  abierto. Decidirlo en el cierre.
 
-**Historia de la 2.2.0. Correcciones por bloques** tras la verificación de la 2.1.0 (NO-GO) y la re-verificación sobre `main`. El plan, con
-el detalle de cada bloque, vive en [docs/verificacion/2.2.0-plan-correcciones.md](docs/verificacion/2.2.0-plan-correcciones.md);
-el método en la sección «Método» de ese plan y en «Método de trabajo acordado» más abajo. **Una rama por bloque desde `origin/main`,
-CI manual completa en verde (⑧, ⑧b, cobertura y mutación), revisiones de `revisor-codigo` y `seguridad-cumplimiento`, PR y merge
-commit.** Lo integra quien ejecuta el bloque si la CI está en verde.
+**Demo `kronoqr.kodigolab.es`:** sigue en la 2.2.1 (el README §3.1 aún dice 2.2.0). La actualiza el propietario. Los datos de
+acceso (usuario, contraseña, teléfono del 2FA) y el enlace al vídeo del TFM van en el formulario de entrega del máster, **nunca
+en el repositorio**. Al cambiar la versión desplegada, actualizar README §3.1 y §6.
 
-**Integrados en `main`:** bloques 0 a 14, 12b, 12c, 15 a 22 y el final. El último de correcciones, **bloque 14 «Pruebas, puertas de calidad y
-documentos de arquitectura»**, es la PR #128 (`main` `bfb3707a`, 08-10-2026; 27 commits). Lo que trae: **matriz de autorización
-generada del router** (`AuthorizationMatrixTest`, un caso por ruta y rol con el token de 2FA pendiente; sin Chromium, con los dobles
-de los renderizadores de PDF), `TestLevelGateTest` (nivel de prueba por requisito; huecos conocidos RF-PR-05 y RF-QR-04),
-`UnitSuiteBudgetTest`, `FrameworkHelpersTest` (ni facades ni helpers globales en `Domain/` ni `Application/`), regla ESLint
-`no-literal-colors`, `DevelopmentSeeder` solo en `local`/`testing` y fuera de la imagen del cliente, `POST /client-errors` con
-`session.complete`. **Versiones inmutables (ADR-053, A6-2):** `release.yml` no reescribe una versión publicada
-(`assert-image-tags-free.sh`; `first_publication` para la primera), el paquete fija sus imágenes por digest (`images.lock`,
-`IMAGE_DIGEST_*` en `compose.prod.yaml`), `install.sh`/`update.sh` etiquetan en local la imagen fijada aunque ya estuviera por su
-digest, y la **vuelta atrás in place** marca y vacía los digests en la copia del `.env`, que al completarse pasa a ser el `.env`
-(`kq_env_mark/drop/has_rollback_digests` en `lib/env-file.sh`; el reintento retira la marca). Job ⑧b con P0–P3 sobre un paquete
-fijado con registro local. **Conciliación registro ↔ auditoría (ADR-057 §4, decisión del propietario del 08-10-2026):**
-`compliance:reconcile-work-record` (04:15 UTC, 7 días; `--full` domingos 02:15), cinco clases de discrepancia, purgas solo
-admisibles (puerto `RetentionYearsFloor`), exención por año sellado limitada a la noche del 31-12, alertas en `work-record.yml`,
-runbook `discrepancia-registro-auditoria.md`; doc 05 §6.1, `obligaciones-legales.md` §5 y doc 07 dicen lo que detecta y su límite
-(asientos falsificados con la credencial del runtime: fila nueva aceptada). ADR-052 a 057 (056 aceptado para la 2.2.x; 057 con §1–§3
-en la 2.2.x) y enmiendas a 020, 027, 033, 040 y 042; `SECURITY.md` (contacto@kodigolab.es, acuse 48 h, evaluación 72 h; el canal
-privado de GitHub sigue desactivado); runbook de pérdida total del servidor con la custodia de secretos. Los anteriores: 13
-«Rendimiento de base de datos» (PR #124, `6882124b`), 22 (PR #122), 21 (PR #120), 12c (PR #118, ADR-051; **tras actualizar a la
-2.2.0 el admin tiene que volver a entrar**), 12b (PR #116) y 12 (PR #114, ADR-050).
+**Puesta a punto local (05-11-2026, PR #234):** las tres SPA por `https://localhost/{admin,portal,kiosk}/`; `doctor` sin fallos
+(7 avisos de desarrollo); `make restore-drill` en verde; `.env` local con `BACKUP_DB_USERNAME=fichaje_backup` (rol creado con
+`03-backup-role.sh`); asistente cerrado en la base local, sin licencia ni quiosco. Sin licencia no hay Reverb en `/live`
+(`license_absent`, sondeo cada 15 s): la presencia en tiempo real con licencia no se ha probado en local.
 
-**Verificación final sobre `main` a08ed150 (08 y 09-10-2026)** con todo el plan de verificación: 0 CRÍTICO/ALTO de seguridad, 0
-BLOQUEANTE del revisor; faltan la tablet real y la validación jurídica. Registros en `docs/verificacion/2.2.0-verificacion-final-*.md`
-(entraron con el bloque final; gitleaks pidió la entrada 31 de la allowlist, la `Sec-WebSocket-Key` de ejemplo del RFC 6455). El propietario ordenó corregir antes de publicar solo cinco hallazgos,
-en una rama: **PR #130 `fix/update-sh-verificacion-final`** (CI de push 37902468205 y manual 37904665030 en verde; la mutación completa
-se cortó a los 90 min, lo conocido). Trae: vuelta atrás *in place* temprana con `start` sin recrear y `.env` asentado (V7-RV-1/2);
-**actualizar *in place* solo desde la 2.2.0** (desde la 2.1.0 la copia previa fallaba siempre), por eso P2b y P3 de ⑧b se saltan
-hasta que la versión anterior sea la 2.2.0; directorio anterior retirado tras actualizar lado a lado (V7-SC-1); órdenes de los
-mensajes con todos sus argumentos y `ScriptMessageArgumentsTest` (V3-PL-04); `doctor.sh` y `product:doctor` fallan con scheduler u
-horizon parados o sin copia verificada en 26 h (V3-PL-07); el rol de la app sin escritura sobre `migrations`, comprobado y reparado
-por `update.sh` (V4-SC-1). El resto de la lista «¿Se pasó algo por alto?» del resumen queda para la 2.2.x salvo nueva orden.
+**Limpieza de documentación (23-11-2026, rama `docs/limpieza-documentacion`, sin integrar):**
 
-**Entrega como TFM (08-10-2026, PR #127 → `main` `2ac00130`):** el proyecto es también el Trabajo de Fin de Máster del propietario
-(Máster de Desarrollo con IA, BIG School). `README.md` sigue el orden que pide la entrega. **`doc_master/` (memoria, despliegue,
-guion del vídeo y presentación) se retiró del repositorio el 13-10-2026 por decisión del propietario**; el README ya no la enlaza
-(sigue en el historial de git, `git show 7cbf912f:doc_master/…`). Los datos de acceso a la demostración (usuario, contraseña y
-teléfono para el código 2FA) y el enlace al vídeo van en el formulario de entrega del máster, **nunca en el repositorio**; el
-`README.md` lo dice así desde el 15-10-2026. Cuando cambie la versión desplegada en `kronoqr.kodigolab.es`,
-actualizar README §3.1/§6.
+- registros de verificación de la 2.1.0 a la 2.2.1 retirados del árbol (siguen en la etiqueta `v2.3.1`; índice en
+  [docs/verificacion/README.md](docs/verificacion/README.md));
+- `docs/plan-verificacion-kronoqr.md` y `docs/verificacion-manual.md` movidos a `docs/verificacion/plan-verificacion.md` y
+  `docs/verificacion/verificacion-manual.md`;
+- doc 03 sin los prompts §6.1-6.5 (los literales viven en `plan implementacion/`); doc 02 §12 reducido a enlace; README del plan
+  reducido a índice;
+- notas «Al actualizar desde la 2.1.0» y «a la 2.2.0» retiradas de `docs/cliente/operacion.md` y `en/operation.md` (el paquete
+  no actualiza desde antes de la 2.2.0), salvo la de las bajas con cese futuro, que siguen citando RRHH y el doc 07;
+- enlace roto de `lang/*/console.php` (alta-nuevo-empleado) corregido; este HANDOFF reducido de 1 202 líneas a lo vigente.
+- **Material comercial fuera del repositorio** (decisión del propietario, 23-11-2026: el repositorio es público): la guía
+  comercial y las publicaciones para redes viven en la carpeta privada de datos del propietario, no en `docs/`. Con la
+  limpieza entran el índice del manual de uso (`docs/cliente/README.md`) y el doc 05 §1/§6 («garantiza» → «facilita»).
 
-**KronoQR 2.2.1 publicada el 17-10-2026** (<https://github.com/BorjaPeonSaiz/KronoQR/releases/tag/v2.2.1>).
-- **Publicación:** PR #177 → `main` `cd3cfa4d`, etiqueta `v2.2.1`. El `release.yml` 38970777099 sale en verde, con las imágenes firmadas con cosign y `SHA256SUMS.bundle`.
-- **Carga:** `load-test.yml` no se dispara con una versión de parche, así que se lanzó a mano (run 38973456612, en verde).
-- **Simulacro local:** `make restore-drill` no se puede ejecutar porque el `.env` de desarrollo usa `fichaje_migrator` como rol de copias (código 7); no se ha tocado el `.env`. La CI cubre la restauración.
+## Siguiente acción
 
-**Verificación final de la 2.2.1, del 17 al 18-10-2026:** se ejecutaron las 7 tandas del plan de verificación. Los registros están en `docs/verificacion/2.2.1-verificacion-final-*.md` y el resumen, en `…-resumen.md`.
-- **Criterio de salida:** 0 🔴/🟠 de seguridad y 0 🔴 del revisor.
-- **Quedan:** 12 🟠 del revisor, ninguno de seguridad en su propia escala, y muchos 🟡 de la 2.2.0 abiertos sin motivo escrito.
-
-**Decisiones del propietario del 18-10-2026** (detalle en Engram, `kronoqr` «Decisiones del propietario 18-10-2026»):
-- **V21-3-PA-1: hecho (#181).** «Haz que se exporte por el nombre o dni»: `POST /reports/legal-export/employees/search` (RF-IN-05, ADR-037 enmendado el 18-10) y el buscador del panel.
-  - Búsqueda: por nombre (mínimo 3 caracteres después de `unaccent`; también «Apellidos, Nombre»), por código exacto o por documento exacto, con 10 resultados como máximo.
-  - Asiento por búsqueda con los `employee_uuids`, nunca el término; una zona de límite `legal-export-search` por cuenta e IP.
-  - `NationalId`/`NationalIdDigest` y `PersonNameSearch` en Shared; el alta mide el documento ya normalizado.
-- **Doc 07:** cierre de la 2.2.1 integrado (#180). El 18-10 el propietario ratificó la fila del oráculo por documento (D1) y el residuo de `sites.timezone` hasta su *trigger* (D2).
-- **Dependabot:** #172 y #179 integradas (la segunda sustituye a la #173). **#149 (`vite-plugin-pwa` 2.0) aparcada** hasta la tablet real: es el bloque 31.
-- **Demo `kronoqr.kodigolab.es`:** la actualiza el propietario; después, las líneas de «versión desplegada» del README.
-
-**No habrá 2.2.2: todo va en la 2.3.0** (órdenes del 18-10-2026: «corregirlo todo», «junta también lo aplazado para la 2.3.0» y «absolutamente todo… perfecta y sin fallos»). Ficheros:
-- [docs/verificacion/2.2.1-pendientes-priorizados.md](docs/verificacion/2.2.1-pendientes-priorizados.md): unos 300 hallazgos abiertos, por urgencia;
-- [docs/verificacion/2.3.0-plan-correcciones.md](docs/verificacion/2.3.0-plan-correcciones.md): 35 bloques más el final, **aprobado el 18-10-2026** («hazlo como consideres mejor»).
-
-Lo que se aprobó con el plan:
-- D1-D21 con la recomendación de cada una. D15-D18 cambian ADR y ya tienen visto bueno: PIN tras la baja, readmisión en la misma ficha, baja programada con tarea diaria y servicio de copias propio.
-- D4 ampliada: todas las pruebas con presupuesto de reloj.
-- Bloque 34 activado: asiento en el detalle de una baja médica y franja sin recargas urgentes.
-- Pedido nuevo: **readmisión sencilla** (25.7). Botón «Dar de alta de nuevo» en la ficha y en Plantilla «De baja», con un solo campo obligatorio (la fecha), varias personas a la vez y propuesta automática al importar el CSV.
-- La 23.3 cambia la protección de `main` en GitHub y se confirma con el propietario al llegar.
-
-**Estado de la 2.3.0 (27-10-2026):** bloques 0 a 20 integrados (#182 a #187, #189 a #191, #193 a #198, #200 a #203; el 18 es `main` `ab6a11ed`). **Bloque 19a** (19.1, 19.2, 19.3, 19.6) integrado: #206, `main` `065714c3`. **Bloque 19b** integrado: #210, `main` `f7ad7b51` (27-10-2026). Dependabot #208 y #209 adaptadas e integradas en #211 (`main` `dc276b41`). **Bloque 20** integrado: #212, `main` `5d234948` (28-10-2026). **Bloque 21** integrado: #213, `main` `5c1a38a0` (28-10-2026). **Bloque 22** integrado: #214, `main` `a53ae834` (29-10-2026). **Bloque 23** integrado: #215, `main` `950ca60e` (29-10-2026). **Bloque 25** (🔒, baja programada y readmisión) **integrado** (#216, #217, #218 y #220; `main` `9089b569`, 01-11-2026): 25.1 (ADR-062) y **25.2 (baja programada, parte a)** integradas (#216, `main` `e7ea191f`; decisión del propietario: alta futura con cese en el alta se programa salvo «Aplicar ya»; puerto `FinalWorkDayActivity` en `Shared`). **25.3 (readmisión: individual, en lote e importación; `employment_periods` con disparadores) y 25.4 (corrección auditada del cese)** integradas (#217, `main` `db7427b1`); RN-27 en el Anexo A; la fila de doc 07 «días trabajados después del cese» queda **Parcial** hasta la 25.5. Revisiones (apto con correcciones) corregidas: cierre de contrato en `employee.rehired`, readmisión por importación solo por documento y con `rehire_digest`, ausencias y cota de marcas por periodo, fichaje antes del alta rechazado como el posterior al cese (sin incidencia, igual que hoy el posterior al cese), guardas de minimización y de corrección del cese en la base. **Pendiente del bloque:** el plan de la importación de ausencias no comprueba el periodo (una fila con solape parcial sale `create` y se salta al aplicar); que corregir un cese anterior no mueve el `valid_to` del contrato cerrado al readmitir (guía RRHH, 25.6); periodos en la búsqueda de la exportación legal del panel (25.6); E2E de la importación con readmisión y mutación de `Absence::fallsWithin`/`rehireDigest`. **25.5** (PIN tras la baja atribuido dentro del periodo, descartes acotados al cese, resumen de ausencias con `outside_employment`) integrada (#218, `main` `cd89182c`), revisada por `revisor-codigo` y `seguridad-cumplimiento` (apto con correcciones, corregidas; doc 07: días tras el cese y PIN tras la baja **Mitigado**; residuales en «Pendiente» → «Bloque 25»). 25.6 y 25.7 integradas en #220. La nocturna repartida por módulo, en #219 (`main` `2397f241`). **Siguiente:** B33 parcial, 34.1, B35, B32 (cierre del doc 07, que necesita lo que resuelva B33) y el final. Del B23 (detalle en Engram `2.3.0/b23`): 23.1 (parte 2.3.0), 23.3 en código y 23.4 hechas (detalle en Engram `2.3.0/b23`). 23.1: veredicto «no fiable» (máquina > 3× la línea base; sigue en rojo con anotación propia, decisión del propietario 29-10) y `quality.measured_off_ci` con RNF-P-02, RNF-P-06 y RNF-P-08. 23.3: ⑧, ⑧b y `Cobertura (RNF-M-01)` en `.github/workflows/gates.yml` (`pull_request` a `main` + `workflow_call` desde `ci.yml`); **exigidos en la protección de `main` con `strict` desde el 29-10-2026** (20 checks obligatorios; forks externos con aprobación siempre). 23.4: informe en un Worker por trozos, hallazgos troceados; las tareas largas bloquean y la «primera fila» sigue avisando (mirar la primera nocturna); mitad servidor de RNF-P-04 en `LivePresenceVolumeTest` (200 ms de mediana, nocturna). Revisiones hechas y corregidas; CI manual 40887304335 en verde; PR #215. **Pendiente:** la «primera fila» de `perf-large-tables` pasa a `expect` tras dos nocturnas de `main` con margen (la de la rama quedó por debajo de 1,5 s). **Recorte de la 2.3.0 (28-10-2026, propietario):** lo que no corrige una regla dura, un riesgo legal o una promesa pasa a la 2.4.0 (sección «Recorte del 28-10-2026» del plan; siguen en la 2.3.0 B22, 23.1 parcial, 23.3, 23.4, B25, B32, B33 parcial, 34.1 y B35).
-
-Lo que conviene saber del bloque 22 (tanda 22a; detalle en Engram `2.3.0/b22` y `2.3.0/b22-contrato`):
-
-- **22.2:** `EveryTestIsTaggedTest` exige etiqueta de requisito en toda prueba de Pest y Playwright; `TraceabilityMatrixFreshnessTest` compara la matriz entera (regenerar con `make traceability` tras tocar etiquetas).
-- **22.3:** todos los pares (operación, código) validados: barridos en `tests/Contract/SharedResponsesSweepTest` y `DependencyUnavailableSweepTest` + puerta `ContractStatusCoverageTest`. Un `assertValidResponse()` sin código literal ya no cubre ningún par. Spectator no veía `POST /broadcasting/auth` (grupo vacío `channel-auth`). Contrato: `BadRequestProblem`, `InvalidRequest` = `oneOf` validación/D6, `UnreadableBody` en `client-errors` y `kiosk/pair/confirm` (decisión del propietario 28-10). Descarga diferida con el `Content-Type` de su formato.
-- **22.4:** los diez hallazgos estaban vivos y se corrigieron sin tocar producción. Destaca: `tests/bootstrap.php` da a cada pasada su `TMPDIR` y lo borra (la suite Unit ya no deja nada en `/tmp`; las 15 000 entradas viejas del contenedor se van al recrearlo); `ParallelRequests` con barrera de arranque; la puerta de `test-unit` en `.github/scripts/pest-duration-budget.sh`. Para la CI: `token-rotation.spec.ts` (no se pudo ejecutar en local) y la suite Integration completa con la barrera.
-- **22.5:** `PinVerification` del 47,6 % al 100 % de MSI; canario de mutación (`make mutate-canary`, `MUTATION_CANARY_EXPECTED`) antes de cada mutación; `make mutate-scope` (la suite Unit cubre el 88,33 % del dominio, puerta en 88); log completo como artefacto y vivos en el resumen; regla para relanzar runs en el doc 02 §10.1 y `docs/runbooks/fallo-de-ci.md`. `make mutate` completo no cabe en local (256 MB): el MSI global solo en la CI.
-- **Mutación nocturna de `main` (HECHO en `ci/nocturna-por-modulo`, 31-10-2026, pendiente de ver una noche real):** la nocturna se cortaba a los 120 min (25, 27 y 28-10) y a los 180 (30 y 31-10). Ahora son tres jobs en `ci.yml`: `mutation` (matriz de 5 partes por módulo, `make mutate-part MUTATE_MODULES=...`, sin `--min`, tope 90 min), `mutation-scope` (M6) y `mutation-total` (suma los mutantes de las partes con `mutation-log.sh total 80`: el MSI >= 80 % sigue siendo global). La cobertura nocturna (`gates.yml`) pasa de 50 a 75 min: mide 32-50 min tanto en el PR como de noche, no compite con nada. Para validar: Actions, CI, Run workflow con `full_mutation` en el disparo manual (en `main`), y mirar la duración de cada parte; si una pasa de 60 min, partirla por módulos. Umbral por fichero (R2-QB-01) decidido el 28-10: 70 % en `mutate-changed` cuando cambian varios ficheros, nada por fichero de noche. Párrafo duplicado y corrupto en el doc 02, línea ~946.
-- **22.6:** autorización cerrada (A2-A8, R4-QA-*, V4-QA-2, V21-4-QA-*); policy de `POST /auth/logout` (`SessionPolicy`); **`POST /auth/logout` responde 403 a quiosco y portal** sin efecto ni asiento; solo gestión y soporte (decisión del propietario 28-10, nota en ADR-039; prueba `LogoutDenialTest`). La matriz exige 0 `access.denied` salvo la denegación por alcance del responsable en `broadcasting/auth`, contada por actor.
-- **Pendiente de la 22.4:** `WorkRecordReconciliation::auditPurgedAlongTheYear` admite el 2 de enero en la expresión regular pero `daysApart <= 1` nunca lo deja pasar (código muerto; `$daysApart >= 0` es un mutante equivalente); en `backend/` hay un directorio sin seguimiento `C:` (`kq-be`, `v21`), restos de sesiones antiguas.
-- **Pendiente:** unas noventa operaciones con cuerpo declaran el 415 de D6 pero no su 400 (`UnreadableBody`); el preámbulo lo cubre en prosa. Para las notas de la versión: el 400 del quiosco y de `me/login` puede llegar como `bad-request` sin `errors`.
-- **N5 (rendimiento del panel, decisión del propietario 28-10):** RNF-P-04 = LCP de `/live` con 500 personas (`perf-live-presence.spec.ts`, nocturna, bloquea); informe de 20 000 filas y 3 000 hallazgos = objetivo interno que avisa (`perf-large-tables.spec.ts`, `warnAboveTarget`). Arreglo del panel y mitad servidor de RNF-P-04: tarea 23.4.
-- **Pendiente del bloque 22 (revisiones):** `TagScanner` cuenta los fixtures dentro de cadenas como cobertura (7 requisitos inflados, `FakeTestSource.php` incluido; arreglar antes de entregar la matriz en el cierre de la 2.3.0); guardar la codificación de la nómina en la fila al generarla (hoy se detecta mirando el fichero); `perf-live-presence` no es en frío del todo (caché del login) ni comprueba el elemento del LCP; `ClockTampering` no ve `Pest\Laravel\mock()` importado ni `swap`; `WallClockAssertionsTest` no prohíbe `toBeLessThan` en el fichero que avisa; confirmar que el `::warning` de las tablas grandes llega al resumen del job (en 40761604031 las dos tablas quedaron por debajo del objetivo y no avisó). La suite unitaria pasaba de 5 s en la CI por ruido del runner (4,38-5,22 s con el mismo código; las pruebas suman 3,6 s): **techo a 6 s (decisión del propietario, 29-10-2026)**, después de sacar a Feature `SuiteTemporaryDirectoryTest` y a Architecture seis ficheros que tocan disco (`TagScanner`, `RequirementCatalog`, `DiagnosticsConfigurationAllowlist`, `DevelopmentSeederGuard`, `DeployedVersion` y `JsonDiagnosticsBundleWriter`). La medición está en el comentario del `Makefile`.
-
-Lo que conviene saber del bloque 21 (integrado: #213; planes medidos antes y después en el commit de cada tarea):
-
-- **21.1:** `work_record_purge_batch` lee lo vencido de cada tabla una vez por índice y lo parte en tandas; índice parcial sobre `LEAST(occurred_at, recorded_at)` de los escaneos sin tramo con `CREATE STATISTICS`. Sin nada vencido, de 573 ms a 2 ms. `inspect()` con un atraso grande todavía recorre `scan_events` (elección barata del planificador).
-- **21.2:** 19 índices de FK `RESTRICT` (`RestrictForeignKeyIndexesTest`), ausentes como anti-join, calendario con serie de enteros; `work_mem` se queda en 4MB (motivo en `infra/compose.prod.yaml`).
-- **21.3:** `MigrationsRoundTripTest` compara el catálogo tras cada `down()`/`up()`; corrigió tres `down()` (`2026_09_22_110000`, `2026_10_24_100000`, `2026_10_09_100000`: este último ya no devuelve a la aplicación escritura sobre `migrations`). En desarrollo, `fichaje_test` puede guardar funciones antiguas que `migrate:fresh` no borra: borrarlas a mano si sale «Restos tras deshacer».
-- **21.4:** `kioskScansBetween` y la historia de patrones van por índice; DB9 cerrado en el doc 07.
-- **Revisión:** el paso 4 de la purga (tramos por generaciones) conserva el `DELETE … LIMIT` repetido: medido, unos 4 s de los 4,2 s con siete meses vencidos y casi todo son las cuatro FK que apuntan a `shift_entries`; leerlos una vez tardó lo mismo (comentario de la migración y nota de ADR-057). `RestrictForeignKeyIndexesTest` falla si aparece una FK `RESTRICT` compuesta.
-- **Pendiente:** las FK `SET NULL`/`CASCADE` sin índice (`*_by_user_id`, `departments.manager_user_id`, `employees.department_id`, `device_pairing_requests.device_id`, `scan_processing_failures.device_id`, `role_has_permissions.role_id`) quedan sin indexar a propósito: sus padres casi nunca se borran. Revisar si alguno empieza a borrarse en lote.
-
-Lo que conviene saber del bloque 20 (integrado: #212; decisiones en Engram `2.3.0/b20-decisiones`):
-
-- **Doc 01:** RN-24 (tramo a mano nunca hacia el futuro, ahora también en `WorkDay::addEntry`/`correctEntry` con `ManualEntryHorizon`), RN-25 (suspendido: no ficha, conserva tarjeta, sin incidencia, **sí entra al portal**, decisión del propietario 27-10), RN-26 (motivo de firma 10-1 000), RS-14 (conciliación). Los escenarios Gherkin viven en doc 01 §11 con su tabla (no hay `.feature`).
-- **RN-19 (20.3):** la revisión espera a que cierre la ventana de 600 s; un fichaje aceptado (o rebote/RN-18) en [intento, +600 s] subsana; `RejectedPinScanRecovered` → `CloseRecoveredIncident` cierra con actor `system` y asiento con los `scan_id`. No se cierra si hubo bloqueo de PIN. **Reapertura (enmienda de ADR-057 §2 aprobada el 27-10):** si después llega otro intento sin subsanar del mismo día, `RejectedPinScanRelapsed` → `ReopenRecoveredIncident` reabre (`resolved → open` solo para cierre de sistema; migración `2026_10_27_100100`, `UPDATE (context)` para `fichaje_app`, vigilado por `work-record-privileges.sh` y `product:doctor`), asiento `incident.reopened`. La reapertura no reenvía el correo de aviso. Una subsanación fuera de `COMPLIANCE_INCIDENT_LOOKBACK_DAYS` no cierra nada.
-- **G5 (decisiones del propietario 27-10):** cambia la promesa del doc 05 §6.3, no el código (un asiento por cada 15 min de uso del soporte), y el panel lista esas ventanas: `GET /api/v1/support/grants/{uuid}/uses` (admin) y «Ver usos» en Soporte. El asiento sigue siendo de mejor esfuerzo (residuo en el doc 07, 2.4.0).
-- **20.7:** `docs:consistency` exige que cada operación del contrato y cada `Http/Controller` y `Domain/Policy` citen un requisito existente; no ve si el requisito cubre de verdad el comportamiento.
-- **Tarjeta de persona suspendida:** `scan_events.result = rejected_suspended` (migración `2026_10_27_100000`, reversible mientras no haya filas).
-- **Pendiente:**
-  - el PIN de una persona suspendida sigue como `rejected_unknown` (toca el verificador de PIN y el CHECK de ADR-043);
-  - carrera de microsegundos suspensión/resolución en `RegisterScanHandler::process` (fila `rejected_unknown` con `employee_id`);
-  - observabilidad sin RNF en doc 01 (métricas y órdenes de mantenimiento sin requisito);
-  - catálogo de departamentos sin RF propio (lo cubren RF-GP-01, RF-PD-03 y RF-ID-03).
-
-Lo que conviene saber del bloque 19 (integrado: #206 y #210):
-
-- **19.1:** `UtcInstant` + `UtcPrecision` (instante del contrato) y `UtcInstant::wallTime` + `UtcWallTime` (horas rotuladas «UTC», siempre convertidas); `SiteWallClock` (hoy en `Shared/Domain/Support`, también lo usa `kiosk:health`), comparado con PostgreSQL en todas las zonas (`America/Inuvik` tolerada: tzdata de PHP más vieja que la de Alpine); `HoursAndMinutes`; guarda `SingleTimeFormatterTest`.
-- **19.3:** `UtcInstant::parse` sin «now»; puerto `EmployeeCodeGenerator`; `persistedId()` en vez de `->id ?? 0`; 15 clases `Shift*`/`Segment` → `ShiftEntry*` (`ShiftMarks` se queda: es nombre del contrato); utilidades estáticas a `Domain/Support/`.
-- **19.2:** el CSV y el PDF del registro propio salen de `PersonalRecordLayout` (una lista de columnas, `PersonalRecordFormat` elige cuales y con que rotulos); cada hora lleva su desfase `UTC+HH:MM` de `SiteWallClock::offset` (con prefijo: un `+` suelto lo neutraliza el dialecto CSV): en el CSV siempre, en tres columnas al final (decisión del propietario 25-10); en el PDF solo junto a la hora cuyo desfase no es el habitual del periodo (el más frecuente; en empate, el del inicio), declarado en la cabecera; `PersonalRecordCsvPdfParityTest` compara los dos escritores con los dos cambios de hora. `ExportedShiftEntry` con `ExportedShiftEntryStatus` y `ExportedClockSource` (resto de H5), espejo de los enums de Attendance comprobado por `ExportedShiftEntryTest`.
-- **19.6:** el asiento de la importación entra en su transacción; dos triggers (`shift_entries_guard_duration`, nota del 25-10 en ADR-057) rechazan un tramo que nace o se cierra con otra duración que la de sus marcas (filas antiguas intactas, las denuncia la conciliación).
-- **Pendiente:**
-  - retirar en la 2.4.0 los alias de `RenamedQueuedClasses` (`ShiftCorrected`, `ShiftTimes`, `ShiftAnomaly`); `RenamedQueuedClassesRetirementTest` lo obliga;
-  - **19b:** `CivilDate::midnight()` para las fechas civiles; puerto `UuidGenerator`; Semgrep `--strict`; Deptrac limita Kiosk y Application; la consola habla el idioma de la instalación (`SpeaksInstallationLanguage`, `lang/*/console.php`; la ayuda de Artisan y las líneas clave=valor que leen los scripts siguen fijas); `model_type` de las cuentas por el puerto `ManagementAccountMorphType` sin `morphMap` (ADR-025, nota del 26-10); comentarios de `app/` y `lang/` sin referencias al plan, con guarda (`PendingDomainCommentCleanup` lista los de `Domain/` que faltan; solo encoge).
-  - **Dependabot (27-10):** #204, #205 y #207 integradas; #208 y #209 en #211 (OpenSpout 5: la cabecera XLSX sale en negrita por primera vez; vue-virtual 3.19 mide con `clientHeight`; axe 4.14 `label-content-name-mismatch` corregido en Cuentas y en el reloj del quiosco). #149 sigue aparcada (bloque 31).
-  - unas 200 líneas de `lang/es` (console, data-export, doctor…) siguen sin tildes; algunas las citan pruebas o scripts: cambiarlas a la vez;
-  - cada pasada de la suite unitaria deja ~235 ficheros en el `/tmp` del contenedor (ya ~11 700): infla los tiempos locales;
-  - Redis local reparado el 26-10 (`redis-check-aof --fix`, como indica `doctor.sh`; se perdieron 1 122 bytes de la cola del AOF). Se ha corrompido dos veces (25-10 y 26-10) por apagar el portÃ¡til con Docker en marcha: parar con `make down` antes.
-
-Lo que conviene saber del bloque 18 (decisiones en Engram `2.3.0/b18-decisiones`):
-
-- **Minutos:** `minutesBetween` trunca cada marca al segundo, como `ElapsedMinutes`. Los casos compartidos están en `backend/tests/Fixtures/elapsed-minutes.json`, que leen `ElapsedMinutesFixtureTest` y `datetime.spec.ts`.
-- **Tramos:** `shiftMark`, `QUEUE_NOTICE_MINUTES` y `workDayTotals` (web-kit) los usan el panel, el portal y `PeriodSummary`; `formatLocalDateTime` sustituye los dos `performedAt`. El panel ya no enseña la zona de otro centro.
-- **Formatos:** `formatInstant(…, { seconds: true })` es el único formateador de instantes con fecha, en 24 h también en inglés. **Decisión del propietario (24-10):** los minutos van con dos cifras en todo el producto, también el quiosco («Hoy: 6 h 00 min»); doc 01 §11 y doc 05 §2 ya lo dicen así.
-- **PIN:** `web-kit/pinShape.ts`, atado a `PortalLoginRequest.pin.pattern` por `pinShape.spec.ts`.
-- **Comentarios (decisión del propietario, 24-10):** `kronoqr-comments/no-plan-references` prohíbe en `src/**` de las tres SPA y web-kit «bloque N», «tarea N.N», «hallazgo X», vueltas de revisión e ids de verificación (los cortos, solo cuando se citan); 627 comentarios limpiados. Los requisitos, ADR, reglas duras y versiones siguen permitidos (doc 02 §3.5). **Formato de instantes (decisión del 24-10):** `formatInstant` = «8 oct 2026, 07:14».
-- **Pendiente:**
-  - las descripciones de `openapi.yaml` aún citan «bloque N» (llegan a los `schema.d.ts`, que la regla excluye);
-  - el docblock de `Attendance/Domain/Event/EmployeeClockedOut.php` aún dice «6 h 0 min»: cambiar solo un comentario de `Domain/` tumba `mutate-changed` (0 mutantes); va con el primer bloque que toque esa clase con lógica probada;
-  - quedan ids en dos cadenas `message`/`reason` de los `eslint.config.js` (código, no comentarios); `H-07` (amenaza del doc 07) se permite.
-
-Lo que conviene saber del bloque 17 (decisiones en Engram `2.3.0/b17-decisiones`):
-
-- **ADR-061 (17.9, aceptado):** el servidor descarta un fichaje que no consigue procesar (excepción que no es rechazo ni dependencia caída de ADR-059) tras ≥ 10 intentos, ≥ 60 min y con cupo ≤ 3 por quiosco y 24 h (techo 20; agotado = la cola se atasca a propósito y alerta crítica). Lote, `/scan` y `/scan/pin` pasan por `UnprocessableScanGuard`; `422 urn:kronoqr:problem:scan-discarded`; nada se borra (`scan_events.result=discarded_unprocessable`, `discarded_scan_reports.source=server`, asiento `scan.discarded`, incidencia `discarded_scan`). Sin atribuir: titular por `payload_fingerprint` (índice parcial `scan_events_accepted_card_fingerprint_index`, 180 días) y si no, incidencia sin persona por quiosco y jornada. `employee_id` solo con tarjeta auténtica (PIN y huella, no). `scan_processing_failures` es seudonimizada, 30 días, y entra en la exportación íntegra (formato 7). La carrera del cupo es residual aceptado.
-- **Claim repetible (V6-KI-02):** entre 10 y 60 s, misma IP por HMAC, token anterior sin usar, como mucho 3; asiento `device.pairing_reclaimed`. El quiosco no lanza dos `claim` a la vez y recupera la respuesta perdida en 70 s.
-- **Quiosco:** cola y lista de descartados cifradas con AES-GCM y una clave propia no extraíble (`kronoqr-kiosk-queue-key`, no derivada del token); las ilegibles se saltan y conservan; solo se descifra lo que se envía. Almacén compuesto disco+memoria con la cuota agotada (el padrón se lee primero de memoria). Escáner que reintenta si ZXing no carga. Idioma de serie tras cada fichaje (D9, `useLocalePolicy`). `shared/device/` separado de `telemetry/`, con reglas `no-restricted-imports`. Vitest con entorno `node` por defecto: las specs con DOM llevan `// @vitest-environment jsdom`, y un `[Vue warn]` hace fallar la prueba.
-- **Observabilidad:** alertas `ScanDiscardedByServer` y `ScanDiscardBudgetExhausted`; `KioskDiscardedScansAttributed` excluye `source="server"` y cuenta la serie que nace en 1; runbook `cola-offline-atascada.md` §11.
-- **Pendiente:**
-  - ejecutar en la tablet real el guion de resistencia de 12 h (`alta-nuevo-quiosco.md` §4.5) y medir el primer fichaje en frío;
-  - desvincular no vacía la cola (regla 19); recuperar filas cifradas con la clave perdida sería otra tarea;
-  - `PairingView` aún no usa `useLocalePolicy()`.
-
-Lo que conviene saber del bloque 16 (#201):
-
-- **Acento legible:** una sola regla de oscurecido (`HexColor::darkenedUntil` en PHP, `accentTextOn`/`adjustUntil` en web-kit, redondeando antes de medir) atada por `backend/tests/Fixtures/accent-text-on-white.json`. La tarjeta y la hoja pintan el texto con el acento oscurecido sobre blanco y la decoración con el acento tal cual; el nombre de la tarjeta va a 8 pt (caben ~18 mayúsculas). Marca enseña siempre el tono de pantalla y el de papel. `AccentContrastPolicy` (aviso y 422) sigue midiendo 2 superficies.
-- **Tema:** `primary-strong` por omisión `#b0502a` (el acento de serie del catálogo sigue siendo `#b8542a`); deshabilitados con suelo de 1,5:1. `usedPairs.spec` barre las plantillas de las tres SPA y web-kit y exige que cada pareja usada (con estados hover, active, disabled y `aria-disabled`) esté medida en `themePairs.ts` y docs/06 §2. `no-literal-colors` detecta nombres de color, `color-mix()`, `<style>` y hex en comentarios. Gráficos con colores del tema y patrones por serie.
-- **web-kit:** `BaseButton`, `NoticeWithActions` (nombre accesible fijo), `useCountdown`, `vAriaDisabled`. `applyBranding({ manageTitle })`: en panel y portal el título solo lo escribe `bindDocumentTitle`.
-- **Quiosco:** manifiesto con `background_color`/`theme_color` = `--kq-color-kiosk-surface` y sin `orientation` (`KioskManifestParityTest`); la tablet sin vincular pide la marca y la aplica sin bloquear.
-- **Correos:** `BrandedMailMessage` con el nombre de la instalación y el idioma del destinatario; `BrandedMailOnlyTest` prohíbe `new MailMessage` fuera de `Shared/Infrastructure/Notification`. El asunto empieza por el nombre de la instalación (los filtros por «KronoQR» cambian; está en la nota de actualización).
-- **Zonas:** `timezoneOptions.ts` traduce los alias de ICU a canónico; `php-timezones.json` vigilado por `PhpTimezonesFixtureTest`.
-- **Pendiente:**
-  - migrar los ~50 botones primarios sueltos del panel a `BaseButton`;
-  - ver un correo real en un cliente de correo y la tarjeta con un nombre largo;
-
-Lo que conviene saber del bloque 15 (#200; decisiones en Engram `2.3.0/b15-decisiones`):
-
-- **Foco:** `BaseDialog` con trampa completa (Shift+Tab, Escape, `focusin`, controles de fecha por segmentos). Los botones en vuelo y bloqueados usan la directiva `v-aria-disabled` (`.busy`, `.reason` → `#kq-blocked-reason`), no `:disabled`, y conservan el foco. `focusRecovery` lleva el foco perdido al `h1` de `main`, ignora diálogos modales y cambios de pantalla. `screenChange` vacía la región viva y enfoca `main h1`; la ficha del empleado tiene `h1` fijo.
-- **Títulos:** «Pantalla – Instalación» (`documentTitle` en web-kit), sin datos personales.
-- **Estados:** «Reintentar» en `ErrorNotice`; corte de 30 s en lecturas GET como `kind: 'timeout'`, sin reintento automático; `LoadingPanel` con regiones vivas persistentes y aviso a los 10 s. El reflujo de `base.css` va en `@layer base`.
-- **Consulta anotada (decisión del propietario):** `AuditNotice` es una banda destacada breve con `<details>`; en el registro de una persona, encima de las jornadas. `auditNotice.spec` la cruza con los `DATASET` del backend.
-- **Portal 403 (decisión del propietario):** nginx responde `urn:kronoqr:problem:portal-network-restricted` fuera de `PORTAL_INTERNAL_CIDR`; el portal solo habla de la red del hotel con ese `type`.
-- **Pruebas:** `axePass` de web-kit (WCAG A/AA 2.2 + `best-practice`) en las tres SPA; `axeRouteCoverage.spec` exige una pasada por ruta; `reflow.spec` a 320 px por ruta; `pluralKeys.spec`, `scrollContainers.spec`; pruebas de foco sin bucles. El proxy de Vite en desarrollo usa `KRONOQR_DEV_API_TARGET` (sin 502).
-- **Pendiente:**
-  - `@axe-core/playwright` y `@playwright/test` resuelven en web-kit por el `node_modules` raíz; declararlos como dependencias de desarrollo de web-kit;
-  - axe del quiosco solo en inglés y de las incidencias `discarded_scan`/`scan_before_revocation` (sin dobles);
-  - posible doble `#kq-blocked-reason` si coinciden marco y diálogo (hoy no ocurre).
-
-Lo que conviene saber del bloque 14 (#198; decisiones en Engram `2.3.0/b14-decisiones`):
-
-- **Exportaciones en diferido (ADR-041 enmendado):** `report_exports` admite `kind` `legal` y `adoption`, avance (`progress` en caché) y cancelación (`cancelled_at`, `stopped_at`: una cancelada en marcha ocupa el turno hasta que el trabajador para). La legal nunca pide licencia, solo CSV, idéntica byte a byte a la síncrona. Las síncronas se mantienen (decisión del propietario); el panel difiere la plantilla entera o más de un mes (`deferral.ts`, ≥ 32 días). El soporte del fabricante no pide en diferido; el auditor solo ve y cancela `kind = legal`. Exportación íntegra en formato 6.
-- **Cola `reports`:** conexión propia con `retry_after` 1900 s > `TIMEOUT_SECONDS` (antes 90 s: otro proceso recogía el trabajo y `failed()` borraba el fichero) y `config/horizon.php` con `supervisor-reports` (2 procesos). Prueba `ReportExportQueueTest`.
-- **Paginación:** registro de una persona por jornadas (31, máx. 100) y tablero de credenciales en el servidor (30); `q` con `PersonNameSearch`.
-- **Panel:** avisos de «informe listo» en la cabecera; idiomas en trozos (`localeController.ts`, reintento y caída a `es`); `chunkLoadRecovery` con `onGiveUp`; `docs/api/role-abilities.json` atado a la base (`RoleCatalogTest`) y al menú (`roleCatalog.spec`); `large-tables` con CPU ×4 (300 ms solo al abrir el informe de 20 000 filas, decisión del propietario).
-- **Pendiente:**
-  - idiomas en trozos del portal (misma técnica que 14.6);
-  - sin E2E de cancelar (el doble del servidor termina antes); cubierto en unitarias;
-  - la verificación de la exportación legal con 1,46 M de filas es una extrapolación (~56 s), no una pasada real.
-
-Lo que conviene saber del bloque 13 (#197; decisiones en Engram `2.3.0/b13-decisiones`):
-
-- **WAL:** `archive-wal.sh` hace `sync` del directorio tras el `mv` (también en el reintento idéntico); un fsync fallido da exit 1. Solo cae al `sync` global si la orden no acepta argumentos.
-- **Simulacro (`restore-drill.sh`):** verifica la cadena de `audit_log` sobre la base restaurada con la imagen de la app del paquete (sin red, sin métricas de producción: `METRICS_TEXTFILE_ENABLED=false`). Distingue «ROTURA» (runbook `rotura-cadena-auditoria.md`) de «NO VERIFICADA»; ambos salen con 6. `--skip-audit-chain` se rechaza si `audit_log` tiene `hash`/`prev_hash` y, como pitr, no mueve `last_success_timestamp` (gauge `…_audit_chain_verified`). Comprueba espacio libre, `docker rm -fv`, filtra `CONTEXT: COPY` del informe. Usa la imagen de postgres del producto si está cargada (V5-DV-03: sin internet).
-- **`flip-bit.sh`:** XOR de un bit en header/body/trailer (trailer de 65 bytes de `lib/kqe.sh`) con semilla impresa y reproducible.
-- **Simulacro en el cliente (decisión del propietario):** `install.sh` y `update.sh` lo programan por cron de root (`schedule-drill.sh ensure`, `40 4 1 1,4,7,10 *`), desactivable con `--no-drill-schedule` (recordado en `/etc/kronoqr/no-drill-schedule`). El lanzador exige árbol de root sin escritura de grupo/otros y retira restos `kronoqr-drill-*`. `doctor` avisa a los 95 días, si falló o si no verificó la cadena. Fila nueva en doc 07 §6 (T1053.003).
-- **RTO con volumen:** job `volumen` de `backup-drill.yml`, semanal (lunes 02:30) o `-f volumen=true`: esquema real + 1 M de asientos con cadena válida + tablas sintéticas (~3,9 M filas). Umbrales: restauración ≤ 600 s, copia ≤ 120 s, cadena ≤ 600 s; revisar tras 3–4 ejecuciones.
-- **Quiosco:** roster y heartbeat en zonas `kiosk_vlan`/`kiosk_other` de nginx, sin gastar el cupo de `/scan`.
-- **Pendiente:**
-  - `--mode pitr` no verifica la cadena (mejora anotada en el runbook);
-  - subir `limit_conn` para la VLAN del quiosco, diferido (R3-DV-05);
-  - la auditoría semanal sale en rojo hasta publicar la 2.3.0: la imagen php 2.2.1 tiene 4 HIGH con parche (libexpat y X11); no habrá 2.2.2.
-
-Lo que conviene saber del bloque 12 (#196; decisiones en Engram `2.3.0/b12-decisiones`):
-
-- **Borde:** COEP `credentialless`; CSP `connect-src 'self'` sin `wss:` (decisión del propietario; si un navegador no lo aplica, la presencia cae al sondeo); `/apps/` de Reverb da 404 en nginx; `types {}` del manifiesto a nivel `http` (dentro de una `location` sustituye el mapa y el JS sale sin tipo); blackbox sin root y solo en `observability`; todo `FROM` y `COPY --from` externo por digest (prueba en `EdgeHardeningTest`).
-- **Rutas:** fuera `sanctum/csrf-cookie` y `storage/{path}`; `broadcasting/auth` en el contrato, solo `POST`, canal validado (otro nombre = 403 sin asiento); `x-route-exclusions` del contrato (`/metrics`, `/horizon/*`) y `OpenApiContractTest` compara router y contrato en los dos sentidos.
-- **Cadena:** `release.yml` exige que el SHA etiquetado sea ancestro de `main` y todos los jobs construyen ese SHA (`assert-tag-at-sha.sh`); `auditoria-semanal.yml` (lunes, sobre `main`, sin secretos, incluye imágenes de terceros solo informativo); `.github/scripts/resolve-registry.sh` compartido.
-- **Política de ramas (decisión del propietario, R6-DV-04):** en ramas, `vuln` de composer, npm y Trivy bloquea solo si el diff toca locks, Dockerfiles, `infra/docker/`, `.dockerignore` o digests (paso `gate` del job `security`); secretos y misconfig bloquean siempre; `main`, etiqueta y `release.yml` bloquean todo. Runbook `triaje-hallazgos-seguridad.md` §4.
-- **12.4:** `credentials:revoke-offboarded` (no migración: una migración no puede escribir en `audit_log`). `update.sh` la lanza tras migrar y antes de `CHAIN_AFTER`; los recuentos van al `--data` de `system.updated`; si falla, salida 6 sin deshacer y se repite a mano.
-- **Doc 07:** cerrados R4-SC-05 y DIV-1 (bloque 11) y los del bloque 12; de los MEDIO sin motivo escrito queda F4.
-- **Pendiente:**
-  - lanzar a mano `auditoria-semanal.yml` una vez tras el merge (`gh workflow run auditoria-semanal.yml`) y revisar `releases/latest` y el pull anónimo;
-  - el ruleset de etiquetas `v*` va con la tarea 23.3;
-  - las imágenes de observabilidad siguen por versión sin digest (ADR-053).
-
-Lo que conviene saber del bloque 11 (#195; detalle en Engram `2.3.0/b11-decisiones` y `2.3.0/b11-decisiones-revision`):
-
-- **ADR-060 aceptado:** la ficha del empleado de baja y la cuenta de gestión se minimizan en sitio al vencer su plazo (no se borran: las FK RESTRICT lo impiden), con asiento por persona y función `SECURITY DEFINER` + trigger que impide revertirlo. Contratos y ausencias se borran en la misma pasada. Plazo de la ficha: `personnel_record_retention_years` del perfil (de serie 4, 1–30). No hay reactivación (ADR-051).
-- **Decisiones del propietario tras la revisión:** `credentials.revoked_reason` pasa a constante; `locale` y `teleworking` se conservan como cuasi-identificadores aceptados (doc 07 §6); `fichaje_app` sin `DELETE` en `employees`, `users`, `employment_contracts` y `absences`; la ejecución de la purga no minimiza más de lo que contó la simulación (lo liberado entra en la pasada siguiente) y la frase de confirmación cubre el plazo de la ficha.
-- **Motivo de soporte:** se vacía a los 90 días (mínimo 30) y rechaza correo, DNI/NIE y teléfono. **Tokens caducados** se purgan a las 03:40; `doctor` avisa de cuentas sin uso y tokens sin caducidad.
-- **Asientos de lectura nuevos (enmienda ADR-037):** presencia por Reverb (agrupada 900 s por cuenta y canal; si el asiento falla se libera la plaza), `GET /management-accounts` e `identity:list-users`, informe diferido a nombre de quien lo pidió.
-- **Paquete de diagnóstico `schema_version` 2:** la huella cubre el manifiesto; `--verify` comprueba un v1 con su regla. La huella del PDF del portal también es v2.
-- **Foto:** el producto no escribe fotos hoy; si el borrado falla tras el COMMIT queda el log `retention.personnel_photo_orphaned` y la nota del informe (la alerta de Loki se retiró).
-- **Infra:** `work-record-privileges.sh` vigila funciones, triggers, CHECK y DELETE retirado del bloque; un trigger o CHECK ausente cuenta como manipulación (rollback en `update.sh`).
-- **Pendiente:**
-  - la conciliación (ADR-057 §4) no detecta una ficha minimizada sin su asiento ni al revés;
-  - el `fix` de `access.tokens_without_expiry` remite a `identity:reset-password`; no hay orden que corte solo los tokens antiguos;
-  - A-27 queda CERRADO en doc 07; el DPO debe validar los cuasi-identificadores residuales y los plazos.
-
-Lo que conviene saber del bloque 10 (#194; detalle en Engram `2.3.0/b10-adr-059`):
-
-- **ADR-059 aceptado.** Decisiones del propietario:
-  - con Redis caído, el portal sigue abierto (zona `portal` en fallo abierto, con los bloqueos del PIN en disco); el panel se cierra con 503;
-  - las rutas que daban 500 pasan a 503 con `Retry-After` y una línea `http.dependency_unavailable`;
-  - la IP del log de nginx se queda en claro, registrado en doc 07 §6.
-- **Licencia `unknown`:** solo con la base caída de verdad. Cualquier otro fallo de lectura deniega lo accesorio, para que un `REVOKE` no sirva de salto de licencia.
-- **Pruebas en `Domain/`:** tocar una excepción del dominio la mete en `mutate-changed`, y necesita pruebas de su clave, sus parámetros y su mensaje (`Tests\Support\Shared\RejectionTranslations`).
-- **Deptrac:** el local da falsos verdes por la caché y el bind mount. Hay que medir en una copia `/tmp/kq` con `--no-cache`.
-- **nginx con HTTP/2:** los 400 y 414 cortan la conexión; el smoke los prueba con `--http1.1`. La zona `/scan/pin` tiene también su variante con barra final.
-- **`update.sh`:** espera a `healthy` estricto en horizon, scheduler y reverb (carrera de U3p).
-- **Pendiente:**
-  - las demás esperas de `update.sh` (postgres, redis, app y nginx) siguen aceptando `running` sin salud. No se endurecen, porque la vuelta atrás puede relanzar una versión sin healthcheck;
-  - `EntryDoesNotContinueWorkDay::$concernsNextEntry` y `CorrectionWouldChangeWorkDate::$byVoiding` no los lee la producción: o el panel los usa, o se eliminan;
-  - caos real con Horizon y una E2E del panel ante un 415.
-
-Lo que conviene saber del bloque 9 (#193):
-- `make alerts-drill` da 44/44. Los comandos de Docker del drill van sin `MSYS_NO_PATHCONV=1`.
-- **Contadores de Redis que nacen en 1:** toda alerta sobre un contador nuevo usa las reglas de grabación de `api.yml`, que suman la rama `unless … offset`.
-- La alerta de cola usa `queue_jobs_waiting` (solo `LLEN`), no `queue_jobs_pending`, que incluye los trabajos reservados.
-- **Workers:** horizon, scheduler (latido en `/tmp`) y reverb tienen healthcheck, y `update.sh` espera a que estén sanos. Si tras el 401 no lo están, la salida es 5 sin deshacer (decisión mía, coherente con la del B6). `retention-guard` no tiene healthcheck, porque es de un solo uso.
-- **`KQ_OBSERVABILITY_REVISION`:** la huella de `observability/` recrea seis servicios. Está en EXCLUIDAS de `assert-runtime-env.sh`; toda variable nueva del `.env` que no sea de la app tiene que ir ahí y en `RuntimeEnvironmentTest`.
-- La divergencia de la proyección guarda la primera y la última marca de tiempo en el textfile.
-- La alerta `ConciliacionCompletaSinTramos` vigila que la conciliación lea tramos.
-- Seguimiento: la tarea 10.8 (cubos de 2 s y 10 s para la latencia del PIN y del lote).
-
-Lo que conviene saber del bloque 8 (#191):
-- Contrato nuevo:
-  - `EmployeeWorkDays.today` (día civil del centro; el portal ya no pide «hoy» aparte);
-  - `privacy_notice.retention_years` en `/branding`, leído del perfil de cumplimiento; el portal y el quiosco lo interpolan;
-  - `no-store` en `/auth/*`, `/me/login`, `/me/workdays` y `setup/administrator`;
-  - `X-Kronoqr-Report-Rows` también en el CSV.
-- web-kit concentra ahora `formatInstant` (24 h por omisión), `formatTimeOfDay`, `formatDayMonthTime`, `safePolicyUrl` y `chunkLoadRecovery`. El panel pasa a 24 h también en inglés. El portal marca la recarga con `kq_reloaded` en la URL, porque no puede usar el almacenamiento del navegador.
-- La sesión del portal caduca en relativo: `expires_at` menos la cabecera `Date` del login.
-- Avisos de privacidad del portal y del quiosco con la reclamación ante la AEPD y los derechos matizados. **La redacción debe validarla el DPO del cliente.** El aviso del quiosco es más largo: mirarlo en la tablet real.
-- Con varios agentes en paralelo: el que toque web-kit debe avisar, porque dos agentes editaron a la vez `branding.ts`. La matriz de trazabilidad la regenera quien coordina, al final.
-
-Lo que conviene saber del bloque 7 (#190; decisiones del propietario en Engram `2.3.0/b7-decisiones`):
-- Solo paran la instalación `MAIL_HOST=mailpit` y `MAIL_FROM_ADDRESS` en `kronoqr.local`. Un hotel sin relevo de correo usa `MAIL_MAILER=array` y consulta las incidencias en el panel; `log` no, porque manda el MIME con nombres a Loki.
-- El log de las órdenes `artisan` lanzadas con `docker compose exec` va al del contenedor (`ConsoleAwareStreamHandler`). Solo se desvía sin `KQ_CONTAINER_MAIN`, que exporta el entrypoint; `phpunit.xml` la declara.
-- Imagen sin digest (`lib/images.sh`): primero siempre `docker pull`; el aviso sale solo si falla y `RepoDigests` está vacío. El ID de imagen en `images.lock` es la tarea 33.13.
-- `license:show` da 3 para «atención»; el 1 es una excepción no capturada.
-- Una biblioteca nueva en `infra/scripts/lib/` necesita `set -euo pipefail` e `IFS=$'\n\t'`, o `make sh-lint` falla.
-- U3m de ⑧b: el 401 o el 503 antes del 3b depende de si la vuelta atrás llegó a «nginx listo»; la prueba exige lo que corresponde.
-
-Lo que conviene saber del bloque 6 (#189):
-- **Decisión del propietario (20-10-2026): tras el 401 de la versión nueva no se restaura** (`ROLLBACK_ARMED=3`, salida 5 sin tocar nada; Engram `2.3.0/b6-sin-restaurar-tras-up`).
-- ⑧b ejercita los fallos con `.github/scripts/update-faults-e2e.sh` (U3s, U3i+U1b, U3m, U3n, U3p, chain-check). U3p sustituye al reintento tras la vuelta atrás, que ya cubre P3.
-- En U3m la vuelta atrás ya hizo `artisan up` antes de fallar (401 tras el paso 3); el 503 antes del 3b solo se da si falla la restauración (U3n).
-- Ficheros sacados de una imagen con `docker cp` bajo `sudo` son de root: nada de `chmod` sin `sudo` sobre ellos.
-
-Lo que conviene saber del bloque 5:
-- **Las notas de la 2.3.0 viven en `operacion.md` §11** (es/en), en párrafos «Al actualizar a la 2.3.0» y «Al actualizar desde la 2.2.0», como las de versiones anteriores; el resumen del CHANGELOG se escribe en el bloque final. **Cada bloque que cambie algo visible para el hotel añade allí su párrafo.** D6 (400 `problem+json`) entra con el bloque 10.
-- `check-package-links.sh` comprueba ya cualquier destino relativo, no solo `.md` e imágenes. Un enlace de un runbook a `../../infra/…`, `.github/…` o `.gitleaks.toml` rompe ⑧ y `release.yml`.
-- La guía de instalación descomprime en `/opt` con `sudo`, como las actualizaciones.
-- `package.sh` deja fuera del paquete los runbooks internos `fallo-de-ci.md` y `triaje-hallazgos-seguridad.md` (I10). Ningún documento que viaja puede enlazarlos: lo comprueban `ClientDocumentationTest` y `check-package-links.sh`.
-- La guía de RRHH §5.4 (es/en) explica «Este tramo terminó en pausa» y RN-05 (ADR-058).
-
-**Cierre del plan (03-11-2026):** plan de la 2.3.0 integrado entero: B33 parcial (#228, `d91d991c`), B34 (#229, `095c195e`), B35 (#230, `6bf0da3a`) y B32 con la 33.12 (#231, `main` `d239aefa`). Doc 07 cerrado para la 2.3.0: §6 sin filas «pendiente» ni destinos 2.3.0 abiertos, Gestión de defectos en 2 con condición (baja a 1 si la verificación final deja un hallazgo sin destino o se publica con un 🔴/🟠 abierto), total SAMM 1,87. Lo anotado para después está en «Pendiente» (bloques 32, 34 y 35). El bloque final se publicó el 04-11-2026; la siguiente acción está al principio de este fichero.
-
-**B17 a B26 y B24 integrados** (orden del 15-10-2026: un PR por bloque en verde):
-- B17 (#161), B18 (#162), B19 (#167), B20 (#168) y B21 (#169).
-- B22 (#170): índices y adopción.
-- B23 (#171): documentación, dependencias, PDF etiquetado solo en el registro personal, embudo de PDF con 503 `pdf-rendering-busy`, y revisión de la purga solo por admin o rrhh.
-- B25 (#174): el auditor solo ve Inspección. La migración retira sus ámbitos `attendance:read` y `audit:read`.
-- B26 (#175): español de serie. `LOCALE_AVAILABLE=['es']`, regla `ActiveLocale` y `resolveUiLocale` en web-kit.
-  - La migración `preserve_locales_on_existing_installations` deja `[es,en]` en las instalaciones ya en uso; el propietario la aceptó el 16-10.
-  - `SettingLimitsTest` fija los límites del catálogo; sin esa prueba, tocar `SettingKey` hundía el MSI de la mutación.
-- B24: `UseCaseInstrumentation::run` y la métrica `use_case_duration_seconds{use_case,outcome}`.
-  - 65 casos de uso medidos y 61 excepciones con motivo cerrado.
-  - `UseCaseInstrumentationTest` lleva un tope `MAX_EXCEPTIONS` que solo baja.
-
-**Pendiente del demo:** recrear Loki para que use `retention-guard`. B17 (#161: cámara, ZXing y libsodium tras el primer pintado; E2E `perf-lcp` con LCP 1,34 s en la CI; panel con vistas bajo demanda, entrada 253 → 106 KiB gzip, recarga única si falta un trozo tras `update.sh`; un solo `bundle-budget.mjs` en web-kit). La #149 de Dependabot (`vite-plugin-pwa` 2.0) queda para la 2.3.0: necesita la tablet. El 13-10-2026 había ordenado **hacer el plan completo**
-(B8 a B26 y B24 al final; el bloque final solo con su orden). Plan: [`docs/verificacion/2.2.1-plan-correcciones.md`](docs/verificacion/2.2.1-plan-correcciones.md);
-lista: [`docs/verificacion/2.2.1-lista-cambios.md`](docs/verificacion/2.2.1-lista-cambios.md).
-
-**Integrados en la 2.2.1:** B1 (PR #136), B2 (#137), B3 (#138), B4 (#139) , **B5 (#141, `7cbf912f`)**, **B6 (#142, `c2af3f12`)** , **B7 (#143, `76f215cc`, 13-10-2026)**, B8 (#144), B9 (#145) y **B10 (#150, `e8176e4b`**: informe por periodo y cumplimiento virtualizados con el composable único `frontend-admin/src/shared/virtualization/useVirtualRows.ts`, que usan también incidencias y presencia; la vista de Cumplimiento no tiene exportación y la guía lo dice), B11 (#151, `f2e52675`: `make test` con 1 GB; prueba del PIN con espía del hasher; semillas sin discrepancias de conciliación) , **B12 (#152, `4d7e984c`, 14-10-2026**: salida de las tareas programadas al log del contenedor con `ScheduledTaskOutput`; `doctor.sh` compara discos físicos y `backup.offsite` solo da verde pleno a un destino de red; **enmienda de ADR-020 aprobada por el propietario**: con PostgreSQL caído el paquete anonimizado desde consola sale con su asiento pendiente, que el producto escribe solo al volver la base; la entrega va por `DeliverDiagnosticsBundle` y `DeferredAuditReceipt`), B13 (#153, `4c5bd2a1`: señales en `update.sh`/`restore.sh` con el código 8 «restaurada pero interrumpida»; `observability/` del cliente viaja salvo la lista protegida; retención de Loki/Tempo por `LOG_RETENTION_HOURS`), B14 (#154, `a410b5aa`: `make alerts-drill`, 33 de 34 alertas disparadas de verdad; `doctor.sh` comprueba las alertas cargadas) y **B15 (#155, `main` `c06405f6`, 15-10-2026**: carga con PIN y rampa; línea base = mediana de tres pasadas; RNF-P-02 se juzga en unidades de velocidad de la máquina, decisión del propietario) y **B16 (#157, `main` `1aebebcd`,
-15-10-2026**: E2E del PIN sin carrera contra la cámara simulada (`blockCamera` + `openPinScreen`); presupuesto de ①–③ medido
-—6:12 a 9:18— y comprobado sin contar la mutación; restauración real en `restore-cycle` con puerta de 0 omitidas, dentro de la
-matriz; 16 códigos ya devueltos declarados en el contrato y `ContractResponseCoverageTest`, una respuesta validada por
-operación). Ese día también se integraron las #146, #148 y #140 de Dependabot. **Merge:** `gh pr merge N --merge` siempre solo, sin tuberías ni `;`; encadenado no casa con la regla de `~/.claude/settings.json` y el clasificador lo deniega. B6+B7 = ADR-057 §1–§3: `fichaje_app` con `UPDATE` solo por columnas del dominio y sin `DELETE` en el registro horario ni en `sites`; sin escribir `jurisdiction`/`is_default`/`sites.compliance_profile_id`; *triggers* de transición e inserción en `shift_entries` e `incidents` (también frenan al propietario: escribir a mano exige desactivarlos en la misma transacción, runbook `discrepancia-registro-auditoria.md` §3.2); purga por `work_record_purge_batch` (`SECURITY DEFINER`, corte máximo con el suelo legal en el motor); `update.sh` comprueba y repara privilegios por conjunto exacto (`lib/work-record-privileges.sh`), hace rollback si falta un *trigger* y ejecuta la conciliación completa tras migrar (informativa, 300 s); el tramo se bloquea (`FOR NO KEY UPDATE`) al cargar la jornada. B5: suelo
-legal de `retention_years` por jurisdicción (4 en ES; `retention_years_floor` en el contrato; `CHECK` en `compliance_profiles`;
-purga negada bajo el suelo; `update.sh --check-only`) y «revisado» de `purge_out_of_bounds` (`compliance:reconcile-work-record
---acknowledge`, asiento `retention.purge_reviewed`, alertas `PurgaFueraDeLimitesRevisada` y `PurgaRevisadaQueExplicaBorrados`).
-**4.3 hecha por el propietario el 13-10-2026**, pero la primera clave se emitió con `--features` repetido y solo concedió 3
-funcionalidades: el emisor se queda con la última aparición sin avisar (ver «Pendiente»). Hay que reemitirla con solo `--features=all`.
-
-**Decisiones del propietario del 13-10-2026** (detalle en el plan, «Decisiones ya tomadas»): ADR-057 §1–§3 entran en la 2.2.1
-(B6, B7); **B25** el auditor solo ve Inspección (menú y API `403`; enmendar doc 01); **B26** español de serie por configuración
-(`APP_SUPPORTED_LOCALES=es`, SPA sin selector con un idioma; ajustar doc 05); mutación completa solo nocturna con 120 min (input
-`full_mutation`); Rector informativo hasta la 2.3.0; **protecciones de GitHub activadas**: escaneo de secretos, protección de
-*push*, Dependabot de seguridad y 17 comprobaciones obligatorias en `main` (si se renombra un job de `ci.yml`, actualizar la
-protección o las PR quedan bloqueadas). Tablet real de 8-12 h: hecha. Validación jurídica y revisión externa: a la espera.
-Rendimiento en hardware de referencia: la carga k6 se niega en `APP_ENV=production`, así que no se mide contra la demo; habría que
-parar la demo y levantar una copia de desarrollo en el mismo servidor (runbook por escribir si el propietario lo pide).
-
-**Nunca empujar etiquetas antiguas con `release.yml` activo**: el push ejecuta el `release.yml` del commit etiquetado, sin la
-guarda de ADR-053. En la demo (`/kronoqr-2.2.0`, en la raíz del servidor) sigue la 2.2.0.
-
-**Lo que destapó el cierre del bloque 14 y conviene recordar** (detalle en Engram, temas `correcciones-2.2.0/bloque-14-*`; lo del
-13 en `bloque-13-rendimiento-bd` y `bloque-13-revisiones`):
-
-- **La vuelta atrás in place dejaba la copia del `.env` con todos los secretos y un `.env` que levantaba la versión nueva** (desde
-  la 5.7; lo cazó el paso P2 nuevo de ⑧b). Ahora la copia pasa a ser el `.env`, con los digests vaciados y marcados
-  (`# KQ_ROLLBACK_DIGESTS`); unas vacías **sin** marca son el opt-out de un servidor sin internet y no se tocan.
-- **Una referencia por digest no deja la etiqueta local**: `docker pull repo:tag@sha256:…` y una imagen ya presente por su digest
-  necesitan `docker tag` aparte, o `restore-drill.sh` (que nombra por etiqueta) no la encuentra.
-- **La matriz de autorización no debe arrancar Chromium**: generar la hoja de instrucciones de verdad dio un `500` a un rol
-  autorizado por un fallo del proceso en el runner. Toda prueba que toque PDF inyecta `FakeCardRenderer` y
-  `FakeInstructionsSheetRenderer`.
-- **`cp -a` sobre un directorio ya instalado falla**: `install.sh` deja `certs/` y `branding/` de root; en la CI se superpone una
-  réplica intacta del paquete hecha antes de instalarlo.
-- **`AggregateBoundaryTest` lee comentarios**: un comentario que cita `ShiftEntry::nextVersion()` cuenta como llamada al agregado.
-- **La cadena de auditoría no autentica a quien escribe** (ADR-057, consecuencias): la conciliación compara con el último asiento y
-  da por bueno un tramo con asientos falsificados coherentes; aceptado en doc 07.
-- **La mutación completa puede pasar de 90 min en un runner lento**: hoy GitHub la canceló dos veces por tiempo (49 min en la
-  ejecución anterior del mismo dominio, MSI 88,22 %). Subir el `timeout-minutes` del job o sacarla de la puerta de cierre de bloque
-  es decisión del propietario; de momento no se toca.
-- **Trampas del entorno:** el heredoc del Bash tool se come las barras invertidas y falla con comillas simples (para PHP con
-  namespaces, Edit; para scripts, Write); el formateador quita los `use` si se añaden en un Edit anterior al que los usa; un
-  `make.exe` huérfano bloquea `Makefile` y `git checkout` falla con «unable to unlink» (matarlo por su PID de Windows con
-  `Stop-Process`; mientras tanto, `git show rev:Makefile > Makefile`).
-- Las de bloques anteriores siguen valiendo: pruebas de plan con `CommittedDatabase` + `QueryPlans::analyze()`; una CTE recursiva se
-  estima a ciegas; un índice de expresión exige el `ORDER BY` textual; `SET LOCAL` fuera de transacción solo avisa; la matriz lleva
-  líneas de los E2E (`make traceability`, diez minutos, sin agentes); `TraceabilityMatrixFreshnessTest` falla hasta regenerar; el
-  log de un job se lee con `gh api …/actions/jobs/{id}/logs`.
-
-**Integrado también el 06-10-2026:** PR #110 (`laravel/reverb` 1.12.0) y #111 (menores de npm), de Dependabot; borradas las ramas
-remotas y locales de bloques ya integrados: en los dos sitios queda solo `main` entre bloque y bloque.
-
-> La sección «Pendiente» de más abajo es anterior al plan de correcciones de la 2.2.0 (fases 3 y 4) y no se ha revisado contra él:
-> lo que siga vigente debería pasar al plan o a «Fuera de la 2.2.0, con motivo».
+1. Integrar `docs/limpieza-documentacion` (PR con merge commit; CI en verde).
+2. Cuando el propietario actualice la demo a la 2.3.1: README §3.1 y §6.
+3. **Abrir ciclo** en `VERSION` e `infra/versions.txt` (`2.3.2 *` o `2.4.0 *`) **antes** de añadir cualquier migración.
+4. Seguir la verificación final de la 2.3.0 desde el paso 5 (tanda 3) y llevar al propietario el reparto de los hallazgos sin
+   destino. Otra versión, solo con orden expresa.
 
 ## Pendiente
 
-### Bloque 32 de la 2.3.0 (03-11-2026)
+### 2.4.0: lo aplazado del plan de la 2.3.0
 
-- **El log técnico `workforce.employees_imported`** (`EmployeeImportController`) no cuenta las readmisiones (`rehire`): una importación de cuatro readmisiones registra `create: 0` y nada más. El asiento `employee.imported` sí lleva `rehired`. Una línea (`'rehire' => $report->countOf(ImportOutcome::REHIRE)`); lo vio `qa-testing` al escribir `PlanExcessSeatsOnRehireTest`.
+Los bloques ⏭️ **24** (entorno de desarrollo), **26** (módulos por puertos y purga con puerto), **27** (Rector bloqueante: hoy
+informativo, ~227 ficheros en rojo), **28** (E2E real contra la API y PostgreSQL), **29** (copias fuera del runtime), **30** (red
+interna endurecida) y **31** (`vite-plugin-pwa` 2.0, tras la tablet), más las tareas 22.7, 23.1 (resto: `aggregate.test.js` en la
+CI, una sola IP con NAT, `INSTANCES` igual en `Makefile` y `run.sh`, margen de RNF-P-08), 23.2, 33.1, 33.7, 33.9, 33.10, 33.11
+(resto: plazo propio de `absences`, Reverb `allowed_origins` desde `APP_URL`, filtro del SVG), 33.13 y 34.2. Detalle y motivo en
+[docs/verificacion/2.3.0-plan-correcciones.md](docs/verificacion/2.3.0-plan-correcciones.md) («Recorte del 28-10-2026» y «Fuera de
+la 2.3.0, con motivo»). También en la 2.4.0: retirar los alias de `RenamedQueuedClasses` (`RenamedQueuedClassesRetirementTest`
+lo obliga) y la incidencia del fichaje anterior al alta.
 
-### Bloque 35 de la 2.3.0 (03-11-2026)
+### Código (backend)
 
-- **Sin prueba propia:** la exportación legal a un destino que no es un fichero normal (`--output=/dev/stdout`, una FIFO) se escribe sin parcial; la carrera real entre la petición del panel y la de consola tras el cambio de candados, y la baja concurrente con la cadena tomada en otro proceso (`UseCaseInOtherProcess`), solo se simulan con dobles. Candidatas para `qa-testing`.
-- **Aceptado:** un `rename()` que falle después del commit dejaría el asiento de la exportación legal sin fichero (lo contrario de lo que se evita).
+- **Emisor de licencias:** `parseOptions()` de `tools/license-issuer/issue.php` se queda con la última aparición de una opción
+  repetida (`--features=all --features=a,b`) sin avisar; debe rechazarse antes de firmar. Le costó al propietario una licencia de
+  la demo con 3 funcionalidades.
+- **`compliance:reconcile-work-record --days`** convierte con `(int)` sin validar (`ReconcileWorkRecordCommand.php:425`);
+  `--acknowledge` y `--responsible` ya usan `ctype_digit`. Falta también la prueba de integración con un id de revisión en cadena.
+- **`InstallationSiteMissing`** se lanza con `new` sin mensaje en `ReadIncidentBoard.php:86`, `ReadComplianceSummary`,
+  `ReadLivePresence`, `ConfirmPairing`, `GeneratePeriodReport`, `ReadAdoptionReport`, `SendWeeklySummaries`,
+  `PayrollExportController` y `ConfigurablePayrollDocumentWriter`: el 409 sale con `detail: ""` y se registra como ERROR. Arreglo:
+  `::make()` en todos y `dontReport`. Cambia comportamiento.
+- **Log `workforce.employees_imported`** (`EmployeeImportController.php:58`) no cuenta `rehire`; el asiento `employee.imported` sí.
+- **Código muerto** en `WorkRecordReconciliation::auditPurgedAlongTheYear` (`:286-291`): la expresión admite el 2 de enero pero
+  `daysApart <= 1` nunca lo deja pasar (`$daysApart >= 0` es mutante equivalente).
+- **Readmisión (bloque 25):** el plan de la importación de ausencias no comprueba el periodo (una fila con solape parcial sale
+  `create` y se salta al aplicar); corregir un cese anterior no mueve el `valid_to` del contrato cerrado al readmitir.
+- **PIN de una persona suspendida** sigue como `rejected_unknown` (toca el verificador de PIN y el CHECK de ADR-043); carrera de
+  microsegundos suspensión/resolución en `RegisterScanHandler::process`.
+- **Funciones guarda:** solo `incidents_guard_transition` se vigila por huella; las demás (`shift_entries_guard_*`,
+  `incidents_guard_insert`, `zz_sites_guard_timezone`, `*_guard_anonymized*`, las `SECURITY DEFINER`) solo por existencia: un
+  `CREATE OR REPLACE` que las vacíe pasa. `incident_context_differs_from_audit` en ADR-057 §4: residuo aceptado, diseño en el ADR.
+- **Conciliación:** no detecta una ficha minimizada sin su asiento ni al revés. No hay orden que corte solo los tokens antiguos
+  (el `fix` de `access.tokens_without_expiry` remite a `identity:reset-password`).
+- **Sesiones:** la baja y los restablecimientos revocan tokens pero no cortan una conexión Reverb abierta (ADR-051, residuo 6).
+- `system.updated` no anota si `update.sh` reparó privilegios (`SystemEventPayload` tiene lista cerrada de claves).
+- `make seed` tarda ~90 s porque la semilla escribe asientos uno a uno bajo el candado; bajarlo exige asientos en bloque en
+  `DatabaseAuditTrail`.
+- El 409 de `POST /setup/administrator` (segundo admin) no deja señal; registrarlo sin PII.
+- Un fallo de Chromium en la hoja de instrucciones o en la impresión de tarjetas sale como 500 (`Reporting` da 503).
+- `EntryDoesNotContinueWorkDay::$concernsNextEntry` y `CorrectionWouldChangeWorkDate::$byVoiding`: o el panel los usa o se quitan.
+- `UpdateDepartmentRequest` comprueba `accounts:*` con un `tokenCan()` a mano (lo limpio: puerto `ManagementActor::tokenGrants()`).
+- Unos 25 docblocks citan ADR-027 donde quieren decir ADR-010; ~200 líneas de `lang/es` (console, data-export, doctor…) sin tildes
+  (algunas las citan pruebas o scripts: cambiarlas a la vez).
+- FK `SET NULL`/`CASCADE` sin índice a propósito (`*_by_user_id`, `employees.department_id`…): revisar si alguna empieza a
+  borrarse en lote.
+- **Por comprobar si siguen abiertos** (restos de septiembre que el recorte del 23-11-2026 no pudo verificar; detalle en
+  `git show 663221ee:HANDOFF.md`): pausa sin vuelta sin incidencia (3.5); elemento de lote con 503 `ClockOutBeforeClockIn`
+  que se reintentaría siempre (3.6, quizá resuelto por ADR-061); semana de resumen semanal fallida que no se recupera sola
+  (3.12); índice parcial de `scan_events(occurred_at)` (3.11); señales de `update.sh` durante su propia vuelta atrás;
+  R3-CH-03 (500 frente a 503 con Redis caído); `LOG_RETENTION_HOURS` en `product:doctor`; alcance `manager_user_uuid` del
+  responsable.
 
-### Bloque 34 de la 2.3.0 (03-11-2026, revisión de seguridad de la 34.1)
+### Contrato y documentación
 
-- **El listado de ausencias sigue enseñando tipo y nota con asiento por bloque** (ADR-037): si el propietario quisiera «quién vio mi baja» exacto también ahí, haría falta otra enmienda (nota fuera del listado o asiento nominal por fila `sick_leave`). Escrito en «Lo que no cubre» de la enmienda del 03-11-2026 y en la fila V21-7-SC-2.
+- `docs/api/openapi.yaml` cita «bloque N» en 4 descripciones (líneas ~361, 12543, 20374, 24029; llegan a los `schema.d.ts`).
+- El docblock de `Attendance/Domain/Event/EmployeeClockedOut.php:24` dice «6 h 0 min» (deben ser dos cifras). Cambiar solo un
+  comentario de `Domain/` tumba `mutate-changed` (0 mutantes): va con el primer cambio con lógica probada en esa clase.
+- Quedan ids de verificación en dos cadenas `message`/`reason` de los `eslint.config.js`.
+- Unas noventa operaciones con cuerpo declaran el 415 de D6 pero no su 400 (`UnreadableBody`). Para notas de versión: el 400 del
+  quiosco y de `me/login` puede llegar como `bad-request` sin `errors`.
+- `PrintCredentialBatchRequest` dice «solo el centro, y es opcional» pero declara `properties: {}`.
+- Cabeceras de descarga sin unificar (`X-Kronoqr-Report-Rows` frente a `X-Kronoqr-Export-Rows`); el 503 de mantenimiento no se
+  enumera por endpoint.
+- Doc 02: párrafo duplicado y corrupto sobre la mutación nocturna cerca de la antigua línea ~946 (comprobar tras la limpieza).
+- Techo del formato PDF sin fijar (`docs/verificacion/verificacion-manual.md`).
 
-### Bloque 25 de la 2.3.0: 25.6 y 25.7 hechas (01-11-2026)
+### Frontend
 
-- **Panel (25.6, 25.7) hecho** en `feat/panel-baja-readmision` (`frontend-panel` + `ui-ux` + `qa-testing`; revisiones de código y seguridad apto con correcciones, corregidas): baja programada, vencida y anulación; readmisión individual y en lote; importación con readmisión; corrección del cese con histórico (autor minimizado si su cuenta lo está: la corrección **no** retiene la cuenta, ADR-060 §2); periodos en la exportación legal; los dos avisos del 31-10; guía de RRHH es/en y consulta para IT en `operacion.md` §18. Contrato: `EmploymentPeriodRecord`, `TerminationCorrectionAuthor`, `offboarded_at` en `EmployeeOffboarding` (también en el listado de `rrhh+`). Doc 07 §6: fila nueva del motivo libre de las correcciones (pendiente del DPO).
-- **Pendiente:** el host tiene `frontend-admin/node_modules` desfasado (5 pruebas de virtualización fallan solo ahí; en el contenedor pasan): `npm ci` en el host. Las pruebas dejan cientos de directorios `/tmp/kq-doctor-am-*` en el contenedor `kronoqr-app`: buscar qué prueba no los borra. Capturas de la guía en el bloque final.
-- **Entorno (01-11-2026):** en el checkout principal Windows no deja reemplazar el `Makefile` (`Device or resource busy`); lo retiene un proceso del anfitrión, casi seguro la extensión Makefile Tools de VS Code (dejó colgado un `make --dry-run` desde el 29-10). Mientras dure, `git checkout`/`merge` que cambie el `Makefile` falla: se trabaja en un worktree (Engram `entorno/makefile-bloqueado`). Se libera recargando VS Code o desactivando la extensión.
-- **CI (01-11-2026):** «① Lint + Tipos · backend» pasó de 6 a 10 min de tope en #220 (Rector, informativo, llegó a 3 min en un runner lento). Valorar sacar Rector de ① si vuelve a crecer.
-- **Para quien opere en un worktree:** `make traceability` lee el checkout principal (`REPO_PATH=/var/www/repo`); detalle en Engram `entorno/matriz-desde-worktree`.
-- **Decidido por el propietario (31-10-2026):** se **aceptan** los tres residuales de doc 07 §6 (bloqueo RS-12 con la cola de alguien de baja; PIN del periodo anterior si se readmite o se hace `reset_pin` antes de sincronizar; salida de un turno de noche del día del cese llegada tras la baja). La 25.6 añade **dos avisos en el panel**: al dar un alta o una readmisión con fecha futura, «los fichajes anteriores a esa fecha se rechazan»; y al readmitir con la baja de hoy, «espera a que los quioscos estén sincronizados» (fila 25.6 del plan). La **incidencia del fichaje anterior al alta** pasa a la 2.4.0 («Fuera de la 2.3.0» del plan). El **apartado para el DPO** en `docs/cliente/obligaciones-legales.md` va en el bloque final, tarea 7.
-- **Validación jurídica (asesoría y DPO del cliente):** retención de periodos y motivos de un readmitido; atribuir un fichaje rechazado a quien ya no tiene relación laboral; visibilidad de bajas programadas para el responsable.
+- `PairingView` del quiosco no usa `useLocalePolicy()`; desvincular no vacía la cola (regla 19).
+- `@axe-core/playwright` y `@playwright/test` resuelven en web-kit por el `node_modules` raíz: declararlos en
+  `packages/web-kit/package.json` como dependencias de desarrollo.
+- Los tres `tsconfig.json` usan `baseUrl`, que TypeScript 7 retira: quitarlo y pasar `vue-tsc`.
+- `sanitizeContext` y el búfer de errores están duplicados en `web-kit/clientErrors.ts` y `frontend-kiosk/.../errorReporter.ts`.
+- ~50 botones primarios sueltos del panel a `BaseButton`; idiomas en trozos también en el portal (como 14.6 en el panel).
+- axe del quiosco solo en inglés; sin dobles para las incidencias `discarded_scan`/`scan_before_revocation`.
+- Una tarjeta que ZXing nunca decodifica deja el quiosco en `scan-idle` en silencio (candidato a aviso pasivo «usa tu PIN»).
 
+### CI y pruebas
 
-### Anotado en el bloque 20 de la 2.3.0 (27-10-2026, revisión de seguridad de la reapertura de RN-19)
+- **Intermitentes y abiertos:** `AppShellView.spec.ts` y `roleCatalog.spec.ts` del panel (1 de 6 con la máquina cargada);
+  `AdministratorStep.spec.ts` en local (importación dinámica del QR); escenario J de ⑧ (traza en `salida-j.trace`); volumen del
+  informe por periodo bajo xdebug; V23-1-QA-2 y V23-2-KI-2.
+- **Prueba del PIN de ⑧b:** incidencia sin abrir (la herramienta deniega crearlas; detalle en `0b0f161d`). Tampoco se abrieron
+  las del 502 de `release.yml` ni la de la fórmula del simulacro (corregida en #243).
+- **`TagScanner`:** un `tag:` comentado en Playwright y `foo()->group()` dentro de una prueba aún cuentan como cobertura.
+- **Mutación:** vivos en `WorkDay::gapAt` (`WorkDay.php:1078`) y `:1175`. La nocturna por módulo (5 partes + `mutation-total`)
+  aún no se ha visto en una noche real: mirar la duración de cada parte; si una pasa de 60 min, partirla.
+- **Rendimiento del panel:** la «primera fila» de `perf-large-tables` pasa a `expect` tras dos nocturnas de `main` con margen;
+  confirmar que el `::warning` de tablas grandes llega al resumen; `perf-live-presence` no es en frío del todo.
+- **Pruebas que faltan:** exportación legal a una FIFO o `/dev/stdout`; carrera real panel/consola y baja concurrente con la
+  cadena tomada en otro proceso (hoy dobles); 409 de dos correcciones simultáneas del mismo tramo; dos «Emitir el PIN»
+  simultáneos; E2E de cancelar una exportación; E2E de licencia caducada (regla dura 15); E2E de la importación con readmisión y
+  mutación de `Absence::fallsWithin`/`rehireDigest`; camino `popen` de `ContainerLogChannel`; V6-BE-4 (ramas de esquema que
+  ninguna prueba produce).
+- `PinScanTest.php:266`: aserción de tiempo constante que no puede fallar. `ClockTampering` no ve `Pest\Laravel\mock()` ni
+  `swap`; `WallClockAssertionsTest` no prohíbe `toBeLessThan` en el fichero que avisa.
+- `make alerts-drill`: si Prometheus no contesta, `disparadas_en_prometheus` sale vacío en silencio. `GuideMetricsHavePanelTest`:
+  22 series sin panel (trinquete). `kronoqr_backup_*_offsite` sin alerta.
+- `GeneratedFilesInventoryTest` falla si corre en el mismo proceso que Feature; la suite Integration completa en local se aborta
+  por memoria (256 MB) en `Row.php`.
+- Valorar sacar Rector de ① (tope subido de 6 a 10 min en #220).
+- Ventana de 503 de una actualización sin medir con una base con volumen (V6-DV-9); `--mode pitr` del simulacro no verifica la
+  cadena; `limit_conn` de la VLAN del quiosco diferido (R3-DV-05); imágenes de observabilidad por versión, sin digest.
 
-- **Huella de las demás funciones guarda** (`arquitecto-dominio` + `migracion-segura`): `work-record-privileges.sh` y `product:doctor` comparan ya el cuerpo de `incidents_guard_transition` por huella (`KQ_INCIDENT_REOPENING_FINGERPRINT`). Las otras (`shift_entries_guard_*`, `incidents_guard_insert`, `zz_sites_guard_timezone`, `*_guard_anonymized*`, las `SECURITY DEFINER`) siguen vigiladas solo por existencia, activación y `SECURITY DEFINER`/`search_path`: un `CREATE OR REPLACE` que las vacíe pasa. No se hizo aquí porque cada una la redefine una migración distinta y la huella esperada depende de cuáles estén aplicadas (una constante por función y por migración, en el script y en PHP).
-- **`incident_context_differs_from_audit` en §4** (`arquitecto-dominio`): residuo aceptado en la enmienda del 27-10 de ADR-057 (reescribir el `context` de una `rejected_pin_scan` no trabajada por persona con dos `UPDATE`). Diseño propuesto en el ADR; toca `WorkRecordDiscrepancy`, `DatabaseWorkRecordAuditSource`, métrica y prueba de Prometheus, runbook y guía de operación es/en.
+### Entorno local y demo
 
-### Anotado en los bloques 18 a 20 de la 2.2.1 (15/16-10-2026)
+- Demo: recrear Loki para que use `retention-guard`.
+- Las pruebas dejan cientos de `/tmp/kq-doctor-am-*` en `kronoqr-app`: buscar qué prueba no los borra.
+- La BD de desarrollo `fichaje` arrastra ~19 700 `entry_without_audit` de la semilla antigua (`make fresh` + `make seed`, borra
+  datos; decisión del propietario).
+- El host tiene `frontend-admin/node_modules` desfasado (5 pruebas de virtualización fallan solo ahí): `npm ci` en el host.
 
-- **Integrados:** B18 (#162: CSP por ubicación, cosign *keyless* de imágenes y de `SHA256SUMS`, Redis por digest),
-  B19 (#167: N5 de ADR-055, `ElapsedMinutes`, Gherkin), B20 (#168: RN-23, zona fija; arreglo de Loki 3.7 sin shell).
-  Dependabot: #164 y #163 integradas; **#163 rompió ⑧** (Loki 3.7.8 sin `/bin/sh`): antes de integrar una PR de
-  imágenes, CI manual completa (`gh workflow run ci.yml --ref <rama>`), la del PR no corre ⑧ ni la observabilidad.
-- **Para el propietario:** ¿la revisión de la purga (`compliance:reconcile-work-record --acknowledge`) debe exigir rol
-  (admin/rrhh, ¿y auditor?) como la corrección de zona? Hoy vale cualquier cuenta de gestión activa (decisión D7).
-- **B23 (deuda de backend), añadido:** `compliance:apply-retention --responsible` no valida el id (`(int)` de `12abc`)
-  ni que la cuenta exista (🟡 MEDIO de seguridad): usar `ConsoleIds` y `ResponsibleAccounts`; #147 de Dependabot
-  (larastan 3.13: 2 errores de PHPStan); `ignore` de mayores de observabilidad en `dependabot.yml` y cerrar #165
-  (Grafana 13) y #166 (Tempo 3); restos de `retention-guard.sh` (título, `export` y `exec` ya inocuos); `SitePolicy`
-  lee los roles de `CorrectSiteTimezoneHandler` (altitud).
-- El desarrollo local sigue con el Loki viejo hasta recrear `loki` y `tempo` (aparece `kronoqr-retention-guard`, sale 0).
-- La primera ejecución real de los jobs `firmar` y `firmar-sumas` de `release.yml` será la etiqueta `v2.2.1`.
-- La métrica Prometheus de `workforce:correct-site-timezone` queda para el B24 (tiene *span* y asiento).
+### Personas, hardware y decisiones del propietario
 
-### Anotado con RNF-P-08 (15-10-2026)
-
-- `load-tests/k6/aggregate.test.js` (98 casos, toda la lógica de veredicto de la carga) no corre en ninguna CI: añadir
-  `node --test load-tests/k6/aggregate.test.js` a un job con Node ya existente (< 1 s), en el bloque que toque la CI.
-- El margen de RNF-P-08 se apoya en tres pasadas con ~90 PIN cada una (cocientes 7,82-8,55; máximo 9,99): vigilar falsos
-  rojos; si salen, más muestras de PIN en la línea base, no más tolerancia. En `threshold`, con pocas decenas de PIN, el
-  p99 es el máximo. La ayuda del `Makefile` (`:296`, `:1290`) solo cita RNF-P-06.
-
-### Anotado en el bloque 16 de la 2.2.1 (15-10-2026)
-
-- `InstallationSiteMissing` se lanza sin mensaje en `ReadIncidentBoard`, `ReadComplianceSummary`, `ReadLivePresence`,
-  `ConfirmPairing`, `GeneratePeriodReport`, `ReadAdoptionReport`, `SendWeeklySummaries` y `PayrollExportController`:
-  el 409 sale con `detail: ""` (el ejemplo de `SiteNotConfigured` promete texto) y se registra como ERROR (no hay
-  `dontReport`). Arreglo: `::make()` en todos y `dontReport(InstallationSiteMissing::class)`. Cambia comportamiento.
-- ~~CT5~~ y ~~el 400 de `POST /client-errors`~~: cerrados en la 22.3 (`21c7a0b5`, `733d4e9a`). La descripción de `ServiceUnavailable`
-  cita una respuesta `DependencyUnavailable` que no existe en el contrato.
-- El 409 «sin centro» de `kiosk/pair/confirm` solo lo produce una prueba con un código de relleno; V6-BE-4 (ramas de
-  esquema que ninguna prueba produce) sigue abierto.
-- El aviso de duración de ④ (180 s) está desfasado (el job dura 10-15 min). Sacar Rector a un job paralelo ahorraría
-  ~70 s en ①.
-- Dependabot: #147 (Composer) roja por 2 errores de PHPStan con larastan 3.12.3 (un `listen()` con `callable` y un
-  `->and()` de Pest); #149 (`vite-plugin-pwa` 2.0, mayor) aparcada para el bloque 17 o la 2.3.0, con tablet.
-
-### Anotado en el bloque 15 de la 2.2.1 (15-10-2026)
-
-- **Latencia del PIN, decidida el 15-10-2026** (rama `docs/rnf-p-07-pin`): bcrypt 12 se queda; RNF-P-02 solo para `/scan`;
-  requisito nuevo **RNF-P-08** (`/scan/pin`, p95 < 400 ms, p99 < 800 ms, estimado; se pidió como RNF-P-07, que ya existía).
-  En la CI se juzga como RNF-P-02 contra `baseline.json`, rehecha con `baseline.js` desde las tres pasadas originales.
-- `v2.2.0` medida con el guion nuevo salió roja en RS-03 dos veces (38654069785, 38656009180) en runners lentos; la rama
-  siempre en verde. No es regresión de la 2.2.1; repetir si se quiere una comparación entre versiones.
-- K6-2 parcial: falta la topología de una sola IP con NAT y una plantilla de 500 personas. K6-4: la ayuda del `Makefile`
-  dice `INSTANCES=8` y `run.sh` usa 10.
-- La línea base (`load-tests/k6/baseline.json`) es la mediana de tres pasadas; para rehacerla, `baseline.js`.
-
-### Anotado en el bloque 14 de la 2.2.1 (15-10-2026)
-
-- `make alerts-drill`: `disparadas_en_prometheus` devuelve vacío si Prometheus no contesta, y la comprobación del estado
-  sano pasa en silencio (no da OK falsos: cada alerta sigue teniendo que llegar a Alertmanager). Distinguir «no contesta».
-- `GuideMetricsHavePanelTest`: 22 series citadas en guías sin panel (deuda V4-DV-2), en trinquete.
-- Prueba de volumen del informe por periodo (`ReportTooLargeForSynchronousDelivery`, corte de 10 s) falló una vez bajo
-  xdebug en la cobertura de la CI (38638188375) y pasó al relanzar. Si se repite, tratarla como frágil.
-- El pendiente del bloque 13 «doctor.sh no comprueba las alertas cargadas» quedó cerrado en el bloque 14.
-
-### Anotado en el bloque 13 de la 2.2.1 (14-10-2026)
-
-- V6-DV-9: la ventana de 503 de una actualización sigue sin medirse con carga; `update.sh` la reparte por fases y ⑧b la
-  publica en el resumen del job. La cifra de ⑧b ya está en las guías (bloque 4 de la 2.3.0); falta medirla con una base
-  con volumen.
-- `doctor.sh` no comprueba que Prometheus tenga cargados los nombres de alerta del paquete (`/api/v1/rules`).
-- `product:doctor` no muestra `LOG_RETENTION_HOURS`: la app no recibe la variable; hacerlo pasa por ADR-042.
-- El salto 2.2.0 → 2.2.1 no fusiona `observability/` (la 2.2.0 no trae `observability.sha256`): gana el paquete y avisa.
-  Las reglas protegidas son todas las `prometheus/rules/*.yml` salvo `local-*` y `kiosk.yml`.
-- `backend/vendor` local trae `spatie/laravel-pdf` 1.9.0 frente a 2.13.1 del lock: `RuntimeEnvironmentTest` falla en local
-  (no en la CI). `composer install` en el contenedor `app` lo arregla.
-
-### Anotado en el bloque 12 de la 2.2.1 (14-10-2026)
-
-- El camino `popen('exec cat >> /proc/1/fd/2')` de `ContainerLogChannel` solo se ha probado a mano en el contenedor; cubrirlo
-  exige un paso en dind que lea `docker logs scheduler`.
-- `GeneratedFilesInventoryTest` falla si corre en el mismo proceso que pruebas Feature («PRODUCT_DATA_EXPORT_PATH fuera de
-  storage/app»); sola pasa. Anterior al bloque 12.
-- Las series `kronoqr_backup_*_offsite` no tienen alerta de Prometheus (el plan pedía aviso, no alerta).
-
-### Anotado en el bloque 11 de la 2.2.1 (14-10-2026)
-
-- La semilla de desarrollo escribe sus asientos uno a uno bajo el candado de la cadena: `make seed` pasa de ~13 s a ~90 s y
-  `MigrationsRoundTripTest` paga lo mismo en el job ④. Bajarlo exige asientos en bloque en `DatabaseAuditTrail` (producción).
-- Contrato: `PrintCredentialBatchRequest` dice «solo el centro, y es opcional» pero declara `properties: {}`.
-- La BD de desarrollo `fichaje` arrastra ~19 700 `entry_without_audit` de la semilla antigua; se quitan con `make fresh` +
-  `make seed` (borra los datos). Decisión del propietario.
-
-### Anotado en los bloques 6 y 7 de la 2.2.1 (13-10-2026)
-
-- `AddShiftEntryHandler` carga con `findWorkDayFor` sin bloqueo: un alta manual simultánea a un cierre del mismo día acaba en
-  `42501` y rollback (seguro, pero no espera). Bloquear igual que `findOpenWorkDayFor`.
-- El asiento `system.updated` no anota si `update.sh` reparó privilegios: `SystemEventPayload` tiene lista cerrada de claves.
-- Faltan pruebas: `409` de dos correcciones simultáneas del mismo tramo y el alta manual frente a un cierre.
-- Índice `incidents(shift_entry_id)` → B22 (anotado en el plan).
-- La purga es una sola sentencia y una transacción del tamaño del atraso: un `statement_timeout` en el rol o la base la haría
-  fallar entera (ADR-057, precisión de §3).
-
-### Anotado en el bloque 5 de la 2.2.1 (13-10-2026)
-
-- **Emisor de licencias:** una opción repetida (`--features=all --features=a,b`) se queda con la última sin avisar; debería
-  rechazarse antes de firmar. Le costó al propietario una licencia de la demo con 3 funcionalidades.
-- `compliance:reconcile-work-record --days` sigue convirtiendo con `(int)` sin validar (`--acknowledge` y `--responsible` ya se
-  validan con `ctype_digit`).
-- Falta una prueba de integración de la conciliación con una revisión cuyo id viene en cadena (la regla está cubierta en dominio).
-- Redis local: volumen vaciado el 13-10-2026 por decisión del propietario; vuelve a funcionar.
-- La suite Integration completa en local se aborta por memoria (256 MB) en `Row.php`; por directorios pasa. Sin investigar.
-- La línea suelta sobre teletrabajo en `docs/verificacion/2.1.0-decisiones-comerciales.md` («Acceso desde internet») ya está
-  implementada (guía RRHH §2); borrarla.
-
-### Anotado en el bloque 4 de la 2.2.1 (10-10-2026)
-
-- `frontend-admin/tests/unit/AdministratorStep.spec.ts` falla en local (contenedor node, transformación de módulos > 8 s antes de la
-  importación dinámica del QR) y pasa en la CI: endurecer la espera de `settle()` o ampliar el margen.
-- `tools/license-issuer/src/LicenseIssuer.php:101` no pasa PHPStan 9 (`sodium_crypto_sign_detached` espera `non-empty-string`);
-  el emisor no está en ninguna pasada de PHPStan del proyecto.
-
-### Diferido a la 2.2.x por el bloque 14 (08-10-2026)
-
-ADR-057 §1–§3 (`REVOKE DELETE` y `UPDATE` por columnas, *trigger* de transiciones, purga por función `SECURITY DEFINER` con suelo
-legal); ADR-056 (zona horaria fija desde el primer fichaje); firma de imágenes con cosign; conciliación completa tras cada
-actualización; `redis:7-alpine` sin digest; mecanismo «revisado» para `purge_out_of_bounds`; suelo legal de `retention_years` por jurisdicción en el perfil, 4 para España
-(R7-SC-01, decidido el 08-10-2026); las semillas de desarrollo disparan la
-alerta de conciliación; huecos de nivel RF-PR-05 y RF-QR-04 en `TestLevelGateTest`; una sola regla de minutos en `Shared`; corrección
-N5 de ADR-055 (necesita RN-10 en doc 01); regla ESLint contra `localStorage` en panel y portal; anexo B del doc 01 frente a los roles
-de `GET /site`; CSP por ubicación; `restore-drill` usa `IMAGE_TAG`; `CLAUDE.md` dice «28 ADRs» (son 57); cifras de presupuesto en
-`.claude/agents`; del 13: DB5, DB7, DB9 (aceptado en doc 07), `count(*)` de la bandeja, JIT de Postgres, prueba de concurrencia con
-`pg_locks`. De la publicación: la línea base de `load-test.yml` con los parámetros de la etiqueta (R5-QA-02) y los 🟠 de la
-verificación final que no entraron (lista «¿Se pasó algo por alto?» de `2.2.0-verificacion-final-resumen.md`).
-
-### Del usuario
-
-- **Decididas el 22-09-2026 (3.8):** pantalla de cuentas de gestión en el panel: **hecha en el bloque 12c** (PR #118, ADR-051).
-  Quedan dos cosas del propietario: (a) confirmar el **alcance añadido** del responsable de departamento por la API
-  (`manager_user_uuid`, solo `admin`); (b) el **plazo de retención** del nombre y el correo de las cuentas dadas de baja y de los motivos
-  libres de `audit_log` (doc 07 A-27), con la asesoría o el DPO del cliente.
-  La línea base del runner y la fila del modelo de amenazas (reloj del quiosco) ya se hicieron en `chore/restos-3.8`.
-- **Decidir si el auditor lee el detalle de jornada y la presencia en vivo (bloque 21, 07-10-2026).** Hoy `WorkDayJournalPolicy::readers()`
-  es admin, rrhh y responsable, y `LivePresencePolicy` tampoco admite al auditor (tarea 1.17: su camino es la exportación legal). El plan
-  (R3-PA-05) pedía «camino directo al detalle de jornada para responsable y auditor»: el panel solo enseña el enlace a quien puede leer
-  jornadas, y abrirla al auditor contradice doc 05 §3.4 y exige un ADR. Si se abre, la fila del catálogo de roles, las dos policies, las
-  pruebas negativas y el panel cambian juntos.
-- **Decididas el 24-09-2026 (tras el cierre de la Fase 3), aplicadas en `docs/decisiones-post-cierre-3`:** (1) **un acceso de
-  soporte `read_only` ya no alcanza la presencia en vivo ni el resumen de cumplimiento por persona** (policies con `isSupportActor()`,
-  prueba por alcance, lista cerrada de `SupportScopeRoutesTest` sin esas dos rutas; sigue leyendo plantilla y el registro horario de
-  una persona, auditado); (2) **la mutación completa del dominio sale del push**: por push se muta solo lo que el push toca en el
-  dominio (`make mutate-changed`), y la completa con su umbral corre de noche y en el disparo manual previo a cada PR (doc 02 §10.1);
-  (3) **los ayudantes, constantes y datasets de las pruebas pueden ir en el idioma del escenario**, como las descripciones; la regla
-  del inglés queda atada a herramienta donde aplica (`IdentifierLanguageTest` sobre `backend/app/`, `id-match` de ESLint sobre los
-  `src/` de las SPA y `web-kit`) y las constantes globales de un fichero Pest llevan prefijo del fichero (`TestGlobalConstantsTest`).
-- **Condiciones del plan antes de la primera venta (decididas el 24-09-2026, tras el cierre de la Fase 3):** (1) **validación
-  jurídica**: a la espera de la reunión con la asesoría laboral, con `docs/cliente/preguntas-asesoria.md` como guion; las preguntas
-  1 y 2 (plazos de `employment_contracts` y `absences`) abren tarea de `RetentionScope` cuando se contesten; (2) **responsable de
-  vigilancia normativa**: es un rol, no software; en el fabricante lo asume el usuario con la asesoría como fuente (primer repaso en
-  esa misma reunión; después semestral y antes de cada versión mayor, añadido a la lista del plan 08), y en cada cliente lo designa
-  el propio cliente en la puesta en marcha siguiendo `docs/runbooks/vigilancia-normativa.md`; (3) **prueba de campo de 12 h en
-  tablet real**: más adelante, con la tarjeta impresa y la recalibración de R16 (bullet «Hardware» de abajo); (4) **costes de
-  impresión: dejan de ser condición** — la impresión de las tarjetas es del cliente, en el formato que elija; el producto entrega el
-  PDF de la hoja de credenciales y el euro por tarjeta del doc 04 §4.4 queda como orientación, no como precio publicado (doc 04
-  «Pendiente de validar» y doc 02 §11 actualizados); (5) **instalación limpia por una persona ajena**: más adelante;
-  (6) **k6 en hardware de referencia** (recomendación aceptada por el usuario a falta de fecha): alquilar un VPS Linux del perfil
-  mínimo del doc 02 §11.6 (4 vCPU / 8 GB) un par de horas, instalar desde el paquete como hace `load-test.yml` y correr
-  `make load-test INSTANCES=10 DURATION=120s` para obtener la cifra absoluta de RNF-P-06 (50 fichajes/s, p95 < 150 ms) que hoy
-  nadie ha medido; tarea temprana de la Fase 4 (`devops-observabilidad` + usuario para la máquina), y se repite en cada versión mayor.
-- **Generar el par ed25519 una vez** (`php tools/license-issuer/generate-keypair.php`), privada al
-  gestor de secretos, pública como valor por defecto de `env('LICENSE_PUBLIC_KEY', '')` en
-  `backend/config/license.php`. `make release-gate` lo exige en cada etiqueta `vX.Y.Z`.
-- **Decidir si hace falta una señal persistente de «tarjeta entregada y PIN sin emitir»** (sugerencia de la revisión de seguridad
-  del bloque 12b): un hallazgo de `product:doctor` o una cifra en el cuadro de impacto (doc 05 ya cuenta «gente sin tarjeta
-  entregada»), solo recuento. Hoy el aviso vive en el listado filtrado, la ficha, el asistente y el diálogo de entrega del tablero.
-- Hardware: tarjeta impresa y plastificada escaneada en quiosco real; resistencia 12 h en tablet;
-  recalibración de estimación R16.
-- Plazo propio y configurable de `absences` (2.4.0, resto de 33.11) y validación del plazo de la ficha con la asesoría laboral; de serie
-  contratos y ausencias se borran con la ficha (ADR-060; doc 07 §6 **A-17**, runbook de derechos §1, `obligaciones-legales.md` §4).
-- Techo del formato PDF (`docs/verificacion-manual.md`).
-- **Engram (09-09-2026):** en funcionamiento (binario 1.20.0 en `~/.local/bin`, plugin `engram@engram` y MCP `engram` en ámbito
-  usuario, protocolo `slim`, proyecto detectado `kronoqr`, nueve memorias sembradas: trampas del entorno, 5.12 y receta de
-  orquestación). **Falta solo** añadir `"permissions": {"allow": ["mcp__engram"]}` a `~/.claude/settings.json` (o ejecutar
-  `engram setup claude-code --protocol=slim` en una terminal) para que fuera del modo automático no pregunte por cada `mem_*`
-  (comprobar; si ya está, borrar).
-
-### Por tarea
-
-- **Fase 4 (restos de la Fase 3 con dueño, 24-09-2026):** cola `reports` propia con configuración de Horizon publicada
-  (`devops-observabilidad` + `backend-laravel`); telemetría (span y log) de los endpoints de informes en diferido (3.9) y de
-  ausencias (3.10) y el `GenerateReportExportJob` colgando de `QueuedTraceContext` (`devops-observabilidad` + `backend-laravel`);
-  partir `stubManagementApi` de `frontend-admin/tests/e2e/support/admin.ts` (~2450 líneas, siete banderas `*Outcome`) por *feature*
-  antes de las pantallas de la Fase 4 (`qa-testing`); pantalla de cuentas de gestión + `identity:list-users` + cambio de contraseña
-  propio, contrato primero (`backend-laravel` + `frontend-panel`); minimizar también las exportaciones `failed` vencidas de
-  `report_exports` (hoy conservan `scope` y `employee_uuid` sin plazo; relajar el `CHECK`) (`backend-laravel` + `qa-testing`);
-  `SECURITY.md` y acta de simulacro de brecha (Gestión de incidentes SAMM 1 → 2) (`devops-observabilidad` + `seguridad-cumplimiento`);
-  los dos WARN del primer `make dast` (`docs/seguridad/evidencia/dast-2026-09-24.md`): restringir `allowed_origins` de CORS en
-  `/api/v1/*` (hoy el valor por defecto de Laravel, `*`; ningún llamador legítimo de otro origen) (`backend-laravel` +
-  `seguridad-cumplimiento`) y añadir `Cross-Origin-Resource-Policy: same-origin` en nginx con su fila en `QualityGatesTest`
-  (`devops-observabilidad`);
-  plazo de corrección por severidad escrito (Gestión de defectos 1 → 2) (`seguridad-cumplimiento`); DFD de las tres SPA y el quiosco
-  físico (Modelado de amenazas 2 → 3) (`arquitecto-dominio` + `seguridad-cumplimiento`); prueba que enumere el router y exija
-  autorización negativa por ruta (`seguridad-cumplimiento` + `qa-testing`); doc 02 §8.2 sin trece series reales del colector textfile
-  (`credentials_coverage_*`, `kronoqr_backup_*`, `kronoqr_maintenance_*`, `presence_metrics_timestamp_seconds`, `retention_*`) y
-  ampliar `textfileSeries()` de `MetricsCatalogueTest` al universo real (`devops-observabilidad`); `amtool check-config` real en Pest
-  (`devops-observabilidad`); cabeceras de descarga unificadas (`X-Kronoqr-Report-Rows` vs `Export-Rows`, `Report-Digest` vs
-  `Export-Sha256`) con `components.headers` en el contrato en la próxima versión (`arquitecto-dominio` decide, `backend-laravel`
-  ejecuta); MSI de `Workforce` (`EmployeeCode`, `Employee`, `ImportColumnMap`, `AbsenceType`) por debajo del resto del dominio
-  (`qa-testing`); concurrencia real por HTTP donde hoy se prueba el candado: dos `PATCH` de la misma ausencia, dos descargas del mismo
-  enlace, dos `POST` de la misma cuenta, dos pasadas de `reporting:weekly-summary` (`qa-testing`); agotar la zona `report-download`
-  (30 r/m por IP) (`qa-testing`); E2E de licencia (RF-PD-04/05 y regla dura 15: fichar con licencia caducada) (`qa-testing`); paridad
-  ES/EN de los `locales/*.json` del portal (`frontend-portal-empleado`); las dos pruebas del menú lateral de `shell.spec.ts` sin
-  etiqueta (`qa-testing`); `docs/runbooks/fallo-de-ci.md` arrastra referencias obsoletas anteriores al cierre (tareas 0.5/0.7/1.1/1.2,
-  «la etapa ④ todavía no existe»): limpieza completa del runbook (`devops-observabilidad`); el alias de un `v-for` en la plantilla de
-  un `.vue` escapa a `id-match` (si se quiere cerrar, `vue/no-restricted-syntax` sobre `VForExpression`) (`frontend-panel`);
-  `ReportExport::withLifecycle()` lleva un `$completedAt` que ningún llamante pasa (`complete()` va por `withFile()`): código muerto
-  que hace inmatable un mutante, borrar de la firma (`backend-laravel`); `isDownloadable()` solo se distingue con una fila `failed`
-  con `file_path` que el `CHECK` prohíbe: si se quiere matar, `ReportExportFixtures::hydratedFromCorruptRow()` (`qa-testing`). Rector,
-  `sanitizeContext`/`lib/checks.sh` y la señal del `409` de `POST /setup/administrator` siguen en «Deuda técnica anotada».
-- **3.9 (restos, 23-09-2026):** **cola `reports` propia** para los informes en diferido (hoy todo va a `default`; exige publicar la
-  configuración de Horizon y un proceso que la atienda); **`REPORTING_EXPORT_PATH` y `PRODUCT_DATA_EXPORT_PATH` no se validan contra
-  `public/` ni `BACKUP_PATH`** (deuda compartida: una comprobación en `doctor` que avise); la instantánea de `scope` es hoy inerte (solo
-  `rrhh+` pide exportaciones, alcance sin restricción): el día que el responsable reciba `reports:*`, decidir si un cambio de ámbito
-  invalida una exportación en cola; **concurrencia real** de dos descargas del mismo enlace y de dos `POST` de la misma cuenta (hoy
-  secuencial + `FOR UPDATE` + índice único parcial); agotar la zona `report-download` (30 r/m por IP) no está probado, solo declarado; las
-  ocho situaciones de `/informe-nuevo` se prueban sobre el camino síncrono que el diferido reutiliza, no repetidas en diferido; 6 mutantes (`ReportExport` 135, 248, 364-365; `ReportExportStatus` 71)
-  sin cubrir en `ReportExport`; `ComplianceSummary` emite `report-too-large` sin diferido al que remitir (acortar el rango); riesgo
-  aceptado: el correo de aviso llega aunque la cuenta se desactive entre pedir y generar (sin enlace ni datos); exportación para la
-  Inspección en diferido, plantillas libres de nómina, envío por correo/SFTP y centro de notificaciones: fuera de alcance (decisión 12); **presupuesto de la suite unitaria**: 2181 pruebas en 6,8 s en reposo en esta máquina frente a los 5 s de `make test-unit` (la CI la mide en Linux y la pasó con 2181 en el run 35831869626): si algún día la rechaza, medir qué ficheros pesan antes de subir el presupuesto.
-- **3.13 (restos, 24-09-2026):** la columna «Estado» del fichero exportado
-  («Fuera del objetivo» / «Sin dato») no se afirma en ningún formato para un indicador en el límite; el texto impreso del PDF no se
-  lee (tipografía en subconjunto, sin extractor en el contenedor; mismo compromiso que `PeriodReportPdfSealTest`); `X-Kronoqr-Export-Criteria`
-  mide ≈ 5,3 KB en base64 (dentro del `fastcgi_buffer_size` de 32 KB de la nginx del producto): si un proxy del cliente topa las
-  cabeceras a 8 KB, pasar las claves de criterio en vez del texto o leerlas del JSON; la atribución de `error_events` al periodo es
-  aproximada (`last_seen_at` + `occurrences`, poda de `product:errors:prune`) y así lo dice la línea de criterios; el presupuesto de
-  base de datos de una petición es de 30 s en el peor caso (hechos + dos informes de horas con su propio `statement_timeout`): si
-  molesta, un `statement_timeout` más corto para las dos llamadas de horas; la línea base de horas **no entra en el asistente de puesta
-  en marcha** (enum cerrado de ocho pasos): solo en «Ajustes operativos»; la disponibilidad RNF-D-01 es una aproximación declarada (el latido no cuenta
-  intentos); contraste visual con `impacto-adopcion.json` de Grafana en el cierre de fase; fuera de alcance (decisión 10): desglose por
-  departamento o quiosco, tendencia de más de dos periodos, envío programado del cuadro, compartirlo anonimizado con el fabricante; la
-  skill `dataviz` que cita el reparto de la ficha no existe en `.claude/skills` (se siguió doc 06). Aparte, un `git stash` huérfano
-  (`wip-3.13-adoption-dashboard`, duplicado del árbol) quedó en la máquina de desarrollo: `git stash drop` a mano.
-- **3.12 (restos, 23-09-2026):** **concurrencia real** de dos pasadas de `reporting:weekly-summary` contra el `UNIQUE` (hoy se prueba con
-  una reclamación duplicada, no con dos procesos); una semana cuyo correo falló **no se recupera sola** el lunes siguiente (la pasada
-  calcula la semana anterior): se reenvía con `--week`; si molesta, una pasada que revise las N semanas sin fila; `registration.update()`
-  real contra un service worker de verdad no se prueba en CI (limitación del entorno): comprobar en una tablet que la comprobación
-  horaria detecta una versión publicada y que la recarga no deja fichajes en vuelo; `weekly_summary_deliveries` conserva
-  `manager_user_id` sin plazo (coherente con `report_exports`, documentado en `obligaciones-legales.md` §4); `KioskUpdateWindow` MSI
-  87,5 % (dos mutantes de formato equivalentes); `npm run test:e2e` del quiosco reconstruye con `--mode test` en cada arranque (unos
-  segundos más); fuera de alcance (decisión 12): baja individual del resumen por responsable, resumen para `rrhh`/`admin`, comparación
-  entre semanas, ventana distinta por quiosco, forzar la actualización desde el panel, enlace al informe con la semana preseleccionada
-  (`PeriodReportView` no lee `route.query`).
-
-- **3.11 (restos, 23-09-2026):** **índice parcial sobre `scan_events(occurred_at)`** para la consulta nocturna de patrones (hoy recorre la
-  tabla: aceptado por nocturno y fuera del fichaje; con ~1,2 M de filas a cuatro años en un hotel de 200 personas, si la pasada supera
-  unos minutos, migración `CONCURRENTLY` con `/migracion-segura`); **prueba de volumen** de `EloquentCredentialScans` a 30 días ×
-  plantilla grande; el desfase de reloj excluye solo RN-16, no las coincidencias (una línea si se quiere); `publishEach()`/`tally()`/
-  `measure()` son ya la tercera copia (`DetectAttendanceAnomalies`, `DetectCredentialPatterns`): a la cuarta, extraer; el adaptador
-  `EloquentAnomalousPatternHistory` lee `incidents` desde `Attendance/Infrastructure` (pendiente de que `arquitecto-dominio` lo
-  ratifique o abra la arista en Deptrac); `turno-abierto-prolongado.md` §5 cita `OBSERVABILITY_METRICS_ENABLED`, que no existe (la real
-  es `METRICS_TEXTFILE_ENABLED`); la guía de RRHH §4 bis dice «ocho tipos de incidencia» y la tabla tiene nueve; verificación visual de
-  la fila nueva de `integridad-dato.json` en Grafana; casos sin prueba fija: coincidencia a caballo de medianoche civil (se atribuye al
-  día del escaneo anterior), escaneo justo en el borde de la ventana, par repartido entre dos quioscos sin alcanzar el umbral en ninguno;
-  `OperationalSettings` lleva seis enteros posicionales (un cambio de orden pasa PHPStan); fuera de alcance (decisión 12): detección en
-  el momento del fichaje, coincidencias entre más de dos personas como hallazgo propio, umbrales por departamento o quiosco, acción
-  automática, correo por hallazgo, patrón sobre fichajes manuales o importados.
-
-- **3.10 (restos, 22-09-2026):** **la carrera se prueba por el candado y no con dos `PATCH` a la vez** (`AbsenceConcurrencyTest` usa `FOR UPDATE NOWAIT` desde una segunda conexión; el escenario HTTP real iría con
-  `ParallelRequests`); `translate()` distingue `absences_chk_superseded_consistency` por el nombre de la restricción en el mensaje del
-  driver; `PeriodReportVolumeTest` no siembra `absences` (comprobar con ~500 empleados que el `LEFT JOIN` usa el índice parcial);
-  los 21 mutantes sin cubrir de `Absence`/`AbsenceType`/`AbsenteeismRule`; el respaldo inalcanzable de `ApplyAbsenceImport` salta la
-  fila sin dejar rastro (coherente con los otros dos); sin captura nueva en la guía (se regenera con las demás, resto de 5.11);
-  ausencias en el portal del empleado, aviso al responsable al registrar una de su gente y ausencias por horas: fuera de alcance
-  (decisión 12); el derecho de acceso (art. 15) se atiende con `GET /absences?employee_uuid=…&status=all` desde `rrhh` (runbook §3),
-  no hay exportación por interesado.
-- **3.8 (restos, 22-09-2026):** **RS-11 sigue pendiente del tercero**: el informe interno, el paquete del revisor y la evidencia están,
-  la revisión externa no; **deuda hermana de H-14**: `update.sh:1874`, `install.sh:1294` y `doctor.sh:266` siguen con `2>/dev/null || true`
-  (sin SIGPIPE, pero un fallo real de `docker compose exec` se lee como «el paquete no trae el comando»): migrarlas a
-  `kq_app_knows_command` es tarea propia con su prueba; **cuentas de gestión** (pantalla del panel, `identity:list-users`, cambio de
-  contraseña por la propia persona; endpoints con policy de `admin` y autorización negativa por rol; las bajas por API colapsan
-  «no existe»/«ya inactiva» en una sola respuesta, RS-03): decisión (a) del usuario del 22-09, con dueño en el bloque «Fase 4»;
-  `identity:deactivate-user` identifica por correo (el docblock lo justifica) y `identity:2fa-reset` por UUID: unificar si
-  `seguridad-cumplimiento` lo prefiere; sin métrica ni span nuevos para los comandos de consola (un contador de rehash publicaría
-  cuántos hashes viejos quedan); `SaturacionDelBordeEnElFichaje` mide la capa de aplicación (no hay exportador de Nginx: los `429` de
-  `limit_req` siguen sin métrica); umbral de `RechazoDeFirmaQr` (> 20 en 15 min) sin validar con tráfico real; `render-config.sh` de
-  Prometheus sin prueba Pest propia (verificado a mano en los cuatro casos); DAST aplazado al cierre de la Fase 3 con dueño
-  (`devops-observabilidad`, `make dast` manual); decisiones (b) línea base del runner regenerada con la primera pasada de `load-test.yml`
-  y (c) fila «Manipulación del reloj del quiosco» en el modelo de amenazas (doc 01 §8.1, doc 07 §4, ATT&CK T1070.006; el repudio de
-  la lectura de datos por un responsable no se añade, lo cubre RS-05): **hechas en `chore/restos-3.8` (22-09-2026)**;
-  `SecurityReviewEvidenceTest` no exige que los `BLOQUEANTE` del informe estén cerrados (el §8 no tiene formato fijo); el escenario
-  `reject-out-of-order` deja 50 turnos abiertos permanentes en empleados reservados de k6 (deliberado, regla 5);
-  `docs/runbooks/brecha-de-seguridad.md` menciona el paquete del revisor sin enlazarlo (no viaja al cliente).
-- **3.7 (restos, 18/22-09-2026):** la **licencia** (activación fuera del asistente, renovación, degradación honesta: RF-PD-04/05) no tiene
-  recorrido E2E, solo una pasada de axe (fila «pendiente» de la tabla de recorridos de la ficha; la regla dura 15 tampoco tiene E2E:
-  propuesta `admin/license.spec.ts` + un fichaje del quiosco con licencia caducada, `producto-licencia` + `qa-testing`); una tarjeta
-  tan deteriorada que ZXing nunca decodifica deja el quiosco en `scan-idle` en silencio (cumple la regla 19 pero no dice nada:
-  candidato a aviso pasivo «¿No te reconoce? Usa tu PIN» tras N s sin lectura, tarea ad hoc de `frontend-quiosco` + `ui-ux`); las
-  dos pruebas del menú lateral de `shell.spec.ts` siguen sin etiqueta (no existe requisito con id para la navegación del panel: darlo
-  de alta en doc 01 si se quiere trazar); `@sinonjs/fake-timers` va vendorizado dentro de `vitest` y ni `npm audit` ni Dependabot lo
-  ven (control: el `integrity` del tarball y el grupo `vitest-mayor`; doc 07 A-15); las tres optimizaciones que sugiere Vitest 5
-  (`fsModuleCache`, `vmThreads`, `isolate: false`) quedan sin evaluar a propósito (comparten estado entre ficheros); el `type-check`
-  de quiosco y panel incluye `tsconfig.e2e.json`; el presupuesto de ⑦ sigue siendo aviso (300 s por app); cobertura y MSI oficiales
-  se leen de la CI; comprobaciones en tablet real (ficha, decisión 12 ampliada por `ui-ux`: extractores de cocina, tarjeta de una
-  temporada, contraluz) siguen siendo manuales; el doc 04/ADR-014 no dice nada del acabado de la tarjeta (mate/brillo) ni de cuándo
-  reponerla por criterio visual: decisión del cliente, sin promesa; la regla ESLint `kronoqr/e2e-sin-esperas-por-reloj` va replicada
-  byte a byte en los tres `eslint.config.js` (no hay config compartida de ESLint) y no ve un `setTimeout` envuelto en un helper;
-  `config/identity.php` conserva un comentario largo sobre la redundancia del nivel Q (explicación, no promesa); `RS-11` con una sola
-  prueba remite al bloque «3.8 (restos)» (decisión 13).
-- **RN-18 (restos, 18-09-2026):** la salvaguarda de la carrera y el puerto `closedEntryEndingAfter` no tienen unitaria de Application
-  (el handler exige un `ConnectionInterface` falso; lo determinista lo cubren dos Feature con `StaleOpenWorkDayRepository`); la
-  E2E de la bandeja del panel no usa dobles por tipo (solo `OPEN_INCIDENT`); `verify-after-load.php` compara `filas >= contadas`
-  porque el escaneo previo `batch_seed` puede producir su propia fila RN-18; el detalle de jornada no muestra escaneos ni la marca de
-  revisión (la hora del fichaje irreconciliable solo se ve en la incidencia; si se quiere en el registro horario es cambio de contrato
-  y de panel); `PeriodReportVolumeTest` (RNF-P-05, 5 s) cayó una vez en la CI de la #68 por ruido del runner (5,6 s) y pasó al
-  repetir: candidata a intermitente si repite; `make test-unit` en local sigue por encima de los 5 s por el bind mount (6,05 s);
-  `load-tests/` queda fuera del alcance de Pint (comillas dobles sin interpolación las detecta una revisión, no una herramienta); doc 05
-  §9.2/§9.5 admite reforzar «nada se pierde» con RN-18 (decisión comercial, sin tocar).
-- **3.6 (restos, 17-09-2026):** `load-test.yml` corrió el 22-09 (run 35724101995, rojo en RNF-P-02 contra la línea base anterior) y
-  su `summary.json` se versionó como línea base nueva (`load-tests/k6/baseline.json`); en el cierre de la Fase 3 se lanzó otra pasada
-  (run 35967821828) contra esa línea base; **un elemento de lote con `503` (`ClockOutBeforeClockIn`) se reintentaría para
-  siempre** (el contrato dice «conservar en la cola»; candidato a incidencia RN-15); `DailyTotalsSnapshot` en `Domain/Event/` está
-  pendiente de ratificar por `arquitecto-dominio`; el `[global]` del pool rendido solo repone `error_log`/`daemonize` frente al
-  `php-fpm.conf.default` de la imagen base; `compliance:verify-audit-chain` no admite rango (recorre la cadena entera tras la
-  carga); `/metrics` solo es legible desde el contenedor `prometheus` (si la pila del paquete no lo lleva, `summary.json` va sin
-  `server_metrics`); `node --test load-tests/k6/` falla en Windows (usar la ruta del fichero); la base de desarrollo queda con ~5 800
-  empleados `K6…` («Carga k6»), 81 quioscos `k6-*`, 145 600 escaneos de histórico y `projection_divergence_total` en 6 (tarjetas,
-  tokens y cuenta revocados por el cierre); el residuo «fila ausente + fichaje simultáneo» de la reconciliación es A-12 (A-11 y A-12
-  del doc 07 no vencen hasta el cierre de la Fase 4).
-- **3.5 (restos, 17-09-2026):** **«pausa sin vuelta» sin incidencia** (candidata a tipo nuevo `open_break`/`missing_break_end` con migración y bandeja); la
-  divergencia `intent`/`result` solo se ve en la base de datos (ninguna pantalla la muestra); probar en tablet real TalkBack del aviso armado y la banda con guantes;
-  captura `quiosco-pausa-confirmada` para la hoja; k6 sobre `lastAcceptedScanOf()` con años de `scan_events` (3.6); la pantalla del
-  perfil descarga el catálogo entero de ajustes (con `KIOSK_SERVICE_CODE` en claro para `admin`) para leer una clave; la mitad
-  `break_end`-tras-`break_start` de la exención del anti-rebote solo la ejercita un cliente de API (el quiosco nunca envía
-  `break_end`); `ScanTarget` es una clase nueva no prevista en el contrato del arquitecto; activar el ajuste en una prueba exige
-  `app()->forgetScopedInstances()` (`OperationalSettingsProvider` es `scoped`).
-- **3.4 (restos, 16-09-2026):** captura `rrhh-15-cumplimiento` para las dos guías cuando exista el generador en `tests/screenshots/hr-guide.screenshots.ts`;
-  `REPORTING_PERIOD_MAX_RANGE_DAYS`/`_MAX_ROWS`/`_TIMEOUT_SECONDS` nunca estuvieron en `.env.example` ni en `configuracion.md`
-  (hueco previo); medir en la 3.6 (k6) el endpoint de cumplimiento, que alcanza también al responsable y deja asiento bajo el
-  candado de ADR-010; en el cierre de la Fase 3 anotar en doc 07 que `compliance_summary` se dejó fuera de `disclosure_grouping`
-  a propósito y es el conjunto que más revela por fila; «Ver incidencia» lleva a la bandeja acotada a la persona (`?employee=`), no
-  a la incidencia por `id`; dos tramos cerrados con el mismo máximo (desempate por `se.id`) sin prueba hasta que la 3.5 reactive
-  RN-12; la fábrica `missingBreak()` está probada pero la rama de emisión no se ejercita mientras dure la suspensión;
-  `ComplianceProfileView` incrusta avisos por efecto (`compliance_view`) que la 3.5 deberá revisar al vaciar la suspensión;
-  cobertura y MSI oficiales se leen de la CI; el panel «Qué falta» del cuadro Negocio atribuye horas contratadas e impuntualidad a
-  la 3.13 (previsión, no compromiso); los `.spec` del portal siguen sin prueba de paridad ES/EN (de la 3.3).
-- **3.3 (restos, 16-09-2026):** verificar en una tablet Android real que Chrome expone `focusMode`, `zoom` y `backgroundBlur` en
-  `getSettings()` y que el aviso de desenfoque dispara (la cámara falsa de Chromium no los trae: el E2E afirma filas y avisos, no
-  valores); `CheckKioskHealthTest` y `KioskHealthRowTest` fijan las mismas reglas desde dos ficheros (fusionar al tocar el dominio de
-  salud); panel de batería en el cuadro Grafana «Operación de quioscos» (`kiosk_battery_level{device}` ya se expone); la paridad
-  ES/EN de los `locales/*.json` la atan `i18n.spec.ts` del quiosco y del panel, el portal no tiene esa prueba (`LangParityTest` solo
-  cubre `backend/lang/`); `diagnostics.spec.ts` tiene una prueba con tiempo de gesto (3,6 s para los 3 s de pulsación larga); **la primera
-  CI manual (35107182531) cayó en ⑦ quiosco** en «dos 401 seguidos vuelve a `/pair`»: las peticiones de montaje de `ScanView`
-  salían antes de instalar las rutas 401 y el siguiente latido tardaba 60 s; ahora la prueba recarga la página tras instalar las
-  rutas (dos 401 deterministas); una tablet sin ningún latido posterior a la
-  configuración del código abre el diagnóstico sin él (decisión 7, documentado en A-10 y §16.5); mover los umbrales de salud a
-  `installation_settings` sigue descartado (decisión 2); `make test-unit` en local ~8 s con la máquina cargada frente a los 5 s del
-  presupuesto (medir en reposo y leer la CI); `HeartbeatConcurrencyTest` dio un falso positivo con `migrate:fresh` de otro agente
-  (BD compartida).
-- **3.2 (restos, 10-09-2026):** `amtool check-config` solo corre en `make observability-check`, en la CI y al arrancar el contenedor
-  (`AlertmanagerConfigTest` valida con el parser de Symfony, más laxo); `render-config.sh` sin prueba de sus `die` de plantilla
-  ausente; las variables de plantilla de Grafana (`label_values`) y los `legendFormat` no se contrastan con el §8.2 ni con la regla
-  dura 21; «incidencias por antigüedad» del cuadro de integridad es una aproximación (`incidents_open` en el tiempo: no hay serie por
-  edad); «Negocio» no muestra horas contratadas ni impuntualidad (sin serie: 3.13); `kiosk_last_seen_seconds` vive
-  en Redis y un quiosco callado ANTES de un `FLUSHALL` desaparece de la serie (segunda red: `kiosk:health`); `QuioscoSinLatido`
-  lleva 600 s literal atados por prueba al valor por defecto de `KIOSK_HEALTH_SILENT_AFTER_SECONDS`, pero cambiar la variable en una
-  instalación no mueve la regla; las alertas de TLS no ven validez ni cadena ni CN (`insecure_skip_verify`; doc 07 A-8, candidata a
-  la 3.8: segundo módulo de blackbox contra `APP_URL` con verificación); `EntregaDeAlertasFallando` no llega por correo si lo roto es
-  el correo; falta prueba de que un fallo de tarea en segundo plano NO llega a `error_events` y `onFailure` de extremo a extremo con
-  `schedule:run`; `ParticionDeAuditoriaDelProximoAnoSinPreparar` no se puede disparar con `promtool` (reloj fijo en 1970); una
-  prueba de arquitectura que ate el nombre de la serie de cada adaptador textfile con el de su regla; `AlertmanagerConfigTest`
-  arranca ocho `sh` (~11 s de la etapa ②); `LogScheduledCommandFailure` y `AlertRecipientsProbe` son lógica pura fuera de `Domain/`
-  y `make mutate` no las cubre; en Docker Desktop `MetricasDelAnfitrionAusentes` queda encendida en dev (ver Trampas) y con
-  Alertmanager en dev intentará entregarse a buzones vacíos; comprobar en tablet real que un `.prom` truncado por disco lleno no
-  inhibe nada (fail-safe verificado solo por lectura); ficha 3.1 «Verificación final» sigue citando `kronoqr-backup` (histórico).
-- **3.1 (restos, 10-09-2026):** comprobación de `doctor` que avise si `LOKI_URL` u `OTEL_EXPORTER_OTLP_ENDPOINT` apuntan a un
-  contenedor que no existe (`Probe` nueva en `Product/Infrastructure/Diagnostics/Probe/`); **doc 07 §6 A-4: validar con el DPO del
-  cliente** que el log técnico con `employee_uuid` + instante de fichaje en Loki 90 días sin borrado selectivo encaja con el derecho
-  de supresión (no es asesoramiento jurídico); `ScanBatchTelemetry` escribe `oldest_occurred_at` (hora real de fichaje) en el log
-  técnico; logs de Nginx, PostgreSQL y Redis no van a Loki (Promtail EOL 03-2026; Alloy y el driver exigen `docker.sock`); el SDK de
-  OTel escribe sus fallos de exportación con `error_log()` fuera de Monolog (acotar con `OTEL_LOG_LEVEL`, variable no introducida);
-  atributos `db.system`/`db.operation` según la ficha y no semconv 1.38 (`db.system.name`, `db.operation.name`): se cambia en la 3.2
-  con los cuadros o nunca; el span del planificador ya no se activa (las consultas de una tarea en primer plano no cuelgan de él;
-  casi todo `console.php` usa `runInBackground()`); `overrides` de Tempo (`max_traces_per_user: 100000`) sin datos reales; sin
-  `mem_limit` en Tempo ni blackbox (ningún servicio de observabilidad lo declara); `QueuedTraceContext` probado con `sync`, falta
-  `queue:work --once` real sobre Redis; falta la gemela concurrente «Loki inalcanzable» de `ScanIdempotencyWithTracingTest`;
-  `TraceparentHeader` y `LogChannelStack` son reglas puras fuera de `Domain/` y `make mutate` no las cubre; `db_query_duration_seconds`
-  acumula las consultas del *setup* de la propia prueba (se afirma presencia e invariante, no cifras); doble ejecución de
-  `attendance:detect-incidents` la misma noche sumaría dos veces `anomalous_patterns_detected_total`; `scan_batch_size` y
-  `pin_resets_total` siguen en Redis y en el paquete pero no en `/metrics` (no están en el §8.2); el `.env` local de dev sigue con
-  `LOG_CHANNEL=stderr` (para probar Loki en local: `LOG_CHANNEL=stack`, `LOKI_URL=http://loki:3100`); la traza «fetch del quiosco →
-  SQL en Grafana» se verificó con `curl` + Tempo API, no navegando en Grafana; la comprobación de memoria del quiosco a 12 h sigue
-  siendo manual; `Unit` tarda 4,5 s en el contenedor frente al techo de 2 s del §9 (ya lo hacía antes).
-- **Cierre de la Fase 5 (restos, 10-09-2026):** la instalación limpia y los cuatro recorridos de las guías por una persona ajena
-  (humano); ⑧b desde **cada** versión soportada y salto no consecutivo real al publicar 2.2.0; **MSI por módulo** con el global
-  en 82,83 %: `Workforce` 66,67 % (`Employee` 23, `ImportColumnMap` 22, `EmploymentContract` 12, `EmployeeCode` 11) y `Kiosk`
-  77,70 % (`KioskHealthReport` 22, `KioskHealthThresholds` 4); `Product` real 81,77 % (el 74,85 % era de media plantilla);
-  `make test-unit` en local 5,54 s > 5 s (CI 1,62 s: mirar si esas pruebas son unitarias, no subir el techo); prueba que
-  enumere el *router* y exija autorización negativa por ruta (hoy `AuthorizationNegativeTest` es una lista a mano de 35 pares);
-  `ClientErrorContextKeysTest` y `Support/ClientDocs.php` siguen con `RecursiveDirectoryIterator` sobre `frontend-*/src` y
-  `docs/`; catorce rutas de gestión sin zona de límite (doc 07 §6, Fase 3); `plan_exceeded` por fila en la importación (doc 07
-  §6, Fase 3); `audit:read` en el alcance `read_only` sin consumidor (doc 07 §6); spans OTel ausentes en los controladores de
-  5.9/5.10/5.12 (los de 5.1–5.8 tienen `*Telemetry`); métricas de exportación íntegra, telemetría, concesiones y paquetes sin
-  emitir; presupuesto de ①–③ de la CI (~20 min frente a los 4 del doc 02 §10.1); primer `run` real de los jobs ④/⑥/⑦/`coverage`
-  puede destapar detalles del runner; el `409` de `POST /setup/administrator` sigue sin señal. **Del verificador tolerante:** una fila manipulada con acción `system.*` y `actor_type` cambiado hace que
-  `AuditEntryDraft` lance `AuditActorNotAllowedForAction` AL LEER, y el verificador muere con excepción en vez de reportar
-  `content_altered` (ruidoso, no silencioso; exige una vía de construcción de solo lectura: `arquitecto-dominio`); mutación de
-  `AuditActionName` en la CI; al publicar 2.2.0, U3 debe probar la vuelta atrás DESDE 2.2.0 y el aviso «acción desconocida».
-- **5.7 (restos):** menores:
-  extraer `compose()`/`wait_for_healthy`/`edge_probe` de `install.sh` y `update.sh` a `lib/checks.sh` (ya divergen);
-  el `503` de mantenimiento no se enumera por endpoint en el contrato (solo el párrafo de `info`);
-  `update.sh` no escribe métricas `.prom` (una vuelta atrás no llega a Prometheus); modo **in-place**
-  tolerado con aviso (doc 07 §6); **salto de mayor de PostgreSQL** no cubierto (runbook §7);
-  `backup.sh`/`restore.sh` con identificadores en español (punto 8 de «no cubiertos»); si `update.sh`
-  coincide con la copia nocturna, sale 2 y el mensaje ya dice que espere; la ⑧b corrió en verde (34152296162).
-- **5.8 (restos):** **verificar en tablet real** que el logotipo sobrevive a una recarga sin red desde la
-  caché del SW (Playwright no puede afirmarlo: el SW no controla la primera carga que lo instala; el nombre y
-  el color sí están probados sin red); `PairingView`/`PinView` del quiosco siguen con el nombre del producto
-  (la ficha solo pedía espera y confirmación); **segundo logotipo para el fondo oscuro del quiosco**
-  (documentado como límite en `configuracion.md` §2.2); el asistente de puesta en marcha (5.5) debería avisar
-  en su paso de marca de que sin licencia activada se ve color y logotipo del producto; `manifest.name` de
-  la PWA es de compilación; regla de ESLint/Pest Arch que prohíba `v-html`/`{!! !!}` con `logoUrl`/`dataUri`
-  (riesgo aceptado en doc 07 §6); unificar el estado de carga de `ComplianceProfileView`/`LicenseView` con
-  `LoadingPanel` como ya hace `BrandingView`; cada `GET /branding` lee y hashea el logotipo (≤ 512 KiB,
-  aceptado con aviso en `.env.example`). (la 5.9 ya lo comprueba: `permissions.branding_logo` y `license.white_label_without_plan`).
-- **5.9 (restos):** `updated_by_user_id` queda `null` cuando escribe un actor de soporte (el actor consta en `audit_log`; si hace falta, `updated_by_support_grant_id`); los `Redis*Metrics` de otros módulos podrían exponer sus claves para que `MetricsCollector` no adivine la forma; ampliar `error_events` en el paquete llega con la 5.12; si el paquete incluyera algún día asientos de `audit_log`, redactar `customer_name` (hoy solo recuentos).
-- **5.11 (restos):** **instalación limpia por una persona ajena siguiendo solo la guía** (criterio del doc 03 §6.5;
-  ningún script la sustituye); regenerar las capturas (`npm run docs:screenshots` en los dos frontends) en cada
-  versión menor —la prueba del sello `img/VERSION` lo recuerda—; los runbooks siguen solo en español; la salida de
-  `compliance:apply-retention` y `verify-audit-chain` está cableada en español (la guía inglesa la glosa); la
-  cabecera de `instalacion.md` §1.2 y §1.3 quedó sin el bloque duplicado de `--check-only`.
-- **5.11b (restos):** los cuatro recorridos por una persona ajena siguiendo solo las guías (decisión 11); **deuda de producto que
-  la guía destapó** (decisión 13): no hay pantalla de contratos en el panel (endpoints sí), `reissue` en un acto es solo de API (el
-  panel emite siempre con `reissue: false`), tres tipos de incidencia del filtro sin productor hasta la Fase 3 (el apartado de
-  ausencias de `guia-rrhh.md` y `en/hr-guide.md` ya está: 3.10); **catorce rutas de gestión siguen sin zona de límite de
-  aplicación** (`POST/PATCH /employees`, `/contracts`, `/offboard`, `/pin/deliver`, `/pin/reset`, `/departments`, `/site`,
-  `GET /reports/legal-export`, `/auth/logout`, `/auth/me`): solo las frena Nginx por IP; una prueba que exija zona por ruta hoy
-  fallaría en ellas; autorización negativa del `429` de credenciales con token de quiosco/portal; prueba de «una cara» con nombre de marca de 60 caracteres y
-  logotipo de 11 mm; un fallo de Chromium en la hoja sale como `500` (la impresión de tarjetas hace lo mismo; `Reporting` da `503`).
-- **5.12 (restos):** inspección manual de `error_events` tras un día de uso con la semilla realista (la automática,
-  `ErrorEventsHaveNoPersonalDataTest`, está en verde); autorización negativa del latido **con** `client_errors` (token de
-  gestión con `heartbeat:write` → 403) y la variante de agrupación concurrente que entra **por el latido**; el `Employee` y el
-  `Device` no son `Authenticatable` y `tokenKey()` lo esquiva con `instanceof Model` (deuda de Identity); la regla
-  `severity: high` es la primera del repositorio y Alertmanager la enruta por defecto: al montar las alertas «Alta» de la 3.2
-  unificar el valor; `ErrorLevel` critical de servidor no distingue un `5xx` puntual de una tormenta (la alerta cuenta grupos
-  nuevos y basta por ahora); el saneado convierte los identificadores SQL entrecomillados en `'…'` (decisión: seguridad sobre
-  detalle); dos comprobaciones de `doctor` más de las que citan las guías si enumeran su número.
-- **Fase 3:** `holidayCalendar` ya lo consume el informe por periodo (3.10; ninguna regla de incumplimiento lo lee); RN-12 ya deriva del ajuste
-  `ATTENDANCE_BREAK_CLOCKING` (3.5) y el descanso intra-día de RN-10 queda fuera por decisión (3.5, decisión 9); RNF-D-03 fallback de colas Redis→BD; pasada k6 en Linux para el p95
-  (RNF-P-02/06); la puerta de cobertura (`make coverage`) no corre en CI.
-- **Decisiones de producto abiertas:** **cuentas de gestión: DECIDIDO el 22-09-2026, habrá pantalla** (ver «3.8 (restos)»; por consola ya existen
-  `identity:deactivate-user` e `identity:reset-password`); si el portal muestra incidencias (hoy `incidents: []` siempre; si
-  se activa, solo resueltas) **y si muestra ausencias** (3.10: no, decisión 1; si se activa, sin la nota); si el
-  `responsable_departamento` ve credenciales de su gente; códigos de
-  recuperación de 2FA (hoy solo `identity:2fa-reset` por consola); si la baja revoca la credencial
-  automáticamente; la mitad de
-  aplicación de RF-ID-08 (requisitos extra de contraseña al exponer el portal a internet).
-
-### Deuda técnica anotada
-
-- **Bloque 13 (07-10-2026), para la 2.2.x:** DB5 (el informe de adopción con `AT TIME ZONE` sigue con `Seq Scan` de `scan_events`), DB7 (dos GIN sin uso) y DB9; el `count(*)` de `IncidentBoard::page()` recorre todas las incidencias del estado en cada visita (con `resolved`, casi todo el histórico); el JIT de PostgreSQL está activo por defecto (`jit_above_cost` 100 000, sin ajuste en `infra/`: valorar `jit=off` o subir el umbral, devops); una prueba de concurrencia con `pg_locks` e `INSERT` concurrente que reproduzca R5-BD-01 (qa-testing, opcional); `AdoptionReportVolumeTest` pasa de 285 s a 366 s por el vaciado de `CommittedDatabase`. El docblock de `2026_09_30_120000` ya no afirma los privilegios de `fichaje_app`, que tiene `UPDATE`/`DELETE` por defecto sobre las tablas del registro (va con R6-AR-01 del bloque 14).
-
-- **Del cierre del bloque 22 (07-10-2026):** `update.sh` deja las señales en su valor por defecto durante su propia vuelta atrás (un
-  segundo Ctrl+C o un HUP repetido la corta a medias): aplicarle la guarda no reentrante y el `trap ''` de `install.sh`. El instalador
-  no guarda su salida en un fichero (sin `tmux` se pierde el mensaje final). La inhibición de las «resueltas» en Alertmanager no está
-  probada de extremo a extremo. R3-CH-03 sigue: las rutas que fallan cerradas con Redis caído dan 500 y no 503. Con el circuito
-  cerrado, las peticiones en vuelo al empezar una avería siguen pagando el DNS completo una vez (decisión: no lanzar un proceso por
-  petición). **El escenario J del job ⑧ falló una vez de forma intermitente** (el instalador en segundo plano murió en silencio
-  al entrar en la fase 3, sin código ni mensaje; en cuatro pasadas más fue bien): el paso traza ahora el instalador (`bash -x` a
-  `salida-j.trace`, impreso sin secretos) y dice el código de salida si se repite. El 07-10-2026 (bloque 13) falló dos veces seguidas por otra causa, ya corregida: `kill -0` sobre el lanzador `sudo` daba EPERM
-  en la imagen 20260901 del runner y el bucle se rendía a la primera; ahora mira con `ps -o stat=`. Si vuelve a fallar, mirar la
-  traza y la versión de la imagen en la cabecera del log antes de tocar nada.
-- **Del cierre del bloque 12c (07-10-2026):** `UpdateDepartmentRequest` comprueba el ámbito `accounts:*` con un `tokenCan()` a mano y
-  una copia del literal (atada por `DepartmentManagerAbilityTest`): lo limpio es un puerto `ManagementActor::tokenGrants()` en Shared.
-  Unos 25 docblocks anteriores al bloque citan ADR-027 («audit_log particionado») donde quieren decir ADR-010 («auditoría en la misma
-  transacción»): corregirlos de una vez. La baja y los restablecimientos revocan tokens pero no cortan una conexión Reverb ya abierta
-  (ADR-051 residuo 6; contención: reiniciar `reverb`): cerrar las conexiones del usuario al revocar, bloque 22 u otro.
-  `AdministratorStep.spec.ts` falla en local por la importación dinámica de `@zxing/library` (pasa en la CI): hacerla determinista.
-  No hay cuadro de Grafana de seguridad/autenticación (ninguno menciona `kronoqr_auth`): la serie de cuentas no tiene panel.
-- **Del cierre del bloque 12b (07-10-2026):** falta la prueba de dos «Emitir el PIN» simultáneos sobre un pendiente (por diseño uno
-  deja `pin.issued` y el otro `pin.reset`); `PinIssuanceEndpointsTest` «no deja a nadie sin PIN en el alta individual» sigue con un
-  `foreach` contra la convención de §3.5; averiguar qué crea `backend/storage/framework/legal-exports/` (apareció el 06-10-2026 a las
-  14:12 y nada del código escribe ahí: las exportaciones van a `storage/app/legal-exports` y `storage/app/tmp/legal-exports`).
-- **Del cierre del bloque 12 (06-10-2026):** `PinScanTest.php:266` lleva una aserción de tiempo constante que no puede fallar
-  (umbral demasiado holgado): afinarla o sustituirla por la comparación estructural de `PinScanOpenPortalTest`. Y falta un E2E que
-  cruce las tres aplicaciones: ajuste a 8 cifras en el panel → restablecer el PIN → fichaje por PIN en el quiosco → acceso al portal.
-- Falta una captura de referencia del panel con `LicenseNotice` activo y las 14 secciones (hallazgo opcional de la revisión del
-  menú lateral del 10-09-2026; la duplicación `guards.ts`/`AppShellView.vue` quedó pagada en la 3.4 con `shared/ui/navigation.ts`).
-- **Rector: 227 ficheros en rojo e ignorado** en `make quality` — aplicar esas reglas o retirarlas del
-  conjunto; un paso siempre rojo y siempre ignorado acaba sin leerse.
-- XLSX se lee sin cota de descompresión más allá de `max_rows` y los 4 MB (riesgo bajo, consciente).
-- El 409 de `POST /setup/administrator` (intento de segundo admin) no deja señal; registrar sin PII (doc 07, fila del 2.º factor,
-  abierta en el tercer cierre; `backend-laravel`).
-- La suite Feature depende del orden alfabético de directorios para EXPONER acoplamientos de estado;
-  nada detecta una prueba que dependa del vaciado de tablas de trabajo confirmadas.
-- `heading-order` (axe, impacto moderado) en `LicenseStep`/`ComplianceProfileStep` al incrustar
-  pantallas con `<h2>` propios.
-- El contrato OpenAPI no enumera el `503` de mantenimiento por endpoint (solo `/scan` y `/scan/batch` lo
-  tenían ya); está descrito en `MaintenanceModeTest` y en `ProblemDetails::maintenance`. Decidir si va en
-  `info.description` o como respuesta reutilizable en cada ruta.
-- `release.yml` publica desde el 24-09-2026 (rama `chore/release-2.1.0`): con la etiqueta `vX.Y.Z` espera a la CI de esa etiqueta,
-  construye y escanea las tres imágenes, las empuja al registro (`vars.IMAGE_REGISTRY` o `ghcr.io/<owner>/kronoqr`), arma el paquete,
-  el SBOM y `SHA256SUMS` y crea la *release* con las notas del `CHANGELOG`. Sin ejecución real todavía: la primera etiqueta es la prueba.
-- **Del cierre de la Fase 5 (`revisor-codigo`, con horas):** unificar `sanitizeContext` y el buffer de errores de cliente de
-  `web-kit/clientErrors.ts` y `frontend-kiosk/.../errorReporter.ts` (copia literal, 3–4 h); generar los `urn:kronoqr:problem:*`
-  del contrato y atar los ocho literales de las SPA (3–4 h); `PdfDocument::builder()` con `dontCache()` + regla Pest Arch que
-  prohíba `new PdfBuilder` fuera (2 h); subir `compose`/`service_state`/`wait_for_healthy`/`edge_probe` a `lib/checks.sh`
-  (2–3 h); tres `minutesBetween` ya aplicados; README de `pairing`/`offline` del quiosco (1 h); un fallo de Chromium en la hoja
-  sale como `500` (`Reporting` da `503`); `SourceDiscoveryTest` rojo en local por diseño: si estorba, degradarlo a aviso y
-  asumir que vuelve a ser invisible.
+- **Validación jurídica (asesoría y DPO del cliente),** guion en `docs/cliente/preguntas-asesoria.md`: plazos de
+  `employment_contracts`, `absences` y de la ficha (ADR-060, A-17); cuasi-identificadores residuales y plazos de minimización;
+  log técnico con `employee_uuid` en Loki 90 días (A-4); avisos de privacidad del portal y del quiosco; motivo libre de las
+  correcciones; retención de periodos de un readmitido y atribución de fichajes rechazados tras la baja.
+- **Tablet real:** resistencia de 12 h (`alta-nuevo-quiosco.md` §4.5) y primer fichaje en frío; enfoque y `getSettings()`
+  (`focusMode`, `zoom`, `backgroundBlur`); logotipo tras recarga sin red desde la caché del SW; TalkBack y guantes; aviso de
+  privacidad largo; `registration.update()` real; tarjeta impresa con nombre largo. Después, bloque 31 (#149).
+- **Instalación limpia y los cuatro recorridos de las guías por una persona ajena**, solo con la documentación.
+- **k6 en hardware de referencia:** VPS de 4 vCPU / 8 GB unas horas, instalar desde el paquete y
+  `make load-test INSTANCES=10 DURATION=120s` (RNF-P-06 absoluto; nunca contra la demo: k6 se niega en `APP_ENV=production`).
+- **Revisión externa RS-11:** informe interno y paquete del revisor listos; falta el tercero.
+- **Decidir:** si el auditor lee el detalle de jornada y la presencia en vivo (contradice doc 05 §3.4, exige ADR); si
+  `--acknowledge` de la conciliación exige rol (hoy cualquier cuenta de gestión, D7); señal persistente de «tarjeta entregada y
+  PIN sin emitir»; asiento nominal por fila en el listado de ausencias (`sick_leave`); portal con incidencias o ausencias,
+  credenciales visibles para el responsable, códigos de recuperación del 2FA, RF-ID-08 con el portal en internet.
+- **Licencia de la demo:** reemitirla con solo `--features=all`.
+- Ver un correo real del producto en un cliente de correo.
+- **Engram:** falta `"permissions": {"allow": ["mcp__engram"]}` en `~/.claude/settings.json` (comprobado el 23-11: no está).
+- Vigilancia normativa: semestral y antes de cada versión mayor (`docs/runbooks/vigilancia-normativa.md`).
 
 ## Trampas del entorno — leer antes de operar
 
-- **Hay una sola base de datos de pruebas en el contenedor `app`, y las suites con `RefreshDatabase` se pisan entre procesos**: una
-  pasada `--testsuite=Integration|Feature` lanzada mientras un agente (o un revisor) ejecuta pruebas filtradas da decenas de fallos
-  falsos (retención, licencia, informe de volumen). La pasada completa se ejecuta en solitario; la mutación (`--testsuite=Unit`,
-  sin BD) sí puede ir en paralelo, y `make mutate MUTATE_PATHS="a.php,b.php"` la acota a ficheros concretos (3.10).
-- **`perl -0pi` con `open "<:encoding(UTF-8)"` sobre un fichero leído en bytes duplica la codificación del fichero entero**
-  (803 líneas cambiadas en el plan): el inserto se lee con `<:raw` y el patrón se escribe con escapes `\xc3\xb3`. Y un *heredoc*
-  entrecomillado con comillas simples dentro no pasa por la herramienta Bash de esta sesión: para textos largos, el fichero se
-  escribe con `Write` y se empalma con perl (3.10).
-- **Una tubería `cmd | grep -q` bajo `pipefail` responde NO cuando la respuesta es SÍ**: `grep -q` cierra la entrada al primer acierto, el
-  productor (el cliente de Docker volcando `artisan list --raw`) muere de EPIPE y sale 1; medido 5/40 en local. La pregunta «¿existe
-  este comando?» se hace con `kq_app_knows_command` (`infra/scripts/lib/app-commands.sh`), nunca con una tubería y nunca con
-  `2>/dev/null`. Y dos copias de la misma comprobación en `update.sh` y en `ci.yml` no son una verificación: ⑧b salía verde o rojo
-  según a cuál le tocara equivocarse (3.8, H-14).
-- **`php artisan test --filter=X` sin `--testsuite=Architecture` no encuentra las pruebas de Architecture** en el contenedor local:
-  usar `--testsuite=Architecture --filter=…` (3.8).
-- **Trivy en Windows**: `make trivy-fs` cae por el tope de 10 min del recorrido sobre el *bind mount* y por cachés que otros procesos
-  reescriben durante el escaneo (`backend/storage/framework/cache/phpstan`, `.claude/`, `backend/.deptrac.cache`): repetir a mano con
-  `--timeout 40m --skip-dirs …,backend/storage,.claude --skip-files backend/.deptrac.cache`; el veredicto que vale es el de la CI (3.8).
-- **Dos suites Pest con base de datos a la vez se pisan** (`RefreshDatabase` hace `migrate:fresh` por proceso): con varios agentes,
-  oleadas: primero los que solo ejecutan Architecture/Unit o `node --test`, después uno solo con Feature/Integration (3.8).
-- **`prometheus.yml` ya es plantilla** (`prometheus.yml.template` + `render-config.sh` propio): el job verificado contra `APP_URL` se
-  omite cuando `TLS_ALLOW_SELF_SIGNED=true` o `APP_URL` está vacía; editar la plantilla, no el fichero rendido del volumen (3.8).
+### Base de datos y suites de backend
 
-- **Una PR de Dependabot de npm integrada en `main` mientras otra rama lleva el lock regenerado deja esa PR en conflicto** sobre
-  los `package.json` y `package-lock.json`, y el lock no se resuelve a mano: fusionar `main`, tomar los manifiestos de `main`,
-  reaplicar lo propio y regenerar el lock desde Linux (`node:24-alpine`, `npm install --package-lock-only --ignore-scripts` sobre una
-  copia con solo `package.json` raíz, lock y los cuatro manifiestos; sin `node_modules`). Si una tarea va a tocar el lock, integrar
-  o aplazar las PRs de Dependabot de npm antes de abrir la suya (3.7, 22-09).
-- **`QRCodeWriter.encode(…, 0, 0)` de `@zxing/library` devuelve la matriz CON zona tranquila (4 módulos por lado)**: un guion que
-  derive la versión del símbolo del ancho de esa matriz se equivoca dos escalones (45 → versión 7 cuando el símbolo real de 37 es
-  versión 5) y «daña» celdas del margen. Restar la zona tranquila y afirmar que cada celda tocada cae dentro del símbolo (3.7).
-- **El 25 % del nivel Q es redundancia, no tolerancia**: ante errores de posición desconocida (un módulo sucio no es un borrado
-  conocido) Reed-Solomon corrige como máximo la mitad (medido: 20/134 palabras decodifica siempre, 24 nunca). No prometer
-  porcentajes de desgaste; el producto repone la tarjeta y mientras tanto se ficha con PIN (3.7).
-- **Con `page.clock` instalado, `window.setTimeout(() => { throw … }, 0)` no produce evento `error` de `window`** (el reloj falso
-  ejecuta el callback por llamada directa): provocar errores globales con `window.dispatchEvent(new ErrorEvent('error', …))`;
-  `page.clock.install()` no pausa el reloj, así que `runFor(INTERVALO - 1)` no demuestra nada (usar `pauseAt` o afirmar un reintento
-  por intervalo); la cámara falsa NO pasa por temporizadores de página, así que `page.clock` no sirve para esperar fotogramas (3.7).
-- **`npm ci` de otro agente en el mismo árbol reinstala `node_modules` entero** y tumba cualquier `vitest`/`playwright` en vuelo:
-  coordinar la migración de dependencias antes de lanzar E2E en paralelo (3.7).
-- **Un commit provisional cuyo mensaje empieza por `#` se vuelve vacío al reaplicarlo en un rebase** (git lo trata como comentario):
-  `git -c core.commentChar=';' rebase --continue` o un mensaje que no empiece por `#` (3.7).
-- **Playwright local en Windows: los navegadores viven en `~/AppData/Local/ms-playwright` y el binario en el `node_modules` de la raíz**
-  (workspace de npm): `npm --prefix frontend-x run test:e2e` funciona; buscar `frontend-x/node_modules/.bin/playwright` no (22-09).
+- **Una sola BD de pruebas (`fichaje_test`) en el contenedor `app`:** dos suites con BD a la vez se pisan (`migrate:fresh` por
+  proceso; fallos falsos «relation … does not exist»). Con varios agentes, oleadas: primero Architecture/Unit/`node --test`,
+  después uno solo con Feature/Integration. `MigrationsRoundTripTest` (todas las migraciones, `CommittedDatabase`) jamás en
+  paralelo. La mutación de Unit sí puede ir en paralelo; `make mutate MUTATE_PATHS="a.php,b.php"` la acota.
+- `fichaje_test` puede guardar funciones antiguas que `migrate:fresh` no borra: borrarlas a mano si sale «Restos tras deshacer».
+- `php artisan test --filter=X` no encuentra Architecture sin `--testsuite=Architecture`.
+- **Con `failOnWarning`, un aviso PHP al cargar un fichero de pruebas deja la suite en 1 sin que Pest imprima nada.**
+  Diagnóstico: `--log-events-text /tmp/e.txt` y `grep "Triggered PHP Warning"`. Causa típica: `const` global repetida entre
+  ficheros (prefijo por fichero, `TestGlobalConstantsTest`).
+- **Reloj fijo + token Sanctum:** en Feature, Integration y Contract el reloj se detiene con `FrozenTime::at('…')` (fija `Clock`
+  y Carbon a la vez; `FrozenTimeTest` lo vigila). `audit_log` está particionado por año. Si `main` pasa a rojo sin commits, mirar
+  primero fechas fijas.
+- Pruebas de plan con `CommittedDatabase` + `QueryPlans::analyze()`; una CTE recursiva se estima a ciegas; un índice de expresión
+  exige el `ORDER BY` textual; `SET LOCAL` fuera de transacción solo avisa. `CommittedDatabase` restaura los catálogos de
+  producto (no escribir `afterEach` para eso).
+- Un proveedor `scoped()` (`OperationalSettingsProvider`) memoriza por petición: `app()->forgetScopedInstances()` al cambiar ajuste.
+- Pest: `toContain($x, $mensaje)` trata el mensaje como otro elemento; PHPStan 9 rechaza `(int) $mixed` (usar el query builder).
+  `Request::create()` añade `Accept-Language: en-us` (el helper `Api` lo anula).
+- Tocar una excepción de `Domain/` la mete en `mutate-changed`: necesita pruebas de clave, parámetros y mensaje
+  (`Tests\Support\Shared\RejectionTranslations`). Un cambio solo de comentario en `Domain/` da 0 mutantes y tumba la puerta.
+  `AggregateBoundaryTest` lee comentarios (citar `ShiftEntry::nextVersion()` cuenta como llamada).
+- Mutación en `--parallel`: un `use DateTimeImmutable;` en un fichero de prueba sin namespace rompe el arranque de los hijos.
+- Alpine/musl: no existe `GLOB_BRACE`. `Finder::contains()` une varias llamadas con O. Hook de Pint activo: el fichero se
+  reformatea al guardar, y un `use` añadido en un Edit anterior al que lo usa desaparece.
+- La migración `2026_08_30_100100_grant_read_ability.php` tiene nombre corto a propósito (Larastan).
+- Ante un fallo «inesperado», comparar `.env` local con `.env.example`; `composer install` en el contenedor si `vendor` local
+  difiere del lock (`RuntimeEnvironmentTest` lo destapa).
 
-- **`shift_entries_no_overlap` cruza jornadas y el agregado `WorkDay` solo ve la suya**: una regla enunciada sobre «el turno abierto»
-  o sobre «los tramos de la jornada» deja fuera el turno de noche cerrado de la jornada anterior; en el camino de apertura hay que
-  preguntar por empleado (`WorkDayRepository::closedEntryEndingAfter`, servida por el índice GiST de la propia restricción) (RN-18).
-- **Una detección nocturna que acota por `occurred_at` no sirve para hechos que llegan tarde a propósito** (elementos atascados en
-  colas): acotar por `recorded_at` y derivar la jornada del `occurred_at` (RN-18).
-- **Un `workflow_dispatch` nuevo no se puede lanzar desde una rama hasta que el fichero existe en la rama por defecto** (404 en la API): la primera ejecución de un workflow nuevo es tras integrar; después sí se lanza con `--ref rama` (3.6, restos).
-- **El paquete instala con `APP_ENV=production` (lo exige `install.sh`) y el aprovisionamiento de k6 se niega contra producción**: el workflow declara la pila `staging` DESPUÉS de instalar y recrea los roles PHP; ningún camino del producto consulta `isProduction()` (3.6, restos).
-- **El runner de GitHub no alcanza RNF-P-06** (4 vCPU compartidas entre servidor y once generadores: ~29 fichajes/s con p95 de decenas de segundos, igual con el pool doblado): allí RNF-P-02/06/08 se juzgan contra `baseline.json` (`K6_LATENCY_VERDICT=baseline`), nunca contra el umbral (decisión 19).
-- **Prueba de carga en Docker Desktop: los `429` salen de `limit_conn conn_per_ip 64`, no de `limit_req`** (3.6): con p95 de 44 s
-  cada origen acumula rate × latencia ≈ 400 conexiones abiertas; `summary.json.edge_limits` distingue las dos causas. Un rojo por
-  429 en local no dice nada del presupuesto de tasa; el veredicto vale solo en el runner o en Linux.
-- **`grafana/k6` corre con uid 12345** y en un runner Linux no escribe en un `.results/` creado por el invocante: `run.sh` lanza con
-  `--user "$(id -u):$(id -g)"`. Docker Desktop lo esconde (ignora el uid del bind mount). Y `install.sh` deja `paquete/.env` a
-  `root:root 0600`: `docker compose --env-file` desde el usuario del runner necesita el `chown` previo (3.6).
-- **`actions/upload-artifact` v4 excluye los directorios ocultos** (`.results/`) salvo `include-hidden-files: true` (3.6).
-- **`GLOB_BRACE` no existe en la imagen Alpine/musl del contenedor `app`**: «Undefined constant»; usar `scandir()`/`Finder` (3.6).
-- **En una cadena de reemplazo de `s{}{}` de Perl sin `/e`, `$\``, `$&` y `$'` se interpolan**: un reemplazo con `?$\`` (regex escrita
-  dentro de código Markdown) insertó 720 líneas del propio documento. Escapar `\$` y comprobar `git diff --stat` contra las líneas
-  esperadas (3.6).
-- **`Finder::contains()` de Symfony une varias llamadas con O, no con Y** (`MultiplePcreFilterIterator`): dos condiciones van en un
-  solo patrón con anticipaciones (3.6).
-- **Un script de datos sintéticos que selecciona por convención de nombre (`K6%`) es peligroso sobre un clon de producción**: la
-  pertenencia se decide por lo que el propio script crea (departamento propio), con confirmación explícita, y abortando ante
-  cualquier coincidencia ajena (3.6, bloqueante de seguridad).
-- **Orden de candados entre el fichaje y cualquier escritura que audite**: el fichaje toma el candado consultivo de la cadena
-  (`EmployeeClockedIn/Out` se graba antes que `DailyTotalsRecalculated`) y DESPUÉS la fila de `daily_totals`. Todo camino que
-  escriba la proyección y deje asiento toma los candados en ese orden (`SerializedLedgerWrite::withChainLock`) o hay abrazo mortal
-  y la víctima puede ser el fichaje (3.6, la prueba lo reproduce: 500 antes, 200 después).
-- **Reloj fijo + token Sanctum = bomba de tiempo** (16-09-2026): una prueba con framework tiene dos relojes, el puerto `Clock` del
-  dominio y Carbon (Sanctum, Eloquent, limitador). `PlanLimitsDoNotBlockTest` instalaba un `FixedClock` de junio, emitía con él un
-  token de quiosco (caducidad = junio + 90 días de `IDENTITY_DEVICE_TOKEN_DAYS`) y fichaba; Sanctum comparaba la caducidad con el
-  reloj REAL y desde el 13-09 respondía 401: `main` en rojo tres días sin que nadie tocara nada. **En Feature, Integration y Contract
-  el reloj se detiene con `FrozenTime::at('…')`** (`tests/Support/Time`), que instala el `FixedClock` y congela Carbon en el mismo
-  instante; `FrozenTimeTest` (Architecture) prohíbe `->instance(Clock::class, …)` en esas suites. `audit_log` está particionado por
-  año: un reloj detenido antes de 2026 rompe cualquier asiento. La CI nocturna (`schedule`) es la única que corre sin un push
-  delante: si `main` pasa a rojo sin commits, mirar primero fechas fijas.
-- **La webcam del portátil no vale para juzgar el enfoque del quiosco** (10-09-2026): «Windows Studio Effects» (encuadre
-  automático + desenfoque de fondo, equipos con NPU) se aplica antes de que Chrome vea la imagen y el QR llega recortado y borroso
-  sin que la PWA pueda evitarlo; se apaga en Configuración › Cámaras. Y una webcam no tiene autoenfoque: tarjeta a 30-50 cm.
-  Documentado en `docs/runbooks/alta-nuevo-quiosco.md` §6 y plan 01 §C.2; la **3.3** debe mostrar `getSettings()` (incluido
-  `backgroundBlur`) en la pantalla de diagnóstico (nota en su ficha, paso 4).
-- **Docker Desktop y `node-exporter` (3.2):** el montaje `/:/host:ro,rslave` de producción no arranca en Windows/macOS («path / is
-  mounted on / but it is not a shared or slave mount»); `compose.dev.yaml` lo lleva sin `rslave`. Aun así la VM no publica ninguna
-  serie con `mountpoint="/"` (su raíz es `overlay`), así que en local `EspacioEnDiscoBajo` no se ejercita con datos reales y
-  `MetricasDelAnfitrionAusentes` queda encendida: las dos se prueban con `promtool` y en Linux. `docker compose -f
-  infra/compose.prod.yaml config` exige un `.env` junto al compose (`cp .env infra/.env` temporal, y borrarlo: está ignorado).
-- **Ningún contenedor de terceros recibe `env_file: .env`** (3.2, doc 07 A-6): Alertmanager lo heredaba de la 1.18 y exponía la clave
-  HMAC del QR en `docker inspect`. Variables nombradas una a una con `environment:`; `AlertmanagerConfigTest` lo vigila. Y todo
-  renderizado de YAML desde el entorno escapa `'` y se valida con la herramienta real antes de arrancar.
-- **El `sh` del runner de la CI es `dash`** (3.2): un `#!/bin/sh` con `set -o pipefail` o `IFS=$'
-	'` pasa en Git Bash (bash) y en BusyBox (ash) y cae en la CI («Illegal option»). Los scripts POSIX llevan `set -eu` e `IFS="$(printf '
-	')"`, `make sh-lint` lo exige por shebang, y se prueban con `docker run debian:stable-slim sh …`.
-- **`promtool test rules` fija el reloj en 1970**: una regla con `month()` no se puede disparar en pruebas; `expect($output)->not->toContain('serie 1')`
-  casa también con un `# HELP` que empiece por «serie 1 mientras…» (pasó con `kronoqr_maintenance_active`).
-- **La mutación va en `--parallel` desde la 5.12** (830 s → 85 s en el dominio de `Product`; en serie la CI tardaba 37 min
-  y la 5.12 la sacó del tope de 45 del job ③, ahora 60). En paralelo, un `use DateTimeImmutable;` (clase global) en un
-  fichero de prueba **sin namespace** rompe el arranque de los hijos como `ErrorException` («use statement with
-  non-compound name has no effect»): no dejar ninguno. Los mutantes sin prueba de `Product/Domain` son de 5.1–5.10
-  (`InvalidSettingValue`, `SettingKey`, `SettingDefinition`, `InvalidComplianceProfileValue`, `InvalidLicenseKey`…); el MSI
-  real de `Product` es 81,77 % (el 74,85 % local era de media plantilla, ver el *bind mount* más abajo). **Toda cifra de
-  mutación o cobertura se lee de la CI**, nunca del portátil.
-- **El bind mount también ciega la cobertura y la mutación locales** (24-09-2026, cierre de la Fase 3): los ~90 ficheros de `app/`
-  que `SourceDiscoveryTest` lista como perdidos no entran en el informe de cobertura de PHPUnit, Pest los da por no cubiertos y
-  `make mutate --covered-only` **no crea ningún mutante** para ellos («0 Mutations for 0 Files» en `AdoptionTarget`; sin la opción,
-  todos «uncovered»). No es un hueco de pruebas ni del plugin. Para medir en esta máquina: copiar el backend dentro del contenedor
-  y mutar allí: `docker compose --env-file .env -f infra/compose.dev.yaml exec -T -e XDEBUG_MODE=coverage app sh -c 'rm -rf /tmp/kq
-  && cp -a . /tmp/kq && cd /tmp/kq && PHP_INI_SCAN_DIR=":$(pwd)/tools/mutation" vendor/bin/pest --mutate --parallel --path=…
-  --testsuite=Unit --covered-only --no-cache'` (el dominio entero: 12 min, mismo MSI que la CI). La cifra oficial sigue siendo la de la CI.
-- **`docs/trazabilidad-pruebas.md` está a 0 bytes mientras `make traceability` corre** (>3 min; más bajo carga): make trunca el
-  fichero al abrir la redirección y el contenedor tarda en generar. Un agente que lo vea vacío y haga `git checkout --` pisa la
-  regeneración (pasó en el cierre de la Fase 3). Regenerar solo sin agentes activos y comprobar el tamaño (~900 KB) y la línea «Fase
-  en curso» antes del commit.
-- **Con `failOnWarning` (desde el cierre de la Fase 3), un aviso PHP en la CARGA de un fichero de pruebas pone la suite en 1 con todo
-  en verde y sin que Pest imprima nada** (ni con `--display-all-issues`): PHPUnit lo registra como «Test Runner Triggered PHP
-  Warning». Diagnóstico: `vendor/bin/pest --testsuite=X --log-events-text /tmp/e.txt` y `grep "Triggered PHP Warning" /tmp/e.txt`,
-  que da fichero y línea. La causa típica es una `const` global repetida entre dos ficheros de la misma suite
-  (`AHORA_DEL_FICHAJE` en `RegisterScanTest` y en `TracingDoesNotBlockClockingTest`): prefijo por fichero.
-- **`docs/` va montado `:ro` en el contenedor `app`** (`infra/compose.dev.yaml`): `qa:traceability` en modo escritura falla ahí;
-  la matriz se regenera con `make traceability` (usa `--output=-` y escribe desde el anfitrión). `TraceabilityMatrixFreshnessTest`
-  cae si la matriz versionada no coincide con lo que generaría el comando: **regenerar antes de cada commit que toque etiquetas**.
-- **`make test-unit` en local tarda 5,5 s y el presupuesto es 5 s** (doc 02 §9.2; en la CI 1,6 s): la puerta sale roja en Windows
-  por el *bind mount*, no por las pruebas. No subir el techo; leer el tiempo de la CI.
-- **La CI cancela la ejecución en curso de la misma rama con cada push** (`concurrency: ci-${{ github.ref }}`,
-  `cancel-in-progress`). Una CI manual (`gh workflow run ci.yml --ref rama`, la única que corre ⑧b fuera de `main`) se
-  lanza **después** del último push, y no se empuja nada más —ni el HANDOFF— hasta que termine.
-- **El *bind mount* de Docker Desktop pierde ficheros al recorrer directorios**: `RecursiveDirectoryIterator` (PHPUnit/Pest)
-  sobre `tests/Feature` devolvía 78 ficheros de 116 y ninguna suite avisaba. `phpunit.xml` va por subdirectorio y
-  `TestDiscoveryTest` (Architecture) falla si vuelve a faltar uno: si falla en local, declarar el directorio afectado aparte.
-  **Un directorio nuevo bajo `tests/Feature` hay que añadirlo a `phpunit.xml`** (la misma prueba lo exige). No dar por buena
-  una cifra local de pruebas sin esa guarda en verde.
-  **También afecta a `backend/app/` (09-09-2026, cierre de Fase 5):** el iterador ve 1.189 de los 1.234 `.php` y pierde los
-  **45 de `Product/Domain/ValueObject`**, siempre los mismos. Consecuencias: la **mutación y la cobertura locales de `Product`
-  medían 52 de 97 ficheros** (el MSI del 74,85 % es de media plantilla), y las pruebas de arquitectura que recorrían con el
-  iterador daban **verde falso** —no hay nada que denunciar en un fichero que no se ve—. Ya recorren con `scandir`
-  (`ModuleTree::phpFilesUnder()`, usado por `AggregateBoundaryTest`, `OutboundChannelsTest`, `DataProtectionGuaranteesTest` y
-  `Support/SettingsSurface.php`); con los 45 dentro **no aparece ninguna violación nueva**. `SourceDiscoveryTest`
-  (Architecture) es el testigo: **en local sale en rojo a propósito** —es el síntoma del sistema de ficheros, no un defecto
-  del producto— y en la CI (Linux, sin bind mount) está en verde. Cobertura, mutación y Deptrac se leen **solo de la CI**.
-- **`package-lock.json`: cualquier `npm install` en Windows con `node_modules/` presente** pierde las
-  plataformas nativas de `@tailwindcss/oxide` y rompe la imagen de Nginx (npm/cli#4828, sufrido dos
-  veces). Operar el lock **siempre desde Linux y sin `node_modules`**; receta en la cabecera de
-  `infra/docker/nginx/Dockerfile`; guarda en `QualityGatesTest`.
-- Los contenedores `node-*` **funcionan desde `chore/restos-3.8`** (raíz del workspace en `/app`, `node_modules` en los cinco
-  volúmenes `node-modules-*`, solo `node-kiosk` instala; plan 01 §B.7). Si `npm ci` queda a medias: `docker volume rm` de esos
-  cinco y `make up`. Servir desde el host con `npm run dev` (5173/5174/5175) sigue valiendo como alternativa.
-- La base `fichaje_test` es compartida: **no correr dos suites de backend a la vez** (fallos falsos
-  «relation … does not exist»). `MigrationsRoundTripTest` deshace y reaplica **todas** las migraciones
-  (usa `CommittedDatabase`): jamás en paralelo con otra suite.
-- `make trivy-fs` **no termina** sobre el bind mount NTFS; verificar con la CI o con una copia en disco
-  Linux. Las pruebas de permisos de fichero (`chmod`) solo valen **dentro del contenedor**.
-- Scripts de shell: el `printf` de bash **no admite especificadores posicionales**; nunca una tubería
-  que corte a su productor (`head` tras `tr </dev/urandom`) — con `set -E` + `trap ERR` + `pipefail` el
-  SIGPIPE dispara la vuelta atrás dentro de una subshell (prueba que lo prohíbe en
-  `tests/Integration/Install/`). **`IFS=$'\n\t'` de los scripts anula la división por espacios**: un
-  `set -- ${line}` o un `read a b` sin `IFS=' '` local deja todo en el primer campo (pasó en
-  `kq_versions_load`).
-- **Una clave nueva de `installation_settings` va en DOS listas del contrato** (`SettingKey` y el `propertyNames` de
-  `UpdateSettingsRequest`), en `SettingsSurface::SCREENS` (Architecture), en la pantalla del panel con su `data-test`, en
-  `configuracion.md` ES/EN con la ruta por la que se cambia y en `.env.example`: cinco sitios, tres pruebas (3.5).
-- **La hoja impresa del empleado vive en `lang/{es,en}/instructions-sheet.php` y `ClientDocumentationTest` solo comprueba guía ⊇
-  código**: añadir texto a la guía no avisa de que el PDF no lo imprime; y tres párrafos más la sacaron de una cara A4
-  (`InstructionsSheetLayoutTest` con Chromium real; margen 14 → 12 mm) (3.5).
-- **Un proveedor `scoped()` (p. ej. `OperationalSettingsProvider`) memoriza por petición: en una prueba que cambia el ajuste hay
-  que `app()->forgetScopedInstances()`** antes de volver a leerlo (3.5).
-- **Una regla de continuación de estado («sigue en pausa») necesita SIEMPRE una cota temporal derivada de un umbral del perfil**, o
-  el estado se vuelve eterno y absorbe la jornada siguiente; y una marca derivada de `scan_events` (`closed_by`) debe seguir la
-  cadena de versiones de RN-13 o la corrección la borra (3.5, bloqueantes de la revisión).
-- **Un agente que corre cobertura dentro del contenedor con una ruta de Windows deja `backend/C：/…/unit-clover.xml`** (dos puntos de
-  ancho completo U+F03A): borrar con `rm -rf "$(printf 'backend/C\357\200\272')"` antes de `git add -A` (3.5).
-- **Las series del colector *textfile* se declaran en `textfileSeries()` de `tests/Architecture/MetricsCatalogueTest.php` y en el
-  doc 02 §8.2**, no en `MetricCatalogue.php` (que solo cataloga lo que sale por `/metrics`): una serie `.prom` nueva sin esas dos
-  entradas rompe `MetricsCatalogueTest` o `GrafanaDashboardsTest` (3.4).
-- **`wrapper.find(...)` de `@vue/test-utils` nunca es falsy** (devuelve un envoltorio también cuando no encuentra nada): una
-  aserción `expect(wrapper.find(sel)).toBeTruthy()` no puede fallar; usar `findAll(sel).length` o `.exists()` (3.4).
-- **Una regla suspendida por `ComplianceRuleSuspension` deja su rama de emisión sin ejercitar en todos los niveles** (la constante es
-  privada y no se puede levantar desde una prueba): fijar al menos la fábrica del hallazgo (`ComplianceFinding::missingBreak()`).
-- **Pest: `expect($array)->toContain($x, $mensaje)` trata el mensaje como otro elemento a buscar**; para
-  un mensaje propio usar `expect(in_array(...))->toBeTrue($mensaje)`. PHPStan 9 rechaza `(int) $mixed`:
-  con `DB::scalar()`/`selectOne()` usar el query builder (`count()`, `value()`).
-- `Request::create()` de Symfony añade `Accept-Language: en-us…` por defecto; el helper `Api` de
-  pruebas lo anula para que el caso neutro sea «sin cabecera».
-- `CommittedDatabase` restaura los catálogos de producto vía `ProductCatalogBaseline` en cada vaciado —
-  no escribir `afterEach` a mano para eso.
-- El nombre corto de la migración `2026_08_30_100100_grant_read_ability.php` es **a propósito** (con el
-  largo, PHPStan/Larastan rompía en ficheros ajenos; causa no encontrada, anotado en su docblock).
-- Los `.env` locales acumulan desfase con `.env.example`: ante un fallo «inesperado», comparar los dos
-  antes de buscar en el código.
-- Hook de Pint activo: tras editar un `.php` de backend, el fichero puede quedar reformateado al
-  instante.
-- **Al tocar `docs/api/openapi.yaml`, regenerar los TRES clientes** (`npm run api:generate` en `frontend-admin`, `frontend-kiosk` y `frontend-portal`): la etapa ① de la CI compara cada `schema.d.ts` versionado con el contrato y falla si uno no se regeneró, aunque esa SPA no use las rutas nuevas (pasó en la primera CI de la 5.10).
-- gitleaks (job `security`) marca como clave cualquier literal `NOMBRE_KEY=valor` aunque sea un ejemplo
-  de prueba: en las aserciones, comprobar el valor sin el nombre de la variable delante.
-- **`npm audit` de la CI (job `security`) cae por avisos nuevos ajenos al cambio** (08-09-2026: `js-yaml` 4.3.1, fijado
-  en exacto por `@redocly/openapi-core` ← `openapi-typescript`). Se resuelve con `overrides` en el `package.json` raíz y
-  regenerando el lock **desde un contenedor Linux con solo los manifiestos** (`node:24-alpine`, `npm audit fix
-  --package-lock-only --ignore-scripts`); nunca `npm install` en Windows. Comprobar después el guarda de `QualityGatesTest`
-  («mantiene en el lock los binarios nativos»).
+### Windows, Docker Desktop y bind mount
 
-- **`packages/web-kit` no compila `.vue` en Vitest** (sin `@vitejs/plugin-vue`, a propósito: los componentes
-  los prueban las SPA). Añadir el plugin exigiría `npm install` en Windows, que es la trampa del lock de
-  arriba. Un `.spec.ts` de web-kit que importe un `.vue` falla al cargar.
-- **Empalmar texto en un `.md` con `perl -0pi` leyendo el reemplazo con `:encoding(UTF-8)` recodifica el
-  resto del fichero** (mojibake en todas las tildes). Leer el reemplazo con `:raw` para que todo sean bytes.
+- **El bind mount pierde ficheros al recorrer directorios** (`tests/Feature` y `backend/app/`). `phpunit.xml` va por
+  subdirectorio y `TestDiscoveryTest` exige declarar cada directorio nuevo de `tests/Feature`; `SourceDiscoveryTest` sale en
+  rojo en local a propósito. Cobertura, mutación y Deptrac locales mienten: **toda cifra se lee de la CI**, o se mide en una copia
+  dentro del contenedor (`rm -rf /tmp/kq && cp -a . /tmp/kq && cd /tmp/kq && …`, Deptrac con `--no-cache`).
+- `make test-unit` en local supera el techo de 6 s por el bind mount; leer el tiempo de la CI, no subir el techo.
+- `make trivy-fs` no termina sobre NTFS: vale la CI (a mano: `--timeout 40m` y saltar `backend/storage`, `.claude`,
+  `backend/.deptrac.cache`). Las pruebas de `chmod` solo valen dentro del contenedor.
+- **`docs/` va `:ro` en `app`:** la matriz se regenera con `make traceability` (~10 min con los E2E, sin agentes activos). El
+  fichero está a 0 bytes mientras corre: no hacer `git checkout --` sobre él; comprobar tamaño (~900 KB) antes del commit.
+  `TraceabilityMatrixFreshnessTest` falla hasta regenerar. Desde un worktree, `make traceability` lee el checkout principal.
+- **`Makefile` bloqueado** («Device or resource busy», «unable to unlink»): un `make.exe` huérfano o la extensión Makefile Tools
+  de VS Code. Matar por PID con `Stop-Process` o recargar VS Code; mientras, trabajar en un worktree o
+  `git show rev:Makefile > Makefile`.
+- Un agente que corre cobertura con ruta de Windows deja `backend/C：/…` (U+F03A): `rm -rf "$(printf 'backend/C\357\200\272')"`
+  antes de `git add`. Hay un directorio `C:` sin seguimiento en `backend/` con restos antiguos. Añadir siempre rutas explícitas.
+- **Redis local con AOF corrupto** tras apagar el portátil con Docker en marcha: `make down` antes de apagar; reparar con
+  `redis-check-aof --fix` como indica `doctor.sh`.
+- `main` local se queda atrás: actualizarlo antes de cambiar a él (llegó a ir 1 044 commits atrasado).
+- La webcam del portátil no vale para juzgar el enfoque (Windows Studio Effects recorta y desenfoca; sin autoenfoque: 30-50 cm).
+- `node-exporter` en Docker Desktop sin `rslave`; `EspacioEnDiscoBajo` y `MetricasDelAnfitrionAusentes` solo en Linux.
+  `docker compose -f infra/compose.prod.yaml config` exige un `.env` junto al compose (copiarlo y borrarlo).
+- Los contenedores `node-*` son Alpine/musl: Chromium de Playwright no arranca; los E2E van en la CI (job ⑦) o en el host
+  (`npm --prefix frontend-x run test:e2e`; navegadores en `~/AppData/Local/ms-playwright`, binario en el `node_modules` raíz).
+  Si `npm ci` de los `node-*` queda a medias: `docker volume rm` de los cinco `node-modules-*` y `make up`.
+- `node --test load-tests/k6/` falla en Windows: pasar la ruta del fichero.
+- **Carga en local:** los 429 salen de `limit_conn`, no de `limit_req`; el veredicto solo vale en el runner o en Linux. El runner
+  de GitHub no alcanza RNF-P-06: allí RNF-P-02/06/08 se juzgan contra `baseline.json` (mediana de tres pasadas; rehacer con
+  `baseline.js`).
+
+### npm y lock
+
+- **`package-lock.json` solo desde Linux y sin `node_modules`** (`node:24-alpine`, `npm install --package-lock-only
+  --ignore-scripts` sobre una copia con solo manifiestos): `npm install` en Windows pierde los binarios nativos de
+  `@tailwindcss/oxide` y rompe la imagen de nginx (guarda en `QualityGatesTest`). Avisos nuevos de `npm audit`: `overrides` en el
+  `package.json` raíz y `npm audit fix --package-lock-only` igual. `npm audit` bloquea solo producción (`--omit=dev`).
+- Una PR de Dependabot de npm integrada mientras otra rama lleva el lock regenerado deja conflicto: tomar los manifiestos de
+  `main`, reaplicar y regenerar. Integrar o aplazar las de npm antes de abrir una rama que toque el lock.
+- `npm ci` de otro agente reinstala `node_modules` y tumba cualquier `vitest`/`playwright` en vuelo.
+- `packages/web-kit` no compila `.vue` en Vitest (a propósito). Vitest corre en `node` por defecto: las specs con DOM llevan
+  `// @vitest-environment jsdom`, y un `[Vue warn]` hace fallar la prueba.
+- `wrapper.find()` de `@vue/test-utils` nunca es falsy (usar `.exists()`). Con `page.clock`, un `throw` en `setTimeout` no da
+  evento `error` (usar `dispatchEvent(new ErrorEvent(…))`), `install()` no pausa el reloj y la cámara falsa no pasa por él.
+
+### Shell, git y herramientas
+
+- **`sh` de la CI es `dash`:** `#!/bin/sh` sin `pipefail` ni `$'\n\t'` (`set -eu`, `IFS="$(printf …)"`); probar con
+  `docker run debian:stable-slim sh …`. Una biblioteca nueva en `infra/scripts/lib/` lleva `set -euo pipefail` e `IFS=$'\n\t'`
+  (`make sh-lint`), y ese `IFS` anula la división por espacios (`read a b` necesita `IFS=' '` local).
+- **`cmd | grep -q` bajo `pipefail` responde NO cuando es SÍ** (EPIPE del productor): «¿existe el comando?» con
+  `kq_app_knows_command`, nunca con tubería ni `2>/dev/null`. Nada de tuberías que corten a su productor con `trap ERR`. El
+  `printf` de bash no admite posicionales.
+- **Herramienta Bash:** el heredoc con comillas simples falla y se come las barras invertidas; textos largos con Write y empalme
+  con perl. `perl -0pi` debe leer con `<:raw` (con `:encoding(UTF-8)` recodifica el fichero entero); en `s{}{}` sin `/e`,
+  `` $` ``, `$&` y `$'` se interpolan: escapar y comprobar `git diff --stat`. Sin python en la máquina.
+- Un commit cuyo mensaje empieza por `#` queda vacío al reaplicarlo en un rebase (`git -c core.commentChar=';'`).
+- Ficheros sacados con `docker cp` bajo `sudo` son de root; `cp -a` sobre un directorio ya instalado falla (`certs/`, `branding/`
+  de root). Una referencia por digest no deja la etiqueta local: `docker tag` aparte. `install.sh` deja `paquete/.env` en
+  `root:root 0600`; `grafana/k6` corre con uid 12345.
+
+### CI y GitHub
+
+- **La CI cancela la ejecución en curso de la misma rama con cada push:** la CI manual (`gh workflow run ci.yml --ref rama`, la
+  única que corre ⑧b fuera de `main`) se lanza después del último push y no se empuja nada más hasta que termine.
+- Un `workflow_dispatch` nuevo no se lanza desde una rama hasta que existe en `main`. `upload-artifact` v4 excluye directorios
+  ocultos salvo `include-hidden-files: true`. El log de un job: `gh api …/actions/jobs/{id}/logs`.
+- **Protección de `main`:** 20 comprobaciones obligatorias con `strict` (⑧, ⑧b y cobertura en `gates.yml`); renombrar un job
+  obliga a actualizar la protección o las PR quedan bloqueadas.
+- Una PR de Dependabot de imágenes necesita CI manual completa antes de integrar (la del PR no corre ⑧; Loki 3.7.8 sin `/bin/sh`
+  rompió ⑧).
+- gitleaks marca cualquier literal `NOMBRE_KEY=valor`, también en pruebas: afirmar el valor sin el nombre delante.
+- Al tocar `docs/api/openapi.yaml`, regenerar los **tres** clientes (`npm run api:generate` en cada SPA).
+- Una clave nueva de `installation_settings` va en cinco sitios (`SettingKey`, `propertyNames` de `UpdateSettingsRequest`,
+  `SettingsSurface::SCREENS`, pantalla del panel, `configuracion.md` ES/EN y `.env.example`).
+- Una serie `.prom` nueva va en `textfileSeries()` de `MetricsCatalogueTest` y en doc 02 §8.2. Toda variable nueva del `.env` que
+  no sea de la app va en EXCLUIDAS de `assert-runtime-env.sh` y en `RuntimeEnvironmentTest`.
+- Las alertas sobre contadores de Redis que nacen en 1 usan las reglas de grabación de `api.yml`. `promtool` fija el reloj en
+  1970. `prometheus.yml` es plantilla (`.template` + `render-config.sh`). Ningún contenedor de terceros recibe `env_file: .env`.
+- `check-package-links.sh` rompe ⑧ si un documento que viaja enlaza `../../infra`, `.github` o los runbooks internos
+  (`fallo-de-ci.md`, `triaje-hallazgos-seguridad.md`). La hoja del empleado vive en `lang/*/instructions-sheet.php`.
+- Ninguna prueba arranca Chromium salvo las de maquetación: inyectar `FakeCardRenderer` y `FakeInstructionsSheetRenderer`.
+
+### Dominio y base de datos
+
+- `shift_entries_no_overlap` cruza jornadas y `WorkDay` solo ve la suya: en la apertura, preguntar por empleado
+  (`closedEntryEndingAfter`). Una detección nocturna de hechos que llegan tarde acota por `recorded_at`.
+- **Orden de candados:** primero el consultivo de la cadena, después la fila de `daily_totals`
+  (`SerializedLedgerWrite::withChainLock`), o hay abrazo mortal con el fichaje.
+- Una regla de continuación de estado necesita una cota temporal del perfil; una marca derivada de `scan_events` sigue la cadena
+  de versiones de RN-13. Una regla suspendida deja su emisión sin ejercitar: fijar al menos la fábrica del hallazgo.
+- Los *triggers* de `shift_entries` e `incidents` frenan también al propietario: escribir a mano exige desactivarlos en la misma
+  transacción (runbook `discrepancia-registro-auditoria.md` §3.2). La cadena de auditoría no autentica a quien escribe (aceptado).
+- `QRCodeWriter.encode(…, 0, 0)` devuelve la matriz con zona tranquila; el 25 % del nivel Q es redundancia, no tolerancia.
+- Un script de datos sintéticos decide la pertenencia por lo que crea él mismo, nunca por convención de nombre.
 
 ## Método de trabajo acordado
 
-Una rama por fase o tarea, un commit por tarea con CI en cada push, PR al cierre con *merge commit*
-(nunca squash: el CHANGELOG se genera de los commits convencionales y **no se edita a mano**). Cada
-cierre de fase pasa por los cuatro revisores (`seguridad-cumplimiento`, `revisor-codigo`, `qa-testing`,
-`devops-observabilidad`) y sube `current_phase` en `backend/config/quality.php` solo al cerrar.
-
-Desde el 09-09-2026 hay además **Engram** (memoria local buscable, herramientas MCP `mem_*`); el reparto con este fichero
-está en `CLAUDE.md` → «Engram: memoria de búsqueda, no sustituto de `HANDOFF.md`». En resumen: este fichero manda y lleva
-la línea; Engram guarda el porqué y el detalle. Al cerrar tarea o sesión: primero `HANDOFF.md`, luego `mem_session_summary`.
+- **Una rama por bloque o tarea desde `origin/main`** recién actualizado (nada de ramas apiladas), commits convencionales, CI
+  manual completa en verde (⑧, ⑧b, cobertura y mutación), revisiones de `revisor-codigo` y `seguridad-cumplimiento` (no escriben),
+  PR y **merge commit** (nunca squash: el CHANGELOG sale de los commits y no se edita a mano). Lo integra quien ejecuta el bloque
+  si la CI está en verde; integrado y con la CI de `main` en verde, se empieza el siguiente sin preguntar.
+- `gh pr merge N --merge` siempre sola; `git push` y `gh workflow run` cada uno en su orden, sin encadenar (el clasificador
+  deniega lo encadenado).
+- Casillas del plan: las tareas ✅ en el PR del bloque; el título del bloque, en el primer commit del bloque siguiente.
+- Cada bloque que cambie algo visible para el hotel añade su párrafo a `docs/cliente/operacion.md` §11 (es/en). Una versión menor
+  obliga a regenerar las capturas (`npm run docs:screenshots`); una de parche, no.
+- **Publicar:** etiqueta → `ci.yml` → `release.yml`; **nunca empujar etiquetas antiguas con `release.yml` activo** (ejecuta el
+  `release.yml` del commit etiquetado, sin la guarda de ADR-053). `load-test.yml` no se dispara con una versión de parche: lanzarlo
+  a mano. Detalle en Engram («publicar una versión»).
+- Varios agentes en paralelo: el que toque web-kit avisa; la matriz de trazabilidad la regenera quien coordina, al final.
+- **Engram** guarda el porqué y el detalle (reparto en `CLAUDE.md`); este fichero manda. Al cerrar tarea o sesión: primero
+  `HANDOFF.md`, luego `mem_session_summary`.
 
 ## Histórico condensado
 
-Detalle de cada hito: mensajes de commit, PRs y `git show 9b1593d:HANDOFF.md`.
-
-- **27-08** — Fase 1 cerrada (18 tareas, 4 revisores) y auditoría independiente con 7 correcciones;
-  v1.0.0 → v1.1.0.
-- **28-08** — Sistema visual compartido (`web-kit`, tokens `--kq-*`, doc 06) y v1.2.0; SSDLC: job
-  `security` (gitleaks/Semgrep/Trivy/SBOM), rastro de autenticación (ADR-039), doc 07 (SAMM/ATT&CK).
-- **29-08** — **ADR-040: un centro por instalación y licencia** → v2.0.0 (contrato de gestión
-  incompatible); Trivy a bloqueante; toolchain frontend + E2E del panel + 2FA/RBAC (PRs #28–#30).
-- **30/31-08** — Fase 2 completa y cerrada (presencia en vivo con Reverb, bandeja, detección de
-  incidencias RN-10/11 — RN-12 suspendida hasta la 3.5 —, reconciliación, informes, exportaciones RGPD,
-  retención con purga sellada, rotación de clave QR); PR #35.
-- **31-08 → 02-09** — **Fase 5, tareas 5.1–5.5** en `feat/fase-5-productizacion`: 5.1
-  `installation_settings` + auditoría (manda la BD sobre el `.env`); 5.2 perfiles de cumplimiento
-  parametrizados sin retroactividad; 5.3 licencia ed25519 con verificación local y degradación honesta
-  (ADR-023: el conjunto legal no tiene caso en el enum); 5.4 instalador de cinco fases con vuelta
-  atrás, Compose de producción, etapa ⑧ de la CI (6 escenarios, verde en el run 33573780721); 5.5
-  asistente de puesta en marcha + importación masiva (backend, contrato, `frontend-admin`, revisiones y
-  arreglo del fallo intermitente de la suite). Todo en `main` vía PR #41 (`3990524`).
-- **02-09** — Rama `feat/tarea-5.6-emparejamiento-quiosco` con el hook de Pint.
-- **07-09** — **Tarea 5.6** implementada (contrato, backend Kiosk, PWA, panel, runbook, 4 revisiones);
-  commit `a1836cf`, PR #42 integrada (`d9a9a91`). Hallazgo del arnés: `ParallelRequests` con
-  `DB::purge()` revertía en silencio la transacción del hijo; corregido a `DB::disconnect()`.
-- **07-09** — **Tarea 5.7** implementada en `feat/tarea-5.7-actualizador` (sin commit al cerrar la
-  sesión): `update.sh`, `versions.txt`, `package.sh`, etapa ⑧b, modo mantenimiento, runbook y docs.
-  `VERSION` → 2.1.0.
-- **07/08-09** — **Tarea 5.8** (marca blanca) en `feat/tarea-5.8-marca-blanca`: contrato público de marca,
-  `web-kit/branding.ts` + `brandingState.ts` + `BrandMark.vue`, gating por licencia (`white_label`) sin
-  degradar el nombre, logotipo validado al guardar, idiomas unificados, pantalla «Marca» del panel; cuatro
-  agentes en paralelo y tres revisiones. PR #46, CI manual 34197180554.
-- **08/09-09** — **Tareas 5.9** (diagnóstico, `doctor`, accesos de soporte), **5.10** (exportación íntegra y telemetría),
-  **5.11** (cinco guías de cliente ES/EN con capturas sobre los dobles) y **5.12** (histórico de errores sin PII, `client_errors`
-  por el latido); PRs #47–#51. Hallazgo del *bind mount* sobre `tests/Feature` (`TestDiscoveryTest`).
-- **09-09** — **Engram** como memoria buscable junto a `HANDOFF.md` (reparto en `CLAUDE.md`). **Tarea 5.11b**: guía de RRHH,
-  guía del portal y hoja del empleado **generada por el producto** (`GET /credentials/instructions-sheet`), `CorrectionDialog`
-  (RF-PA-04: el panel no podía corregir), Playwright del portal desde cero, `ClientDocumentationTest` a ocho pares; PR #52.
-- **09/10-09** — **Fase 5 cerrada** (`current_phase => 5`): siete bloqueantes corregidos en `chore/cierre-fase-5` (`doctor.sh` en
-  el paquete, asientos `system.*` del actualizador, pantalla «Ajustes operativos», doc 05 ↔ ADR-023, matriz y etiquetas de
-  trazabilidad, CI con ④/⑥/⑦ y cobertura nocturna, `scandir` frente al *bind mount* en `app/`); doc 07 SAMM 1,47 → 1,73.
-- **22-09** — **3.7** cerrada (PR #72) y **3.8** completa (PR #74: revisión interna ASVS 2, paquete del revisor, 14 hallazgos
-  cerrados con prueba, H-14 del `grep -q` bajo `pipefail`); restos de la 3.8 (`node-*` desde el workspace, línea base del runner,
-  fila 12 del modelo de amenazas) en `chore/restos-3.8`.
+- **Agosto-septiembre 2026:** fases 1, 2, 3 y 5 cerradas; v1.0.0 → v2.1.0 (ADR-040: un centro por instalación). Diario en
+  `git show 9b1593d:HANDOFF.md`.
+- **Octubre-noviembre 2026:** verificación de la 2.1.0 (NO-GO) y correcciones por bloques → 2.2.0 (09-10), 2.2.1 (17-10),
+  2.3.0 (04-11) y 2.3.1 (05-11). Detalle en `CHANGELOG.md`, en las PR y en `git show 663221ee:HANDOFF.md`.
+- Los registros de verificación de la 2.1.0 a la 2.2.1 viven en la etiqueta `v2.3.1` (índice en `docs/verificacion/README.md`).

@@ -1168,7 +1168,7 @@ Esperado: un empleado con una baja de tres días no aparece como ausente injusti
 |---|---|
 | **Horas** | 5–7 |
 | **Agente / Skill** | `backend-laravel`, revisión de `seguridad-cumplimiento` |
-| **Requisitos** | RF-PR-06 (doc 02 §11 y Anexo A). Derivada: RN-19 «Fichaje por PIN no registrado» (verificación 2.2.0, bloque 5: [`../docs/verificacion/2.2.0-bloque5-especificacion-pin-incidencias.md`](../docs/verificacion/2.2.0-bloque5-especificacion-pin-incidencias.md), ADR-043), que reutiliza la misma cadena hallazgo → incidencia → bandeja. Y por la misma cadena, desde el bloque 18 de la verificación 2.2.0 ([ADR-047](../docs/adr/ADR-047-ningun-fichaje-sale-de-la-cola-sin-desenlace-del-servidor.md)): RN-20 «Fichaje anterior a la retirada de la credencial» y RN-22 «Fichaje descartado por el quiosco» |
+| **Requisitos** | RF-PR-06 (doc 02 §11 y Anexo A). Derivada: RN-19 «Fichaje por PIN no registrado» (verificación 2.2.0, bloque 5: [`../docs/verificacion/2.2.0-bloque5-especificacion-pin-incidencias.md`](https://github.com/BorjaPeonSaiz/KronoQR/blob/v2.3.1/docs/verificacion/2.2.0-bloque5-especificacion-pin-incidencias.md), ADR-043), que reutiliza la misma cadena hallazgo → incidencia → bandeja. Y por la misma cadena, desde el bloque 18 de la verificación 2.2.0 ([ADR-047](../docs/adr/ADR-047-ningun-fichaje-sale-de-la-cola-sin-desenlace-del-servidor.md)): RN-20 «Fichaje anterior a la retirada de la credencial» y RN-22 «Fichaje descartado por el quiosco» |
 | **Precondiciones** | Derivado: `scan_events` con `device_id` y `occurred_at` (**1.4**), la bandeja de incidencias (**2.5**), la detección programada (**2.6**) y la configuración con ámbito para los parámetros (**5.1**) |
 | **Bloquea a** | No figura dependencia en los documentos |
 

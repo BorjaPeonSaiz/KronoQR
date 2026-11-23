@@ -4,7 +4,7 @@
 |---|---|
 | **Estado** | Aceptada. **Enmendada en la 2.2.1 (bloque 18): firma con cosign y Redis por digest.** Implementada en el bloque 14 de la 2.2.0 (`release.yml`, `.github/scripts/assert-image-tags-free.sh`, `infra/compose.prod.yaml`, `infra/scripts/package.sh`, `install.sh`, `update.sh`, `doctor.sh`); la CI la ejercita con un registro local (etapa ⑧b, escenarios P0 a P3) |
 | **Fecha** | 8 de octubre de 2026 |
-| **Decide** | `arquitecto-dominio` (bloque 14 de la 2.2.0, hallazgo A6-2 de la [tanda 6 de la 2.1.0](../verificacion/2.1.0-tanda-6.md), abierto y ampliado con Redis en la [re-verificación](../verificacion/2.2.0-reverificacion-tandas-5-6-7.md)) · implementa `devops-observabilidad` · revisa `seguridad-cumplimiento` |
+| **Decide** | `arquitecto-dominio` (bloque 14 de la 2.2.0, hallazgo A6-2 de la [tanda 6 de la 2.1.0](https://github.com/BorjaPeonSaiz/KronoQR/blob/v2.3.1/docs/verificacion/2.1.0-tanda-6.md), abierto y ampliado con Redis en la [re-verificación](https://github.com/BorjaPeonSaiz/KronoQR/blob/v2.3.1/docs/verificacion/2.2.0-reverificacion-tandas-5-6-7.md)) · implementa `devops-observabilidad` · revisa `seguridad-cumplimiento` |
 | **Afecta a** | [ADR-016](ADR-016-producto-licenciado-on-premise.md) (N instalaciones en M versiones) · [ADR-054](ADR-054-la-vuelta-atras-de-una-actualizacion-es-restaurar-la-copia.md) (la versión a la que se vuelve tiene que ser la misma que se instaló) · `.github/workflows/release.yml` (jobs `etiquetas-libres`, `imagenes` y `paquete`) · `.github/scripts/assert-image-tags-free.sh` · `infra/scripts/package.sh` (`KQ_IMAGES_LOCK`) · `infra/compose.prod.yaml` (`IMAGE_DIGEST_*`) · `infra/scripts/install.sh`, `infra/scripts/update.sh` · doc 02 §11.6.1 |
 | **Requisitos** | RQ-11, RS-08, RS-10, RF-PD-10 |
 
