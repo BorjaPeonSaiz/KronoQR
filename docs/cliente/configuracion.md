@@ -843,7 +843,17 @@ deliberado: tu instalación tiene que poder funcionar en una red aislada, y una
 comprobación en línea convertiría la conectividad de otra empresa en un punto de
 fallo de tu registro horario.
 
+**La clave de licencia no es un secreto**: es una afirmación firmada sobre lo
+que has contratado, no abre nada, y perderla no tiene consecuencia. Se pide
+otra al proveedor.
+
 ### 3 bis.2 Cómo se activa
+
+**Al instalar**, pégala en `LICENSE_KEY` del `.env` **antes** de ejecutar el
+instalador (§6.17). **Si no la tienes a mano, instala igualmente**: sin licencia
+activada el sistema se instala, arranca y **registra jornada con normalidad**;
+lo único que no está disponible son las funcionalidades accesorias de §3 bis.3,
+que aparecen solas al activarla, sin reiniciar nada.
 
 **Desde el panel** (lo normal): entra como *administrador*, ve a **Licencia**,
 pega la clave en el recuadro y pulsa «Activar una clave». Puedes pegarla con
@@ -863,7 +873,30 @@ docker compose exec app php artisan license:show
 
 Ese comando imprime, en este orden: el estado, tu plan frente a lo que estás
 usando de verdad, qué está degradado, **qué sigue funcionando pase lo que pase**
-y qué hacer. Es el que te pedirá soporte si llamas.
+y qué hacer. Es el que te pedirá soporte si llamas. No hay nada programado que
+revise la licencia: se mira cuando se quiere mirar.
+
+**Códigos de salida**, por si quieres vigilarla desde tu propio sistema:
+
+| Orden | Código | Significa |
+| --- | --- | --- |
+| `license:show` | `0` | Licencia vigente y sin exceso de plan. Nada que hacer |
+| `license:show` | `1` | **Hay algo que mirar**: no hay licencia, caducó, caduca pronto, no se puede verificar, o se ha superado una cifra del plan. **No significa que el sistema esté parado**, y el propio comando lo dice: se sigue fichando, consultando el registro, exportando para la Inspección y haciendo copias exactamente igual |
+| `license:activate` | `0` | Activada y vigente |
+| `license:activate` | `1` | Activada, pero **no vigente** todavía: caducada, o su vigencia empieza más adelante. Se guardó igual |
+| `license:activate` | `2` | **No se activó nada.** La clave no verifica, o no indicaste ninguna. La licencia anterior sigue como estaba |
+
+El estado también sale en la sonda de salud, para vigilarlo sin entrar por SSH:
+
+```bash
+curl -sS https://TU-SERVIDOR/api/v1/health
+# {"status":"ok","version":"1.4.2","license":"valid"}
+```
+
+Ese campo puede decir `unknown`: significa que la sonda no ha podido saberlo
+**sin tocar la base de datos**, que es su regla —una sonda de vida que consulta
+PostgreSQL hace reiniciar el servicio cuando lo caído es PostgreSQL—. El dato
+autoritativo es `license:show`.
 
 > **La clave completa no aparece nunca** en la salida del comando ni en el panel:
 > se enseña su *huella*, doce caracteres, que es lo que sirve para confirmar por
@@ -883,6 +916,10 @@ funcionalidades dejan de estar disponibles:
 | **Informes por periodo** y su comparativa con las horas contratadas | La consulta del registro de cada persona, la exportación para la Inspección y el portal del empleado |
 | **La salida a nómina** (sección 2.5), tanto la descarga inmediata como la generación en segundo plano | La consulta del registro de cada persona y la exportación para la Inspección, que no se degradan nunca |
 | **Presencia en tiempo real**: pasa a **actualizarse por sondeo**, no se apaga. La pantalla sigue enseñando quién está dentro, con unos segundos de retraso, y lo dice | — |
+| **El cuadro de impacto y adopción** (material de gestión, no registro) | — |
+| **El resumen semanal por correo**: deja de enviarse | — |
+| **La marca propia** (logotipo y color, sección 2.2): vuelve la marca del fabricante. Lo configurado se conserva y vuelve a aplicarse solo al renovar | — |
+| **La telemetría** (sección 3 quinquies), que ya viene apagada de serie | — |
 
 Y estas **nunca** se ven afectadas, con la licencia como esté:
 
@@ -2289,7 +2326,7 @@ custodia. El procedimiento y la restauración están en
 | Variable | Marca | Qué hace | De serie | Cuándo cambiarla | ¿Afecta al cálculo de horas? |
 | --- | --- | --- | --- | --- | --- |
 | `BACKUP_PATH` | `[CLIENTE]` | Destino de las copias, montado en la misma ruta dentro de los contenedores. Ver [`instalacion.md`](instalacion.md) §6 | `/var/backups/fichaje` | **Al instalar, siempre**, por un destino que no esté en el mismo disco que la base de datos. Si es un recurso de red, **tiene que estar montado antes** de levantar los servicios | No |
-| `BACKUP_ENCRYPTION_KEY` | `[INSTALADOR]` | Cifra y autentica las copias. **Sin ella no hay copia**: el script se niega a empezar | (vacía; la genera `install.sh`) | Nunca a mano. **Es la única que hay que custodiar fuera del servidor**: sin ella no se restaura nada. Ver [`operacion.md`](operacion.md) §9 | No |
+| `BACKUP_ENCRYPTION_KEY` | `[INSTALADOR]` | Cifra y autentica las copias. **Sin ella no hay copia**: el script se niega a empezar | (vacía; la genera `install.sh`) | Nunca a mano. **Es la imprescindible de custodiar fuera del servidor**: sin ella no se restaura nada. Ver [`operacion.md`](operacion.md) §9 y el inventario de [`rotacion-secretos.md`](../runbooks/rotacion-secretos.md) §0 | No |
 | `BACKUP_WAL_KEY` | `[INSTALADOR]` | Cifra y autentica el WAL archivado (desde la 2.2.0). Se **deriva** de `BACKUP_ENCRYPTION_KEY` y solo la recibe `postgres`; no abre volcados ni copias físicas. Sin ella, o si no es la derivada, PostgreSQL **no archiva** (nunca en claro) y `./doctor.sh` falla | (vacía; la calculan `install.sh` y `update.sh`) | Nunca a mano ni copiada de otro servidor. Si falta o no coincide, recalcúlala desde el directorio de la instalación con `sudo bash ./backup.sh derive-wal-key --write-env .env` y recrea `postgres` (`sudo docker compose up -d postgres`) ([`instalacion.md`](instalacion.md) §6, «`BACKUP_PATH`») | No |
 | `BACKUP_RETENTION_DAYS` | — | Días que se conservan las copias diarias. Ver [`operacion.md`](operacion.md) §6 | `30` | Si tu política de copias es otra. **Ojo con el espacio en disco** antes de subirlo | No |
 | `BACKUP_MIN_COPIES` | — | Copias que nunca se borran, aunque hayan caducado todas | `3` | Casi nunca. Es la red de seguridad que evita quedarse sin ninguna copia | No |

@@ -1166,7 +1166,7 @@ services:
   # entorno de un binario de terceros que solo necesita quince variables.
   alertmanager:
     profiles: [observability]
-    image: prom/alertmanager:v0.34.2
+    image: prom/alertmanager:v0.35.0
     entrypoint: ["/etc/alertmanager/render-config.sh"]
     command:
       - --config.file=/alertmanager/alertmanager.yml
@@ -1251,7 +1251,7 @@ services:
 
   loki:
     profiles: [observability]
-    image: grafana/loki:3.7.9
+    image: grafana/loki:3.7.10
     # Sin entrypoint propio: la imagen no tiene shell. LOG_RETENTION_HOURS lo valida el servicio
     # `retention-guard` (dependencia de abajo) antes de que este arranque.
     entrypoint: ["/usr/bin/loki"]

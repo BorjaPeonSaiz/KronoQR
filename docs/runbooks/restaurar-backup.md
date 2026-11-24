@@ -57,8 +57,11 @@ Si una de estas alertas suena, ese es el primer sitio al que mirar.
    (`BACKUP_ENCRYPTION_KEY_PREVIOUS`, solo para restaurar: se pasa con `-e BACKUP_ENCRYPTION_KEY_PREVIOUS` a `docker compose run --rm restore`; no se deja en el `.env`). La clave del WAL
    (`BACKUP_WAL_KEY`) **se deriva** de esa misma clave: no hay una segunda que
    custodiar (`backup.sh derive-wal-key`).
-2. **La copia no sale de aquí.** Vive en la infraestructura del cliente; el
-   fabricante no la recibe ni la custodia (regla dura 16, RL-14).
+2. **La copia no sale de la infraestructura del cliente**: el fabricante no la
+   recibe ni la custodia (regla dura 16, RL-14). Del **servidor** sí tiene que
+   salir, a otro disco físico o a otra máquina: cómo se monta el destino y cómo
+   se comprueba, en
+   [`../cliente/instalacion.md`](../cliente/instalacion.md) §6, «`BACKUP_PATH`».
 3. **Nada de lo que imprimen estos scripts contiene datos personales**
    (regla dura 21): rutas, nombres de tabla y números. Se pueden pegar en un
    parte de incidencia tal cual.
@@ -82,9 +85,20 @@ el mismo entorno y lo retira al terminar.
 
 ## 2. La copia ha fallado
 
+**Síntoma.** Suena `CopiaDeSeguridadFallida`, `CopiaDeSeguridadSinVerificar` o
+`CopiaDeSeguridadAusente`, o `./doctor.sh` avisa de que no puede escribir en el
+directorio de copias. **Impacto:** el fichaje no se entera, pero **sin una
+copia verificada no hay actualización** (`update.sh` se niega en su paso 3) y,
+si hubiera que restaurar, volverías a la última copia buena. Resuélvelo el
+mismo día.
+
 ### Diagnóstico
 
 ```bash
+# 0. ¿Está en marcha quien hace las copias, y qué ha dicho en las últimas 24 h?
+docker compose ps scheduler
+docker compose logs --since 24h scheduler | grep -i backup
+
 # 1. Qué dice la última ejecución (código y motivo)
 docker compose exec scheduler php artisan backup:verify
 
@@ -113,15 +127,18 @@ las copias— no está lanzando sus tareas (§4.3).
 
 ### Códigos de salida y qué significa cada uno
 
-Es la tabla común de los cinco scripts ([`../cliente/operacion.md`](../cliente/operacion.md) §8; hasta la 2.0.0 `backup.sh` tenía una propia, la equivalencia está allí):
+Qué significa cada código lo dice la tabla común de los scripts, en
+[`../cliente/operacion.md`](../cliente/operacion.md) §8 (hasta la 2.0.0
+`backup.sh` tenía una propia; la equivalencia también está allí). Lo que suele
+haber detrás en una copia, y qué hacer:
 
-| Código | Significa | Qué hacer |
+| Código | Causa más frecuente | Qué hacer |
 | --- | --- | --- |
-| `2` | Falta una herramienta, no se llega a la base, el destino no es escribible o sin espacio, o falta `BACKUP_ENCRYPTION_KEY`. **Nada se ha escrito** | El mensaje dice cuál. `docker compose ps`; [§5](#5-disco-de-copias-casi-lleno); el `.env` |
-| `3` | Ya existe el fichero de destino, o no hay copia que verificar. **Nada se ha escrito** | Espera un segundo y repite, o mira `backup.sh list` |
-| `4` | La copia falló y lo escrito a medias se retiró; **la anterior sigue siendo la buena** | Sigue el mensaje: dice qué falló y dónde |
+| `2` | `BACKUP_PATH` sin montar o sin espacio, falta una herramienta, no se llega a la base, o falta `BACKUP_ENCRYPTION_KEY`. **Nada se ha escrito** | El mensaje dice cuál. Monta el destino, libera espacio ([§5](#5-disco-de-copias-casi-lleno)) o revisa el `.env`, y repite. La copia anterior sigue intacta |
+| `3` | El fichero de destino ya existe (dos copias en el mismo segundo), o `backup:verify` no encuentra ninguna copia. **Nada se ha escrito** | Repite pasado un minuto. Si es `verify`, lanza antes `backup:run` o mira `backup.sh list` |
+| `4` | El volcado o el cifrado **han fallado a mitad**: casi siempre el disco se ha llenado durante la copia, o el rol de copias no puede leer algo. Lo escrito a medias se retiró; **la anterior sigue siendo la buena** | Libera espacio en `BACKUP_PATH` (el mensaje dice cuánto queda) y repite |
 | `5` | Quedó algo a medias que hay que retirar a mano | El mensaje dice qué fichero |
-| `6` | La copia se escribió pero **no verifica**, o una existente no verifica. **Trátala como inexistente** | Prueba la anterior; si la clave rotó, hace falta la anterior |
+| `6` | La copia se escribió pero **no verifica**, o una existente no verifica. **Trátala como inexistente** | Repite. Si se repite, prueba la anterior (abajo); si la clave rotó, hace falta la anterior |
 | `7` | **El rol con el que se copia es privilegiado** (superusuario, o puede crear roles o bases, o saltarse RLS). No se ha escrito ninguna copia | Es una garantía de seguridad, no una avería: [`rotacion-secretos.md`](rotacion-secretos.md), sección «El rol de las copias es privilegiado». Con el rol equivocado no se copia |
 
 ### Resolución
@@ -434,11 +451,17 @@ fichero ya no está pasan a «Caducada» en la primera purga (la horaria para la
 exportación íntegra, la de las 04:25 UTC para los informes) y dejan un asiento
 `data_export.file_missing` o `report_export.file_missing`; si alguno no había
 caducado, puede sonar `FicheroGeneradoDesaparecidoAntesDeCaducar`. **Tras una
-restauración no es una brecha**: anótalo en el parte y pide de nuevo la
-exportación o el informe que haga falta. Los ficheros generados después de la
-copia, que la base ya no conoce, los borra la purga al cumplir su plazo. El
-detalle, en [`ficheros-generados.md`](ficheros-generados.md) §2 y en
-[`../cliente/operacion.md`](../cliente/operacion.md) §18. Si se restaura en un
+restauración no es una brecha**: anótalo en el parte y pide de nuevo lo que
+haga falta —la exportación íntegra desde Licencia → «Tus datos son tuyos»
+([`../cliente/operacion.md`](../cliente/operacion.md) §13.2), y cada informe
+desde el panel, quien lo necesite—: se generan de los datos restaurados. Los
+ficheros generados después de la copia, que la base ya no conoce, nadie los
+puede descargar y los borra la purga al cumplir su plazo. Si
+`FicheroGeneradoDesaparecidoAntesDeCaducar` suena **sin** que haya habido
+restauración ni actualización desde la 2.1.0, no es esto: lee
+[`../cliente/operacion.md`](../cliente/operacion.md) §13.3, «Si el fichero
+desaparece antes de caducar». El detalle, en
+[`ficheros-generados.md`](ficheros-generados.md) §2. Si se restaura en un
 servidor nuevo, el volumen está vacío y la telemetría estrena identificador.
 
 Las tres órdenes de `restore.sh` van por el servicio **`restore`**, no por
@@ -659,13 +682,15 @@ lugar: no sigas.
 | --- | --- |
 | `el MAC no cuadra` (mismo `kid`) | Corrupción o manipulación. Prueba con la anterior (`restore.sh --list`); si no hay avería que lo explique, [`brecha-de-seguridad.md`](brecha-de-seguridad.md) |
 | `clave distinta o cabecera alterada` | Rotación de clave: pasa la anterior con `-e BACKUP_ENCRYPTION_KEY_PREVIOUS` a `docker compose run restore`, solo para restaurar |
-| `sin .sha256` | La copia está incompleta o la han tocado. No la uses |
+| `sin .sha256`, o falta el manifiesto | La copia está incompleta o la han tocado. No la uses |
 | `copia heredada de la 2.1.0` | Ver abajo |
 
 **Copias de la 2.1.0.** Están cifradas pero **no autenticadas**: el `.sha256`
-junto a ellas no prueba nada frente a quien pueda escribir en el destino. Se
-pueden restaurar con la bandera explícita, que **se pasa en cada orden y nunca
-se deja en el `.env`** (lo que ponga el `.env` no cuenta, y `doctor.sh` lo avisa):
+junto a ellas no prueba nada frente a quien pueda escribir en el destino. Si es
+la que necesitas, se puede restaurar con la bandera explícita (primero con
+`--dry-run`), que **se pasa en cada orden y nunca se deja en el `.env` ni en una
+tabla de cron** (lo que ponga el `.env` no cuenta, y `doctor.sh` lo señala como
+fallo):
 
 ```bash
 docker compose run --rm --no-deps restore \
@@ -678,7 +703,8 @@ lleva `integrity=legacy_accepted` (si no la usas: `integrity=authenticated`, con
 `kqe_created` y `kid`). `doctor.sh` avisa si `KRONOQR_ACCEPT_UNAUTHENTICATED` está
 en el `.env` o en una tabla de cron, y `restore.sh` y `restore-drill.sh` ignoran esa variable: la bandera es solo la opción `--accept-unauthenticated`. La vuelta atrás de `update.sh` la usa **solo** para la copia previa
 que él mismo acaba de crear. La bandera desaparecerá cuando la versión mínima
-desde la que se puede actualizar sea la 2.2.0 o posterior.
+desde la que se puede actualizar sea la 2.2.0 o posterior; mientras tanto, las
+copias de la 2.1.0 caducan solas a los `BACKUP_RETENTION_DAYS`.
 
 **Tras volver a la 2.1.0**, lo escrito por la 2.2.0 (`.gz.enc`, copias KQE1) **no
 lo lee el `restore.sh` de la 2.1.0**: restaura con el paquete de la 2.2.0, que
@@ -700,12 +726,30 @@ lo lee el `restore.sh` de la 2.1.0**: restaura con el paquete de la 2.2.0, que
 Entre los dos `ALTER DATABASE … RENAME` la señal solo se **anota** y se atiende al
 terminar (unos segundos): no hace falta repetirla. `restore.sh` consulta el cluster
 antes de decidir qué ocurrió, así que nunca deja la instalación sin base de
-producción por una señal. Una base `<base>_restore_<fecha>` de más de un día en
-`pg_database` es de una restauración que murió sin limpiar (por ejemplo, con
-`kill -9`): `restore.sh` y `doctor.sh` lo avisan y se elimina con
-`DROP DATABASE "<nombre>" WITH (FORCE)`. La orden completa, con qué poner en
-cada hueco, está en [`../cliente/operacion.md`](../cliente/operacion.md) §18,
-«…`./doctor.sh` avisa de "bases de una restauración que no terminó"».
+producción por una señal.
+
+**«Hay bases de una restauración que no terminó».** Una base
+`<base>_restore_<fecha>` de más de un día en `pg_database` es la base de
+trabajo de una restauración que murió sin limpiar (`kill -9`, un corte de luz).
+**No la usa nadie, pero lleva una copia entera de los datos personales**, y por
+eso `restore.sh` y `doctor.sh` la señalan, con una orden de dos huecos,
+`<migrador>` y `<nombre>`. Las que se llaman `<base>_pre_restore_<fecha>` son
+otra cosa —la base anterior a una restauración que sí terminó— y **no** salen
+en ese aviso. Para eliminarla, asegúrate primero de que no hay ninguna
+restauración en marcha (`pgrep -af restore.sh` no debe devolver nada) y rellena
+los huecos: `<migrador>` es el valor de `DB_MIGRATION_USERNAME` del `.env`
+(`fichaje_migrator` de serie) y `<nombre>`, cada uno de los nombres que da el
+aviso, de uno en uno. Desde el directorio vigente:
+
+```bash
+sudo grep '^DB_MIGRATION_USERNAME=' .env
+sudo docker compose exec postgres psql -U fichaje_migrator -d postgres -c 'DROP DATABASE "fichaje_restore_20261012T031500Z" WITH (FORCE)'
+./doctor.sh
+```
+
+La orden no pide contraseña: se ejecuta dentro del contenedor de PostgreSQL.
+Las comillas dobles alrededor del nombre son necesarias. Si `doctor.sh` ya no lo
+avisa, está resuelto.
 
 Si la restauración la lanzó `update.sh` en su vuelta atrás, la salida `8` cuenta como
 restaurada y la vuelta atrás sigue; `update.sh` ignora una segunda señal mientras

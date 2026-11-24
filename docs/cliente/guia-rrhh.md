@@ -1725,7 +1725,7 @@ Lo que el panel no deja hacer, a propósito: darte de baja a ti, dar de baja la
 última cuenta de administración, ni restablecer tu propia contraseña o tu
 segundo factor. Por eso conviene que haya **siempre dos personas con rol de
 administración**; si la única pierde el móvil, la recuperación la hace IT desde
-el servidor ([`operacion.md`](operacion.md) §9).
+el servidor ([`cuentas-de-gestion.md`](../runbooks/cuentas-de-gestion.md) §6).
 
 Cada alta, baja y restablecimiento queda en el registro de auditoría, con quién
 lo hizo, cuándo y el motivo. **En el motivo, nada de datos de salud ni juicios
@@ -2200,7 +2200,7 @@ siempre es uno de estos casos:
   una actualización: que cierre sesión y vuelva a entrar.
 
 Si la única persona con rol de administración es la que no puede entrar, la
-recuperación la hace IT desde el servidor ([`operacion.md`](operacion.md) §9).
+recuperación la hace IT desde el servidor ([`cuentas-de-gestion.md`](../runbooks/cuentas-de-gestion.md) §6).
 Nada de esto impide fichar a nadie.
 
 ### …la bandeja se llena de incidencias iguales

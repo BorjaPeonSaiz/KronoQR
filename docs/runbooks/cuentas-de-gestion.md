@@ -45,6 +45,9 @@ compruébalo con `identity:list-users` (sección 6).
 **Quién:** una persona con rol de administración, en Panel → **Cuentas** →
 **«Nueva cuenta»**.
 
+**La lista de Cuentas** enseña, por cada cuenta, nombre, correo, rol, estado,
+segundo factor, si la contraseña es propia o temporal y último acceso.
+
 1. **Nombre** de la persona —no el del puesto: es el que aparece como autor de
    cada corrección que firme—, **correo** y **rol**. El correo es solo su
    identificador de acceso; el producto no le envía nada.
@@ -54,7 +57,7 @@ compruébalo con `identity:list-users` (sección 6).
    | Administración | Dirección e IT del hotel. Configuración, licencia, cuentas |
    | RRHH | Quien lleva la plantilla, las correcciones y la Inspección |
    | Responsable de departamento | Jefes de sala, de pisos, de cocina. **Solo su departamento**, y solo cuando se le asigne (sección 3) |
-   | Auditoría | Consulta, sin corregir nada |
+   | Auditoría | Solo la exportación para la Inspección (RF-ID-02); cualquier otra pantalla le responde «Sin permiso» |
 
 2. **Confirma con tu segundo factor.** El diálogo pide **tu** código de la
    aplicación de autenticación (o tu contraseña actual, si tu cuenta todavía no
@@ -64,7 +67,8 @@ compruébalo con `identity:list-users` (sección 6).
 3. **«Crear cuenta».** Aparece la **contraseña temporal**, **una sola vez**.
    Anótala y entrégala **en mano** o de viva voz, nunca por correo ni por
    mensajería. Marca «La he entregado en mano a…» y cierra. Si la pierdes antes
-   de entregarla, restablécela (sección 4.1): no se puede volver a consultar.
+   de entregarla, restablécela (sección 4.1): no se puede volver a consultar,
+   porque el producto guarda su huella, no la contraseña.
 4. **La persona entra el mismo día.** Con su correo y la contraseña temporal,
    el panel le pide primero **dar de alta su segundo factor** (código QR en su
    teléfono) y después **fijar su propia contraseña**. Hasta entonces no puede
@@ -104,6 +108,9 @@ de la plantilla y a las correcciones de jornada.
   uno con su asiento `support_grant.revoked`.
 - **No se borra nada.** La cuenta sigue siendo la autora de todo lo que firmó.
 - **No se reactiva.** Si vuelve, se le crea una cuenta nueva con otro correo.
+- **No reabre la creación del primer administrador.** Esa puerta sigue cerrada
+  aunque haya cuentas dadas de baja: si se reabriera, dar de baja a alguien
+  sería una forma de crear un administrador sin credenciales.
 
 **Lo que el panel no admite, y responde con un aviso sin cambiar nada:**
 
@@ -186,7 +193,8 @@ equivocada, la sesión se cierra y deja `auth.lockout_started`.
 
 **Sobre tu propia cuenta** el panel no deja restablecer ni la contraseña ni el
 segundo factor: para eso está «Cambiar mi contraseña», y para el segundo factor
-perdido, otra persona con rol de administración. **Ten siempre dos cuentas de
+perdido, otra persona con rol de administración. Tampoco deja restablecer el
+segundo factor de quien no lo tiene activo. **Ten siempre dos cuentas de
 administración.**
 
 ---

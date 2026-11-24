@@ -459,7 +459,7 @@ copia diaria y semanal y verifica que se pueden restaurar, pero:
   ([`operacion.md`](operacion.md) §11, notas de la 2.2.0).
 - **Las copias de la 2.1.0** que sigan dentro de su plazo están cifradas pero
   no autenticadas: restaurarlas exige pedirlo expresamente y queda anotado en
-  el registro de auditoría ([`operacion.md`](operacion.md) §18).
+  el registro de auditoría ([`restaurar-backup.md`](../runbooks/restaurar-backup.md) §6.8).
 - **Haz el simulacro trimestral** de restauración
   ([`restaurar-backup.md`](../runbooks/restaurar-backup.md)). Una copia que nunca
   se ha restaurado es una hipótesis.
@@ -552,10 +552,10 @@ construido para que ninguna decisión comercial pueda dejarte incumpliendo:
   persona que entra hoy aunque estés por encima de lo contratado, y puede fichar
   desde el primer día. Si el producto te lo impidiera, esa persona trabajaría sin
   registro y la infracción sería **tuya**.
-- Lo que sí ocurre son avisos, un recorte de funcionalidades **accesorias** —los
-  informes por periodo y la actualización en tiempo real de la presencia— y un
-  apunte en el registro de auditoría con la fecha desde la que estás fuera de
-  contrato.
+- Lo que sí ocurre son avisos, un recorte de funcionalidades **accesorias**
+  —material de gestión, no registro; la lista está en
+  [`configuracion.md`](configuracion.md) §3 bis.3— y un apunte en el registro de
+  auditoría con la fecha desde la que estás fuera de contrato.
 
 **Nada de esto te exime de la parte que sigue siendo tuya**: pagar la licencia si
 la has contratado, y conservar el registro cuatro años aunque termine la relación
@@ -563,9 +563,9 @@ comercial. Para lo segundo, el producto incluye una exportación íntegra que
 puedes ejecutar en cualquier momento y llevarte (§7 quater).
 
 > Si alguna vez encuentras que **no puedes fichar o no puedes acceder al
-> registro** y la causa es la licencia, **no es lo previsto**: es una avería.
-> Avisa al proveedor adjuntando la salida de
-> `docker compose exec app php artisan license:show` y de `GET /api/v1/health`.
+> registro** y la causa es la licencia, **no es lo previsto**: es una avería, y
+> tu IT sabe qué enviar al proveedor ([`configuracion.md`](configuracion.md)
+> §4, «…quiero comprobar que la licencia no está bloqueando nada»).
 
 ---
 

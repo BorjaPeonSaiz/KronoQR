@@ -19,6 +19,21 @@ cobertura y mutación completa). Paquete comprobado: `SHA256SUMS`, firma cosign 
   lo ignora. **#149** (`vite-plugin-pwa` 2.0) sigue aparcada hasta la tablet real (bloque 31 de la 2.4.0).
 - Después de la publicación se integró #243 (`main` `663221ee`): el simulacro de la fila borrada nunca elige la primera fila.
 
+**Dependencias después de la 2.3.1 (24-11-2026):**
+
+- **#255 integrada:** `laravel/framework` 13.43, que corrige CVE-2026-128083 («Task Output Injection», `<13.40`; `main` estaba
+  afectado), y el grupo de Composer de #252. `endroid/qr-code` se queda en 6.1.x porque la 6.2 exige PHP 8.5.
+  `config.platform.php = 8.4.25` en `composer.json`, para que no vuelva. Guzzle sigue en la 7.
+- La imagen de postgres suma `krb5-libs`, `libxml2` y `libxslt` al `apk upgrade` acotado: 20 HIGH con arreglo publicado.
+- **#247** (acciones) integrada. **#252 y #246** cerradas porque las sustituye #255. **#251** (Mailpit, Alertmanager y Loki) en
+  integración.
+- **#253 (npm):** `vue-router` 5.5 escribe `vue-router:scroll` en `sessionStorage`, siempre y sin opción. Choca con ADR-052 y
+  rompe PinRevealDialog, TemporaryPasswordDialog y LanguageSelector. `dependabot.yml` lo ignora a partir de la 5.5, y se pidió
+  `@dependabot recreate`: integrar el grupo regenerado si sale en verde.
+  - **Decisión del propietario pendiente:** aceptar la clave como excepción de ADR-052 o quedarse en la 5.4. La recomendación es
+    quedarse en la 5.4.
+- **#149** sigue aparcada hasta la tablet real.
+
 **KronoQR 2.3.0 publicada el 04-11-2026** (PR #233 → `main` `bf36c298`). Plan de correcciones de la 2.3.0 integrado entero
 (bloques 0-23, 25, 32-35); lo recortado el 28-10-2026 tiene destino 2.4.0 (ver «Pendiente → 2.4.0»). Doc 07 cerrado para la
 2.3.0 con SAMM 1,87. Clave de soporte `156a123c31a9a153` de serie en `config/product.php`.
@@ -43,7 +58,7 @@ en el repositorio**. Al cambiar la versión desplegada, actualizar README §3.1 
 `03-backup-role.sh`); asistente cerrado en la base local, sin licencia ni quiosco. Sin licencia no hay Reverb en `/live`
 (`license_absent`, sondeo cada 15 s): la presencia en tiempo real con licencia no se ha probado en local.
 
-**Limpieza de documentación (23-11-2026, rama `docs/limpieza-documentacion`, sin integrar):**
+**Limpieza de documentación (23-11-2026, PR #254, `main` `05d74e1a`):**
 
 - registros de verificación de la 2.1.0 a la 2.2.1 retirados del árbol (siguen en la etiqueta `v2.3.1`; índice en
   [docs/verificacion/README.md](docs/verificacion/README.md));
@@ -60,7 +75,8 @@ en el repositorio**. Al cambiar la versión desplegada, actualizar README §3.1 
 
 ## Siguiente acción
 
-1. Integrar `docs/limpieza-documentacion` (PR con merge commit; CI en verde).
+1. Integrar `docs/fuente-unica-guias-cliente`: una sola fuente para secretos, copias, licencia y códigos de salida en las
+   guías de cliente (lo repetido pasa a resumen y enlace). La limpieza se integró en #254 (`05d74e1a`).
 2. Cuando el propietario actualice la demo a la 2.3.1: README §3.1 y §6.
 3. **Abrir ciclo** en `VERSION` e `infra/versions.txt` (`2.3.2 *` o `2.4.0 *`) **antes** de añadir cualquier migración.
 4. Seguir la verificación final de la 2.3.0 desde el paso 5 (tanda 3) y llevar al propietario el reparto de los hallazgos sin
@@ -114,6 +130,8 @@ lo obliga) y la incidencia del fichaje anterior al alta.
   (algunas las citan pruebas o scripts: cambiarlas a la vez).
 - FK `SET NULL`/`CASCADE` sin índice a propósito (`*_by_user_id`, `employees.department_id`…): revisar si alguna empieza a
   borrarse en lote.
+- `lang/*/doctor.php` y `infra/scripts/lib/messages-doctor.sh` remiten a `operacion.md` «Las copias tienen que salir del servidor»,
+  que desde el 24-11-2026 es un resumen: apuntarlos a `instalacion.md` §6 («`BACKUP_PATH`»), con `BackupOffsiteDoctorCheckTest`.
 - **Por comprobar si siguen abiertos** (restos de septiembre que el recorte del 23-11-2026 no pudo verificar; detalle en
   `git show 663221ee:HANDOFF.md`): pausa sin vuelta sin incidencia (3.5); elemento de lote con 503 `ClockOutBeforeClockIn`
   que se reintentaría siempre (3.6, quizá resuelto por ADR-061); semana de resumen semanal fallida que no se recupera sola

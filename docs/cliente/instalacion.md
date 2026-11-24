@@ -831,59 +831,27 @@ KronoQR. Detalle en [`configuracion.md`](configuracion.md) §2.2.
 
 ## 2. Códigos de salida del instalador: qué hacer con cada uno
 
-Los scripts de operación (`install.sh`, `update.sh`, `doctor.sh`,
-`backup.sh`, `restore.sh`, `restore-drill.sh`) usan **la misma tabla**
-([`operacion.md`](operacion.md) §8). Sirve para escribir un cron
-o un runbook sin leerse cada script. **Lo que sigue es lo que significa cada
-código en `install.sh`**; en los demás el mismo número dice lo mismo en
-general, pero el caso concreto cambia (en `doctor.sh`, por ejemplo, el `3` es
-«no hay instalación que diagnosticar» y el `6`, «el diagnóstico ha encontrado
-un fallo»): está en esa §8.
-
-| Código | Significa | Qué hacer |
-| --- | --- | --- |
-| `0` | Correcto. | Nada. Sigue en el paso 1.5. |
-| `1` | **Uso incorrecto.** Un argumento que no existe. Nada tocado. | `./install.sh --help`. |
-| `2` | **Requisitos no cumplidos. NADA escrito.** El servidor está exactamente como estaba. | Lee la línea «Que hacer» de cada `[FALLA]`, corrígelo y vuelve a ejecutar. |
-| `3` | **Hay una instalación previa. NADA escrito.** | El instalador **no reinstala encima**: destruiría el registro horario. Para actualizar, `./update.sh` (ver [`../runbooks/actualizacion-cliente.md`](../runbooks/actualizacion-cliente.md)). Para ver cómo está, `./doctor.sh`. |
-| `4` | **Falló y deshizo todo lo que había hecho.** El servidor vuelve a estar como antes. | El mensaje dice la causa. Corrígela y vuelve a ejecutar el instalador: es seguro. |
-| `5` | **Falló y NO pudo deshacerlo todo.** Requiere intervención. | El mensaje enumera **exactamente qué ha quedado** y qué orden lo retira. Hazlo y vuelve a ejecutar. Es el único código que exige a alguien delante. |
-| `6` | **Instalado, pero la verificación final no pasó.** Los servicios están en pie y **no se ha deshecho nada**. Los datos están a salvo. | **No es el certificado ni el nombre del servidor**: la fase 5 sondea `https://127.0.0.1` sin comprobar el certificado. Sale `6` por una de tres causas, y el mensaje dice cuál: `/api/v1/health` o `/api/v1/ready` no respondieron bien (casi siempre PostgreSQL o Redis caídos o sin arrancar: §5, «…instalé bien pero `/api/v1/ready` devuelve 503»); `product:doctor` dio al menos un `[FALLO]` (está impreso justo encima, cada uno con su «Que hacer»); o la imagen no trae `product:doctor`, que es un paquete roto (avisa al fabricante). Corrige la causa y comprueba con `sudo ./doctor.sh`. **No vuelvas a lanzar `install.sh`**: la instalación existe y saldría con `3`. |
-| `7` | **La firma cosign de una imagen del producto no es válida.** Solo puede salir si tienes cosign instalado (§7.1). No se ha instalado nada: en la fase 1 no se había escrito nada, y más tarde se deshace lo escrito, como en el `4`. | **Primero, `IMAGE_REGISTRY`**: si está mal escrito, el registro responde `denied` y cosign no puede leer la firma, lo que cuenta como firma no válida. Compruébalo con el `docker pull` de §1.2 y vuelve a ejecutar. Si la imagen se descarga bien y sigue saliendo `7`, **no instales**: avisa al fabricante con el detalle de cosign que imprime el script. No uses `--skip-signature-check` para salir del paso. |
-| `129`, `130`, `143` | **Interrumpido antes de escribir nada** (fases 1 y 2): `129` es un corte de la sesión SSH, `130` un Ctrl+C y `143` un `kill`. NADA escrito. | Vuelve a ejecutarlo, mejor dentro de `tmux` (§1.4). Desde la fase 3 una interrupción **no** sale con estos códigos: se trata como un fallo, deshace lo hecho y sale con `4` (o `5` si algo no se pudo deshacer). |
+`install.sh` termina con un código de **la tabla común** de los scripts de
+operación, que dice en qué fase se paró y qué quedó escrito. La tabla completa,
+con el caso concreto de `install.sh` y qué hacer con cada código, está en
+[`operacion.md`](operacion.md) §8. Lo esencial al instalar: con `0`, sigue en
+el paso 1.5; `2`, `3` y `129`/`130`/`143` no han escrito nada; `4` lo ha
+deshecho todo y se puede repetir; `5` es el único que exige intervenir a mano;
+y con `6` **la instalación existe**: no vuelvas a lanzar `install.sh`,
+comprueba con `sudo ./doctor.sh`.
 
 ---
 
 ## 3. Qué genera el instalador, y qué pasa si lo pierdes
 
-Todos los secretos se generan **en tu servidor** con `openssl` y **no se
-transmiten a nadie**. El fabricante no los conoce y no puede recuperarlos.
-
-| Secreto | Para qué | Si lo pierdes |
-| --- | --- | --- |
-| `APP_KEY` | Cifra sesiones y datos cifrados | Las sesiones y esos datos dejan de poder leerse |
-| `QR_SIGNING_KEY_CURRENT` (+ su `_ID`) | Firma los códigos QR de las tarjetas | **Hay que reimprimir todas las tarjetas** |
-| `DB_PASSWORD` | Rol de la aplicación en PostgreSQL | Se rota; ver `../runbooks/rotacion-secretos.md` |
-| `DB_MIGRATION_PASSWORD` | Rol de migración, propietario de la base. Solo lo reciben los servicios de un solo uso `migrate` y `restore` | Íd. |
-| `BACKUP_DB_PASSWORD` | Rol de copias `fichaje_backup`, de **solo lectura**. Solo lo recibe el `scheduler` | Íd. La copia diaria falla hasta que se rota |
-| `REVERB_APP_ID` / `_KEY` / `_SECRET` | Presencia en vivo del panel | Se rotan; solo afecta al tiempo real |
-| `BACKUP_ENCRYPTION_KEY` | Cifra y autentica las copias de seguridad | **Las copias dejan de poder restaurarse.** Custódiala fuera del servidor |
-| `BACKUP_WAL_KEY` | Cifra y autentica el WAL archivado (desde la 2.2.0). **No es un secreto nuevo**: se **deriva** de `BACKUP_ENCRYPTION_KEY` y solo la recibe PostgreSQL | Nada que custodiar aparte: se recalcula desde `BACKUP_ENCRYPTION_KEY` (§6, «`BACKUP_PATH`») |
-| `IDENTITY_PIN_SEALING_SECRET_KEY` | Abre los PIN que el quiosco sella sin red | Los fichajes por PIN encolados sin red no se podrían abrir |
-| `GRAFANA_ADMIN_PASSWORD` | Acceso al cuadro de mandos | Se rota en Grafana |
-
-El fichero `.env` queda con permisos `0600`. **Ningún secreto se imprime por
-pantalla ni queda en el log del instalador**, y eso se comprueba en cada
-publicación de versión.
-
-**Un rol de base de datos NO recibe contraseña**: `fichaje_maintenance`, el
-único que puede soltar particiones vencidas del registro de auditoría. Nace sin
-credencial a propósito, y se le asigna una **en el momento** de la purga anual.
-El procedimiento está en [`operacion.md`](operacion.md).
-
-**La clave de licencia no es un secreto** y no está en esa tabla: es una
-afirmación firmada sobre lo que has contratado, no abre nada, y perderla no
-tiene consecuencia. Se pide otra al proveedor.
+Todos los secretos se generan **en tu servidor** con `openssl`, quedan en el
+`.env` con permisos `0600`, **no se imprimen ni se transmiten a nadie**, y el
+fabricante no los conoce ni puede recuperarlos. Dos consecuencias que conviene
+saber hoy: sin `BACKUP_ENCRYPTION_KEY` las copias no se pueden restaurar (por
+eso se custodia fuera del servidor, §1.6), y sin `QR_SIGNING_KEY_CURRENT` hay
+que reimprimir todas las tarjetas. El inventario completo —para qué sirve cada
+secreto, qué pasa si lo pierdes, cuáles se guardan fuera y cómo se rota— está
+en [`../runbooks/rotacion-secretos.md`](../runbooks/rotacion-secretos.md) §0.
 
 ---
 
@@ -896,20 +864,11 @@ de ejecutar el instalador, o actívala después con:
 docker compose exec app php artisan license:activate "KQL1...."
 ```
 
-> **Si no la tienes a mano, instala igualmente.** Sin licencia activada el
-> sistema se instala, arranca y **registra jornada con normalidad**: lo único
-> que no estará disponible son las secciones accesorias del plan —informes por
-> periodo, Impacto y adopción, exportación para nómina, marca propia (logotipo y
-> color), resumen semanal por correo y actualización en tiempo real de la
-> presencia, que pasa a refrescarse cada pocos segundos—. La activas cuando la tengas y
-> aparecen solas, sin reiniciar nada.
->
-> **Y una licencia caducada tampoco bloquea nunca el fichaje ni el acceso al
-> registro.** Eso te dejaría incumpliendo la ley por una acción nuestra.
-
-Comprueba en cualquier momento cómo está con
-`docker compose exec app php artisan license:show`. Todo lo demás sobre la
-licencia está en [`configuracion.md`](configuracion.md), sección 3 bis.
+**Si no la tienes a mano, instala igualmente.** Sin licencia el sistema se
+instala, arranca y **registra jornada con normalidad**; solo faltan las
+funcionalidades accesorias del plan, que aparecen solas al activarla. Qué se
+degrada, qué no se degrada nunca y cómo se consulta está en
+[`configuracion.md`](configuracion.md), sección 3 bis.
 
 ---
 
@@ -1141,7 +1100,7 @@ Entra con ella antes de que caduque (72 horas de serie,
 el segundo factor y después fijar una contraseña tuya. Es la consola porque
 todavía no hay otra cuenta de administración que pueda hacerlo desde el panel;
 en cuanto la haya, la vía normal es Panel → **Cuentas**
-([`operacion.md`](operacion.md) §9).
+([`cuentas-de-gestion.md`](../runbooks/cuentas-de-gestion.md)).
 
 Crear otra cuenta **no** es la salida recomendada: dos cuentas para la misma
 persona parten en dos la respuesta a «¿quién corrigió esta jornada?». Si aun así
@@ -1551,6 +1510,38 @@ ti** (el instalador no sabe dónde está físicamente un recurso de red):
    [`../runbooks/perdida-total-del-servidor.md`](../runbooks/perdida-total-del-servidor.md):
    necesita estas copias y la clave de §1.6 (`BACKUP_ENCRYPTION_KEY`), también
    **fuera del servidor**.
+
+**Qué cuenta como «fuera», y cómo te avisa el producto si no lo están.** La
+promesa de perder como máximo 15 minutos de registro vale **siempre que las
+copias y el WAL salgan del servidor**. Cuentan como fuera si `BACKUP_PATH` es un
+recurso de red (NFS, SMB/CIFS) o está en **otro disco físico**; una partición o
+un volumen lógico del mismo disco no cuenta (si muere el disco, mueren las dos).
+Otro disco protege de la avería, **no del robo ni del incendio**: lo ideal es
+otra máquina y, si puede ser, otro edificio. El producto no puede sacar las
+copias por ti (no envía nada a ninguna parte), pero **te avisa** cuando
+`BACKUP_PATH` y su `wal/` comparten disco con los datos de Docker y de
+PostgreSQL:
+
+- `./doctor.sh` lo comprueba desde el servidor y es **la comprobación
+  completa**: resuelve el **disco físico** de cada ruta (a través de
+  particiones, volúmenes lógicos de LVM y RAID por software) y compara discos.
+  Necesita `sudo` para ver el disco de Docker; sin él, o con ZFS, dice que no ha
+  podido comprobarlo;
+- la copia nocturna publica una medida más gruesa y `product:doctor` la lee en
+  la comprobación **`backup.offsite`**, en el apartado de copias. Desde dentro
+  del contenedor solo se ve el **sistema de ficheros**, no el disco: un destino
+  de red sale en verde; uno en otro sistema de ficheros da un aviso suave («no
+  se puede saber si es otro disco físico») que remite a `./doctor.sh`.
+
+Es **siempre un aviso, nunca un fallo**: no cambia el código de salida ni
+bloquea `install.sh` ni `update.sh`. Si ya sacas las copias por tu cuenta
+(sincronización a otra máquina, cinta, nube en la UE), no hay nada roto, y el
+aviso seguirá saliendo porque el producto no puede verlo. Para quitarlo: monta
+el destino antes de arrancar, en la ruta de `BACKUP_PATH` (por ejemplo, un
+volumen NFS en `/var/backups/fichaje`); reinicia con `docker compose up -d` y
+lanza una copia (`docker compose exec scheduler php artisan backup:run`); y
+ejecuta `sudo ./doctor.sh`, que debe decir que las copias no están en el mismo
+disco físico que los datos, o que están en un recurso de red.
 
 **Todo lo que se guarda aquí va cifrado y autenticado** (desde la 2.2.0): el
 volcado diario, la copia física semanal y también el **WAL archivado**

@@ -852,7 +852,18 @@ afterwards. It is deliberate: your installation has to be able to work on an
 isolated network, and an online check would turn another company's connectivity
 into a point of failure for your working-time record.
 
+**The licence key is not a secret**: it is a signed statement of what you have
+contracted, it opens nothing, and losing it has no consequence. You ask your
+provider for another one.
+
 ### 3 bis.2 How it is activated
+
+**At install time**, paste it into `LICENSE_KEY` in the `.env` **before**
+running the installer (§6.17). **If you do not have it at hand, install
+anyway**: without an activated licence the system installs, starts and
+**records working time normally**; the only things not available are the
+accessory features of §3 bis.3, which appear on their own when you activate it,
+without restarting anything.
 
 **From the management panel** (the usual way): sign in as *administrator*, go to
 **Licence**, paste the key into the box and press “Activate a key”. You can
@@ -872,7 +883,31 @@ docker compose exec app php artisan license:show
 
 That command prints, in this order: the state, your plan against what you are
 actually using, what is degraded, **what keeps working whatever happens** and
-what to do. It is the one support will ask you for if you call.
+what to do. It is the one support will ask you for if you call. Nothing
+scheduled checks the licence: you look at it when you want to.
+
+**Exit codes**, in case you want to monitor it from your own system:
+
+| Command | Code | Means |
+| --- | --- | --- |
+| `license:show` | `0` | Licence valid and within the plan. Nothing to do |
+| `license:show` | `1` | **There is something to look at**: no licence, it expired, it expires soon, it cannot be verified, or a plan figure has been exceeded. **It does not mean the system is stopped**, and the command itself says so: clocking in, looking up the record, exporting for the Inspectorate and backups carry on exactly the same |
+| `license:activate` | `0` | Activated and valid |
+| `license:activate` | `1` | Activated, but **not valid** yet: expired, or its validity starts later. It was saved anyway |
+| `license:activate` | `2` | **Nothing was activated.** The key does not verify, or you did not give one. The previous licence stays as it was |
+
+The state also appears in the health probe, to monitor it without logging in
+over SSH:
+
+```bash
+curl -sS https://TU-SERVIDOR/api/v1/health
+# {"status":"ok","version":"1.4.2","license":"valid"}
+```
+
+That field may say `unknown`: it means the probe could not find out **without
+touching the database**, which is its rule —a liveness probe that queries
+PostgreSQL makes the service restart when what is down is PostgreSQL—. The
+authoritative source is `license:show`.
 
 > **The full key never appears** in the command output or in the panel: its
 > *fingerprint* is shown, twelve characters, which is what serves to confirm
@@ -892,6 +927,10 @@ features stop being available:
 | **Reports by period** and their comparison with the contracted hours | Looking up each person's record, the export for the Labour Inspectorate and the employee portal |
 | **The payroll export** (section 2.5), both the immediate download and the background generation | Looking up each person's record and the export for the Labour Inspectorate, which are never degraded |
 | **Real-time presence**: it switches to **polling**, it does not switch off. The screen still shows who is in, a few seconds behind, and says so | — |
+| **The impact and adoption dashboard** (management material, not the record) | — |
+| **The weekly email summary**: it stops being sent | — |
+| **Your own branding** (logo and colour, section 2.2): the vendor's branding comes back. What you configured is kept and applies again on its own when you renew | — |
+| **Telemetry** (section 3 quinquies), which already comes switched off by default | — |
 
 And these are **never** affected, whatever the state of the licence:
 
@@ -2312,7 +2351,7 @@ keeps it. The procedure and the restoration are in
 | Variable | Marker | What it does | Default | When to change it | Affects hours calculation? |
 | --- | --- | --- | --- | --- | --- |
 | `BACKUP_PATH` | `[CLIENTE]` | Destination of the backups, mounted at the same path inside the containers. See [`installation.md`](installation.md) §6 | `/var/backups/fichaje` | **On installing, always**, with a destination that is not on the same disk as the database. If it is a network share, **it has to be mounted before** bringing the services up | No |
-| `BACKUP_ENCRYPTION_KEY` | `[INSTALADOR]` | Encrypts and authenticates the backups. **Without it there is no backup**: the script refuses to start | (empty; `install.sh` generates it) | Never by hand. **It is the only one that has to be kept safe off the server**: without it nothing can be restored. See [`operation.md`](operation.md) §9 | No |
+| `BACKUP_ENCRYPTION_KEY` | `[INSTALADOR]` | Encrypts and authenticates the backups. **Without it there is no backup**: the script refuses to start | (empty; `install.sh` generates it) | Never by hand. **It is the essential one to keep safe off the server**: without it nothing can be restored. See [`operation.md`](operation.md) §9 and the inventory in [`rotacion-secretos.md`](../../runbooks/rotacion-secretos.md) §0 (in Spanish) | No |
 | `BACKUP_WAL_KEY` | `[INSTALADOR]` | Encrypts and authenticates the archived WAL (since 2.2.0). It is **derived** from `BACKUP_ENCRYPTION_KEY` and only `postgres` receives it; it does not open dumps or physical copies. Without it, or if it is not the derived one, PostgreSQL **does not archive** (never in clear text) and `./doctor.sh` fails | (empty; `install.sh` and `update.sh` compute it) | Never by hand nor copied from another server. If it is missing or does not match, recompute it from the installation directory with `sudo bash ./backup.sh derive-wal-key --write-env .env` and recreate `postgres` (`sudo docker compose up -d postgres`) ([`installation.md`](installation.md) §6, "`BACKUP_PATH`") | No |
 | `BACKUP_RETENTION_DAYS` | — | Days the daily backups are kept. See [`operation.md`](operation.md) §6 | `30` | If your backup policy is different. **Mind the disk space** before raising it | No |
 | `BACKUP_MIN_COPIES` | — | Backups that are never deleted, even if they have all expired | `3` | Almost never. It is the safety net that avoids being left with no backup at all | No |
