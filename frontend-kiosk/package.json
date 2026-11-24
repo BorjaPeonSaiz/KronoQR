@@ -27,7 +27,7 @@
     "libsodium-wrappers": "^0.8.4",
     "pinia": "^4.1.0",
     "vue": "^3.5.45",
-    "vue-i18n": "^11.4.20",
+    "vue-i18n": "^11.4.21",
     "vue-router": "^5.4.0",
     "workbox-window": "^7.4.1"
   },
