@@ -19,6 +19,21 @@ cobertura y mutación completa). Paquete comprobado: `SHA256SUMS`, firma cosign 
   lo ignora. **#149** (`vite-plugin-pwa` 2.0) sigue aparcada hasta la tablet real (bloque 31 de la 2.4.0).
 - Después de la publicación se integró #243 (`main` `663221ee`): el simulacro de la fila borrada nunca elige la primera fila.
 
+**Dependencias después de la 2.3.1 (24-11-2026):**
+
+- **#255 integrada:** `laravel/framework` 13.43, que corrige CVE-2026-128083 («Task Output Injection», `<13.40`; `main` estaba
+  afectado), y el grupo de Composer de #252. `endroid/qr-code` se queda en 6.1.x porque la 6.2 exige PHP 8.5.
+  `config.platform.php = 8.4.25` en `composer.json`, para que no vuelva. Guzzle sigue en la 7.
+- La imagen de postgres suma `krb5-libs`, `libxml2` y `libxslt` al `apk upgrade` acotado: 20 HIGH con arreglo publicado.
+- **#247** (acciones) integrada. **#252 y #246** cerradas porque las sustituye #255. **#251** (Mailpit, Alertmanager y Loki) en
+  integración.
+- **#253 (npm):** `vue-router` 5.5 escribe `vue-router:scroll` en `sessionStorage`, siempre y sin opción. Choca con ADR-052 y
+  rompe PinRevealDialog, TemporaryPasswordDialog y LanguageSelector. `dependabot.yml` lo ignora a partir de la 5.5, y se pidió
+  `@dependabot recreate`: integrar el grupo regenerado si sale en verde.
+  - **Decisión del propietario pendiente:** aceptar la clave como excepción de ADR-052 o quedarse en la 5.4. La recomendación es
+    quedarse en la 5.4.
+- **#149** sigue aparcada hasta la tablet real.
+
 **KronoQR 2.3.0 publicada el 04-11-2026** (PR #233 → `main` `bf36c298`). Plan de correcciones de la 2.3.0 integrado entero
 (bloques 0-23, 25, 32-35); lo recortado el 28-10-2026 tiene destino 2.4.0 (ver «Pendiente → 2.4.0»). Doc 07 cerrado para la
 2.3.0 con SAMM 1,87. Clave de soporte `156a123c31a9a153` de serie en `config/product.php`.
