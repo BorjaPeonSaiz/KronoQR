@@ -522,7 +522,7 @@ services:
 
   #--- 11 · Correo de desarrollo ----------------------------------------------
   mailpit:
-    image: axllent/mailpit:v1.32
+    image: axllent/mailpit:v1.33
     container_name: kronoqr-mailpit
     environment:
       MP_MAX_MESSAGES: "500"
@@ -603,7 +603,7 @@ services:
   # la superficie pasa de "todo el `.env`" a "las quince variables que este
   # binario declara usar", que es el umbral que se puede razonar y auditar.
   alertmanager:
-    image: prom/alertmanager:v0.34.2
+    image: prom/alertmanager:v0.35.0
     container_name: kronoqr-alertmanager
     entrypoint: ["/etc/alertmanager/render-config.sh"]
     command:
@@ -695,7 +695,7 @@ services:
 
   #--- 15 · Logs estructurados ------------------------------------------------
   loki:
-    image: grafana/loki:3.7.9
+    image: grafana/loki:3.7.10
     container_name: kronoqr-loki
     # Sin entrypoint propio: la imagen no tiene shell. LOG_RETENTION_HOURS lo valida el servicio
     # `retention-guard` (dependencia de abajo) antes de que este arranque.
