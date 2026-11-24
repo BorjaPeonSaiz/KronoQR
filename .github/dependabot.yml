@@ -69,6 +69,15 @@ updates:
     cooldown:
       default-days: 7
     labels: ["dependencies", "frontend"]
+    # vue-router 5.5 guarda siempre las posiciones de desplazamiento en
+    # sessionStorage (clave `vue-router:scroll`, con la ruta de cada pantalla),
+    # sin opcion para desactivarlo. ADR-052 solo admite almacenamiento del
+    # navegador en las excepciones declaradas, y las pruebas de PinRevealDialog,
+    # TemporaryPasswordDialog y LanguageSelector fallan (PR #253). Se queda en la
+    # 5.4 hasta que el propietario decida si se acepta esa clave.
+    ignore:
+      - dependency-name: "vue-router"
+        versions: [">=5.5.0"]
     groups:
       npm-menores-y-parches:
         update-types: ["minor", "patch"]
