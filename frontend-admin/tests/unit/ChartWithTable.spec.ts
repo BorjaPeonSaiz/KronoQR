@@ -83,7 +83,9 @@ describe('ChartWithTable', () => {
     // El lienzo queda oculto a la vista y a los lectores de pantalla (display: none). Se lee el
     // estilo en línea porque el montaje no está adjunto al documento y, con jsdom 31,
     // `isVisible()` no resuelve la visibilidad de un nodo desconectado.
-    expect(wrapper.get<HTMLElement>('[data-test="chart-canvas"]').element.style.display).toBe('none')
+    expect(wrapper.get<HTMLElement>('[data-test="chart-canvas"]').element.style.display).toBe(
+      'none',
+    )
 
     const table = wrapper.get('[data-test="chart-table"]')
     const headers = table.findAll('th')
