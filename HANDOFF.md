@@ -29,8 +29,8 @@ cobertura y mutación completa). Paquete comprobado: `SHA256SUMS`, firma cosign 
 - **npm:** `vue-router` 5.5 escribe `vue-router:scroll` en `sessionStorage`, siempre y sin opción. Choca con ADR-052 y rompía
   PinRevealDialog, TemporaryPasswordDialog y LanguageSelector. `dependabot.yml` lo ignora a partir de la 5.5. Dependabot
   cerró #253 y lo rehízo sin `vue-router` en **#257**, ya integrada.
-  - **Decisión del propietario pendiente:** aceptar la clave como excepción de ADR-052 o quedarse en la 5.4. La recomendación es
-    quedarse en la 5.4.
+  - **Decidido por el propietario (24-11-2026):** se queda en la 5.4, y esa clave no se acepta como excepción de ADR-052.
+    Revisar si una versión posterior de `vue-router` permite desactivarla.
 - **#258** (`jsdom` 31) integrada. Antes, **#259** cambió la aserción de `ChartWithTable.spec.ts`, porque `isVisible()` no resuelve
   la visibilidad de un nodo desmontado del documento con jsdom 31.
 - **#149** sigue aparcada hasta la tablet real. Abiertas solo 2 alertas, las dos de desarrollo: `minimatch`, por
