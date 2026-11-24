@@ -522,7 +522,7 @@ services:
 
   #--- 11 · Correo de desarrollo ----------------------------------------------
   mailpit:
-    image: axllent/mailpit:v1.33
+    image: axllent/mailpit:v1.34
     container_name: kronoqr-mailpit
     environment:
       MP_MAX_MESSAGES: "500"
