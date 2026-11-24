@@ -38,6 +38,14 @@ ENV TZ=UTC \
 # pero el parche existe y el runbook de triaje (§1, punto 1) dice que un
 # arreglo publicado se aplica, no se excepciona.
 #
+# `krb5-libs`, `libxml2` y `libxslt` entran el 24-11-2026 por lo mismo: la base
+# (Alpine 3.24.3) trae krb5-libs 1.22.2-r1 con dieciseis CVE HIGH
+# (CVE-2026-107364, -112315 a -112323, -118380, -119079, -40355, -40356, -71199,
+# -71200), libxml2 2.13.9-r2 (CVE-2026-86144) y libxslt 1.1.43-r3
+# (CVE-2026-125350, -87636, -9947), todas parcheadas en el indice (1.22.3-r0,
+# 2.13.9-r3 y 1.1.43-r4). Las trae postgresql17 como dependencias (GSSAPI y
+# XML); el servidor no usa GSSAPI, pero el arreglo existe y se aplica.
+#
 # La imagen base esta fijada por DIGEST y no solo por tag (mismo motivo):
 # `postgres:17-alpine` es un tag movil que Docker y Alpine reconstruyen sin
 # avisar, y dos `docker build` el mismo dia en maquinas distintas podrian
@@ -67,7 +75,7 @@ ENV TZ=UTC \
 # esas dos librerias se vuelven a resolver contra el indice cada dia.
 ARG APK_INDEX_STAMP=local
 RUN echo "apk index stamp: ${APK_INDEX_STAMP}" \
-  && apk upgrade --no-cache libssl3 libcrypto3 libuuid \
+  && apk upgrade --no-cache libssl3 libcrypto3 libuuid krb5-libs libxml2 libxslt \
   && apk add --no-cache bash openssl \
   && rm /usr/local/bin/gosu
 
