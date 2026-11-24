@@ -25,14 +25,17 @@ cobertura y mutación completa). Paquete comprobado: `SHA256SUMS`, firma cosign 
   afectado), y el grupo de Composer de #252. `endroid/qr-code` se queda en 6.1.x porque la 6.2 exige PHP 8.5.
   `config.platform.php = 8.4.25` en `composer.json`, para que no vuelva. Guzzle sigue en la 7.
 - La imagen de postgres suma `krb5-libs`, `libxml2` y `libxslt` al `apk upgrade` acotado: 20 HIGH con arreglo publicado.
-- **#247** (acciones) integrada. **#252 y #246** cerradas porque las sustituye #255. **#251** (Mailpit, Alertmanager y Loki) en
-  integración.
-- **#253 (npm):** `vue-router` 5.5 escribe `vue-router:scroll` en `sessionStorage`, siempre y sin opción. Choca con ADR-052 y
-  rompe PinRevealDialog, TemporaryPasswordDialog y LanguageSelector. `dependabot.yml` lo ignora a partir de la 5.5, y se pidió
-  `@dependabot recreate`: integrar el grupo regenerado si sale en verde.
+- **#247** (acciones) y **#251** (Mailpit, Alertmanager y Loki) integradas. **#252 y #246** cerradas: las sustituye #255.
+- **npm:** `vue-router` 5.5 escribe `vue-router:scroll` en `sessionStorage`, siempre y sin opción. Choca con ADR-052 y rompía
+  PinRevealDialog, TemporaryPasswordDialog y LanguageSelector. `dependabot.yml` lo ignora a partir de la 5.5. Dependabot
+  cerró #253 y lo rehízo sin `vue-router` en **#257**, ya integrada.
   - **Decisión del propietario pendiente:** aceptar la clave como excepción de ADR-052 o quedarse en la 5.4. La recomendación es
     quedarse en la 5.4.
-- **#149** sigue aparcada hasta la tablet real.
+- **#258** (`jsdom` 31) integrada. Antes, **#259** cambió la aserción de `ChartWithTable.spec.ts`, porque `isVisible()` no resuelve
+  la visibilidad de un nodo desmontado del documento con jsdom 31.
+- **#149** sigue aparcada hasta la tablet real. Abiertas solo 2 alertas, las dos de desarrollo: `minimatch`, por
+  `@redocly/openapi-core` y ESLint, y `serialize-javascript`, por `@rollup/plugin-terser` en el service worker del quiosco.
+  Comprobar si la segunda la cierra #149.
 
 **KronoQR 2.3.0 publicada el 04-11-2026** (PR #233 → `main` `bf36c298`). Plan de correcciones de la 2.3.0 integrado entero
 (bloques 0-23, 25, 32-35); lo recortado el 28-10-2026 tiene destino 2.4.0 (ver «Pendiente → 2.4.0»). Doc 07 cerrado para la
@@ -75,8 +78,8 @@ en el repositorio**. Al cambiar la versión desplegada, actualizar README §3.1 
 
 ## Siguiente acción
 
-1. Integrar `docs/fuente-unica-guias-cliente`: una sola fuente para secretos, copias, licencia y códigos de salida en las
-   guías de cliente (lo repetido pasa a resumen y enlace). La limpieza se integró en #254 (`05d74e1a`).
+1. Hecho el 24-11-2026: limpieza de documentación (#254) y fuente única en las guías de cliente (#256). Pendiente de ese
+   trabajo: apuntar `doctor.php` y `messages-doctor.sh` a `instalacion.md` §6 (ver «Pendiente»).
 2. Cuando el propietario actualice la demo a la 2.3.1: README §3.1 y §6.
 3. **Abrir ciclo** en `VERSION` e `infra/versions.txt` (`2.3.2 *` o `2.4.0 *`) **antes** de añadir cualquier migración.
 4. Seguir la verificación final de la 2.3.0 desde el paso 5 (tanda 3) y llevar al propietario el reparto de los hallazgos sin
