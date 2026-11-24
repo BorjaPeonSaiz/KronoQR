@@ -80,7 +80,12 @@ describe('ChartWithTable', () => {
     expect(wrapper.get('[data-test="toggle-view"]').text()).toBe('Ver como gráfico')
     // El cambio de vista se anuncia (V7-PA-7).
     expect(announcement.value).toContain('Se muestra la tabla de datos')
-    expect(wrapper.find('[data-test="chart-canvas"]').isVisible()).toBe(false)
+    // El lienzo queda oculto a la vista y a los lectores de pantalla (display: none). Se lee el
+    // estilo en línea porque el montaje no está adjunto al documento y, con jsdom 31,
+    // `isVisible()` no resuelve la visibilidad de un nodo desconectado.
+    expect(wrapper.get<HTMLElement>('[data-test="chart-canvas"]').element.style.display).toBe(
+      'none',
+    )
 
     const table = wrapper.get('[data-test="chart-table"]')
     const headers = table.findAll('th')
