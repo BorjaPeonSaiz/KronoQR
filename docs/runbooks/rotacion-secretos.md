@@ -9,7 +9,8 @@ empezar:
 
 | Situación | Ritmo | Prioridad |
 | --- | --- | --- |
-| **Rotación programada** | Anual, o según la política del cliente | Que nadie se quede sin fichar |
+| **Cambio de quién tiene acceso** (sale alguien de IT, cambia el proveedor) | En cuanto se produzca | Que nadie se quede sin fichar |
+| **Rotación por calendario** | Solo si la política del hotel la exige (por ejemplo, anual); el producto no la impone | Que nadie se quede sin fichar |
 | **Sospecha de compromiso** | El mismo día | Cerrar la puerta, aunque cueste servicio |
 
 **Impacto en el fichaje:** ninguno si se sigue el orden de cada sección. Los dos
@@ -38,24 +39,49 @@ docker compose -f docker-compose.yml exec -T app <comando>
 
 ## 0. Qué genera el instalador, y cuál de estos secretos es cuál
 
+**Este es el inventario de referencia**: la guía de instalación, la de
+endurecimiento, la de operación y el runbook de pérdida total remiten aquí.
+
 Desde la tarea 5.4, `install.sh` genera **todos** los secretos de una
 instalación nueva con `openssl`, en el servidor del cliente, y los escribe en un
-`.env` con permisos `0600`. Ninguno se imprime por pantalla ni queda en el log
-del instalador, y eso se comprueba en cada publicación de versión.
+`.env` con permisos `0600`, propiedad de `root`. Ninguno se imprime por pantalla ni queda en el log
+del instalador, y eso se comprueba en cada publicación de versión. **No se
+transmiten a nadie: el fabricante no los conoce y no puede recuperarlos.**
 
-| Variable que escribe `install.sh` | Cómo se genera | Se rota en |
+| Variable que escribe `install.sh` | Para qué | Cómo se genera | Si lo pierdes | ¿Copia fuera del servidor? | Se rota en |
+| --- | --- | --- | --- | --- | --- |
+| `APP_KEY` | Cifra sesiones y datos cifrados, entre ellos el secreto del segundo factor de cada cuenta de gestión | `base64:` + 32 bytes aleatorios | Las sesiones y esos datos dejan de poder leerse: **ninguna cuenta de gestión pasa el 2FA** hasta que se le reinicia con `identity:2fa-reset`, cuenta por cuenta, y lo da de alta otra vez | **Sí** (para la pérdida total) | §2 |
+| `QR_SIGNING_KEY_CURRENT` y `QR_SIGNING_KEY_CURRENT_ID` | Firma los códigos QR de las tarjetas | 32 bytes aleatorios en base64; el `_ID`, 2 caracteres hexadecimales | **Hay que reimprimir todas las tarjetas** | **Sí.** Quien la tenga puede fabricar tarjetas válidas: trátala como la llave maestra del edificio. Durante una rotación existe además `QR_SIGNING_KEY_PREVIOUS` (con su `_ID`), que se guarda igual: sin ella, las tarjetas aún no reimpresas dejan de valer | §1 (runbook propio) |
+| `DB_PASSWORD` | Rol de la aplicación en PostgreSQL | 32 caracteres alfanuméricos | Se rota | No: tras una pérdida total no se repone | §3 |
+| `DB_MIGRATION_PASSWORD` | Rol de migración, propietario de la base. Solo lo reciben los servicios de un solo uso `migrate` y `restore` | Íd. | Se rota | No | §3 |
+| `BACKUP_DB_PASSWORD` | Rol de copias `fichaje_backup`, de **solo lectura** con `REPLICATION`. Solo lo recibe el `scheduler` | 32 caracteres alfanuméricos, **propia** (no es la del migrador) | La copia diaria falla hasta que se rota | No | §3 |
+| `REVERB_APP_ID` / `_KEY` / `_SECRET` | Presencia en vivo del panel | ID y KEY: 8 y 16 bytes en hexadecimal; SECRET: 32 bytes aleatorios en base64 | Se rotan; solo afecta al tiempo real | No | §5 bis |
+| `BACKUP_ENCRYPTION_KEY` | Cifra y autentica las copias de seguridad | 32 bytes aleatorios en base64 | **Las copias dejan de poder restaurarse** | **Sí, y es obligatorio, el día de la instalación** | §5 |
+| `BACKUP_WAL_KEY` | Cifra y autentica el WAL archivado (desde la 2.2.0). Solo la recibe PostgreSQL | **No es un secreto nuevo**: se **deriva** de `BACKUP_ENCRYPTION_KEY` (`backup.sh derive-wal-key`) | Nada: se recalcula desde `BACKUP_ENCRYPTION_KEY` ([`../cliente/instalacion.md`](../cliente/instalacion.md) §6, «`BACKUP_PATH`») | No hace falta | §5 |
+| `IDENTITY_PIN_SEALING_SECRET_KEY` | Abre los PIN que el quiosco sella sin red | 32 bytes aleatorios en base64 (es exactamente lo que hace libsodium al crear una privada X25519; la pública se deriva de ella) | Los fichajes por PIN encolados sin red no se podrían abrir | **Sí** | §5 bis |
+| `GRAFANA_ADMIN_PASSWORD` | Acceso al cuadro de mandos | 32 caracteres alfanuméricos | Se rota en Grafana | No | §5 bis |
+
+**Lo que se guarda fuera del servidor** —la columna «Sí»— se guarda con la
+custodia de la clave de copias: gestor de contraseñas de la empresa o sobre
+cerrado en caja fuerte, **nunca** solo en el servidor ni junto a las copias. El
+procedimiento está en
+[`../cliente/operacion.md`](../cliente/operacion.md) §9, «Custodia de
+secretos». **No guardes el `.env` entero**: lleva las contraseñas de la base de
+datos, incluida la del superusuario, que no se reponen
+([`perdida-total-del-servidor.md`](perdida-total-del-servidor.md) §3.3).
+**Renueva esa copia después de cada rotación.**
+
+**Secretos que no están en el `.env`:**
+
+| Secreto | Dónde vive | ¿Sale del servidor? |
 | --- | --- | --- |
-| `APP_KEY` | `base64:` + 32 bytes aleatorios | §2 |
-| `QR_SIGNING_KEY_CURRENT` | 32 bytes aleatorios en base64 | §1 (runbook propio) |
-| `QR_SIGNING_KEY_CURRENT_ID` | 2 caracteres hexadecimales | §1 |
-| `DB_PASSWORD` | 32 caracteres alfanuméricos | §3 |
-| `DB_MIGRATION_PASSWORD` | Íd. | §3 |
-| `BACKUP_DB_PASSWORD` | 32 caracteres alfanuméricos, **propia** (no es la del migrador): la usa `fichaje_backup`, un rol de solo lectura con `REPLICATION` | §3 |
-| `REVERB_APP_ID` / `_KEY` | 8 y 16 bytes en hexadecimal | §5 bis |
-| `REVERB_APP_SECRET` | 32 bytes aleatorios en base64 | §5 bis |
-| `BACKUP_ENCRYPTION_KEY` | 32 bytes aleatorios en base64 | §5 |
-| `IDENTITY_PIN_SEALING_SECRET_KEY` | 32 bytes aleatorios en base64 (es exactamente lo que hace libsodium al crear una privada X25519; la pública se deriva de ella) | §5 bis |
-| `GRAFANA_ADMIN_PASSWORD` | 32 caracteres alfanuméricos | §5 bis |
+| Token de una tablet | En la propia tablet ([`../cliente/endurecimiento.md`](../cliente/endurecimiento.md) §6); se rota en §4 | No |
+| Token de un acceso de soporte | Se muestra **una sola vez** al concederlo ([`../cliente/operacion.md`](../cliente/operacion.md) §12.4) | Se entrega a soporte por el canal del contrato |
+| Contraseña de `fichaje_maintenance` | **No existe** hasta la purga anual (abajo) | No |
+
+**La clave de licencia no es un secreto** y no está en esta lista: es una
+afirmación firmada sobre lo que se ha contratado, no abre nada, y perderla no
+tiene consecuencia. Se pide otra al proveedor.
 
 **Las contraseñas de base de datos son alfanuméricas a propósito.** Viajan por
 una cadena de conexión y por un fichero de entorno, y ahí cada capa escapa los

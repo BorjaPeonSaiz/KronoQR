@@ -367,50 +367,14 @@ comando programado.
 
 ## 7. La licencia, en dos comandos
 
-No hay nada programado que revise la licencia: se mira cuando se quiere mirar.
-
-```bash
-docker compose exec app php artisan license:show
-```
-
-**Códigos de salida**, por si quieres vigilarlo desde tu propio sistema:
-
-| Código | Significa |
-| --- | --- |
-| `0` | Licencia vigente y sin exceso de plan. Nada que hacer |
-| `1` | **Hay algo que mirar**: no hay licencia, caducó, caduca pronto, no se puede verificar, o se ha superado una cifra del plan |
-
-> **`1` no significa que el sistema esté parado**, y el propio comando lo dice.
-> Se sigue fichando, consultando el registro, exportando para la Inspección y
-> haciendo copias exactamente igual.
-
-Para activar una clave nueva:
-
-```bash
-docker compose exec app php artisan license:activate "KQL1...."
-```
-
-| Código | Significa |
-| --- | --- |
-| `0` | Activada y vigente |
-| `1` | Activada, pero **no vigente** todavía: caducada, o su vigencia empieza más adelante. Se guardó igual |
-| `2` | **No se activó nada.** La clave no verifica, o no indicaste ninguna. La licencia anterior sigue como estaba |
-
-El estado también sale en la sonda de salud, para vigilarlo sin entrar por SSH:
-
-```bash
-curl -sS https://TU-SERVIDOR/api/v1/health
-# {"status":"ok","version":"1.4.2","license":"valid"}
-```
-
-Ese campo puede decir `unknown`: significa que la sonda no ha podido saberlo
-**sin tocar la base de datos**, que es su regla —una sonda de vida que consulta
-PostgreSQL hace reiniciar el servicio cuando lo caído es PostgreSQL—. El dato
-autoritativo es `license:show`.
-
-Todo lo demás sobre la licencia —qué se degrada al caducar, qué no se degrada
-nunca, los límites del plan y qué hacer si una clave no se activa— está en
-[`configuracion.md`](configuracion.md), sección 3 bis.
+No hay nada programado que revise la licencia: se mira cuando se quiere mirar,
+con `docker compose exec app php artisan license:show`, y una clave nueva se
+activa con `license:activate`. Un `1` de `license:show` **no significa que el
+sistema esté parado**: se sigue fichando, consultando el registro, exportando
+para la Inspección y haciendo copias exactamente igual. Los códigos de salida de
+las dos órdenes, el campo `license` de la sonda de salud, qué se degrada al
+caducar, qué no se degrada nunca, los límites del plan y qué hacer si una clave
+no se activa están en [`configuracion.md`](configuracion.md), sección 3 bis.
 
 ---
 
@@ -423,18 +387,18 @@ y un `3` que significara una cosa en uno y otra en otro sería una trampa.
 **El código dice en qué fase se paró y qué quedó escrito. El detalle va en el
 mensaje, que es lo que hay que leer.**
 
-| Código | Significa siempre | En cada script |
-| --- | --- | --- |
-| `0` | Correcto | — |
-| `1` | **Uso incorrecto.** Nada tocado | Un argumento que no existe, o falta un valor |
-| `2` | **Requisitos no cumplidos. NADA escrito.** La máquina está como estaba | `install.sh`: falta Docker, disco, puerto ocupado. `backup.sh`/`restore.sh`: falta `pg_dump`, el destino no es escribible, no hay espacio, o falta `BACKUP_ENCRYPTION_KEY`. `update.sh`: una precondición no se cumple, o **la copia previa ha fallado**; la instalación sigue en su versión. `doctor.sh`: **Docker no responde**, o la versión de Compose no es la soportada; no se ha podido comprobar nada más |
-| `3` | **Estado previo incompatible. NADA escrito** | `install.sh`: ya hay una instalación (usa `update.sh`). `backup.sh`: no hay copia que verificar, o el destino ya existe. `restore.sh`: quedan conexiones abiertas contra la base. `update.sh`: ya está en la versión de destino, o no hay instalación que actualizar. `doctor.sh`: **no hay ninguna instalación que diagnosticar** en este servidor — si es uno nuevo, lo que hace falta es `install.sh` |
-| `4` | **Falló y se deshizo todo lo hecho** en esa ejecución. Se puede reintentar | `install.sh`: contenedores, volúmenes y `.env` devueltos a su estado. `backup.sh`: los ficheros a medias barridos, la copia anterior intacta. `restore.sh`: base de trabajo eliminada, la de producción sin tocar. `update.sh`: copia previa restaurada y **versión anterior en marcha y verificada**. `doctor.sh`: **no lo usa**, no escribe ni deshace nada |
-| `5` | **Falló y NO se pudo deshacer todo, o falló algo después de que la versión nueva ya atendiera (y entonces no se deshace). Hay que intervenir a mano.** El mensaje dice exactamente qué queda, qué orden lo retira y si hay que restaurar algo o no | Es el único código que exige a una persona delante. `doctor.sh` y `backup.sh`: **no lo usan** (`backup.sh` barre siempre lo que había empezado a escribir) |
-| `6` | **El trabajo se hizo pero la verificación posterior falló.** No se deshace nada | `install.sh`: los servicios están en pie; no es el certificado, sino las sondas `/health` y `/ready`, un `[FALLO]` de `product:doctor` o un paquete sin él, y el mensaje dice cuál ([`instalacion.md`](instalacion.md) §2). `backup.sh`: la copia existe pero **no verifica: trátala como inexistente**. `restore-drill.sh`: hoy no se podría recuperar el registro. `update.sh`: **casi nunca** (toda verificación de la versión nueva que falla deshace); la única excepción es que el asiento `system.updated` de `audit_log` no se pudiera escribir tras una actualización que sí terminó — el trabajo se hizo y no se deshace por eso. `restore.sh`: **la base está restaurada y en servicio, pero el asiento `system.restored_from_backup` de `audit_log` no se pudo escribir**; no repitas la restauración y escribe el asiento con la orden del mensaje (`restaurar-backup.md` §6.7). `restore.sh`, `restore-drill.sh` y `backup.sh verify`, **desde la 2.2.0, también por integridad**: falta el `.sha256`, el MAC no cuadra, el nombre del fichero no es el de su cabecera, falta o no cuadra el manifiesto autenticado (`.manifest.mac`), o la copia es de la 2.1.0 y no se ha pedido expresamente; en ese caso **no se ha tocado nada** (§18, «…la restauración se niega por integridad»). `doctor.sh`: **el diagnóstico ha encontrado al menos un fallo** — con la aplicación en marcha, en su propio informe (`product:doctor`) o porque `scheduler` u `horizon` están parados; con la aplicación parada, en una de las comprobaciones externas. El mensaje dice qué leer |
-| `7` | **Garantía de seguridad rota. NADA aplicado.** Un rol de la base de datos tiene más privilegios de los permitidos, o una copia ha intentado cambiarlos (AUD-1). No es una avería: es una garantía que el producto se niega a saltarse | `backup.sh`: el rol con el que se copia es superusuario, o puede crear roles o bases, o saltarse RLS; no se ha escrito ninguna copia y salta la alerta de copia fallida. `restore.sh` y `restore-drill.sh --mode database`: la copia ha cambiado roles del clúster al restaurarse; no se ha intercambiado ninguna base y se ha intentado devolver los roles a su estado. Sigue `rotacion-secretos.md` («El rol de las copias es privilegiado») o `restaurar-backup.md` §6.6. `install.sh` y `update.sh`: la firma de cosign de una imagen del producto **no es válida** (solo se comprueba si tienes cosign instalado, §7.1 de [`instalacion.md`](instalacion.md)); `update.sh` sale en el paso 1 sin tocar nada e `install.sh` deshace lo escrito. Si el mensaje dice que el registro **ha negado el acceso**, casi siempre es `IMAGE_REGISTRY` mal escrito o con el valor de la plantilla: corrígelo y repite. Si no, no instales esas imágenes y avisa al fabricante con el detalle que imprime el script |
-| `8` | **Restauración completada pero interrumpida por una señal.** Solo `restore.sh`: la señal llegó durante o después del intercambio de bases. La base restaurada YA está en servicio y la anterior se conserva con su marca | `restore.sh`: **no repitas la restauración**. Si además el asiento de auditoría quedó pendiente, sale con `6` y la orden que lo escribe. `update.sh` lo trata como restaurado y sigue con su vuelta atrás |
-| `129`, `130`, `143` | **Interrumpido antes de escribir nada**: `129` corte de la sesión SSH, `130` Ctrl+C, `143` `kill`. NADA escrito | `install.sh` y `update.sh`: solo en las fases que todavía no han tocado nada; desde que empiezan a escribir, una interrupción se trata como un fallo y sale con `4` o `5` tras deshacer. `restore.sh`: una señal ANTES del intercambio de bases elimina la base de trabajo y sale con ellas (la base de destino no se toca); DURANTE el intercambio la señal se difiere hasta dejar la instalación coherente y entonces sale con `8`. `backup.sh`: en **cualquier** fase; barre lo que había empezado a escribir y la copia anterior sigue intacta, como en el `4`. Ejecútalos dentro de `tmux` o `screen` (`instalacion.md` §1.4) |
+| Código | Significa siempre | En cada script | Qué hacer |
+| --- | --- | --- | --- |
+| `0` | Correcto | — | Nada. Tras `install.sh`, sigue en el paso 1.5 de [`instalacion.md`](instalacion.md) |
+| `1` | **Uso incorrecto.** Nada tocado | Un argumento que no existe, o falta un valor | `./<script> --help` |
+| `2` | **Requisitos no cumplidos. NADA escrito.** La máquina está como estaba | `install.sh`: falta Docker, disco, puerto ocupado. `backup.sh`/`restore.sh`: falta `pg_dump`, el destino no es escribible, no hay espacio, o falta `BACKUP_ENCRYPTION_KEY`. `update.sh`: una precondición no se cumple, o **la copia previa ha fallado**; la instalación sigue en su versión y, si ya estaba en mantenimiento, se ha retirado. `doctor.sh`: **Docker no responde**, o la versión de Compose no es la soportada; no se ha podido comprobar nada más | Lee la línea «Que hacer» de cada `[FALLA]`, corrígelo y vuelve a ejecutar. Copia: [`restaurar-backup.md`](../runbooks/restaurar-backup.md) §2. Actualización: los cuatro casos con párrafo propio están en [`actualizacion-cliente.md`](../runbooks/actualizacion-cliente.md) §4 |
+| `3` | **Estado previo incompatible. NADA escrito** | `install.sh`: ya hay una instalación; **no reinstala encima**, porque destruiría el registro horario. `backup.sh`: no hay copia que verificar, o el destino ya existe. `restore.sh`: quedan conexiones abiertas contra la base. `update.sh`: ya está en la versión de destino, o no hay instalación que actualizar. `doctor.sh`: **no hay ninguna instalación que diagnosticar** en este servidor — si es uno nuevo, lo que hace falta es `install.sh` | `install.sh`: para actualizar, `./update.sh`; para ver cómo está, `./doctor.sh`. `update.sh`: nada, o `install.sh` si de verdad no hay instalación. `backup.sh`: repite pasado un minuto, o lanza antes `backup:run` |
+| `4` | **Falló y se deshizo todo lo hecho** en esa ejecución. Se puede reintentar | `install.sh`: contenedores, volúmenes y `.env` devueltos a su estado. `backup.sh`: los ficheros a medias barridos, la copia anterior intacta. `restore.sh`: base de trabajo eliminada, la de producción sin tocar. `update.sh`: copia previa restaurada y **versión anterior en marcha y verificada**. `doctor.sh`: **no lo usa**, no escribe ni deshace nada | El mensaje dice la causa: corrígela y vuelve a ejecutar, es seguro. `update.sh`: envía antes el informe al fabricante, que dice en qué paso y por qué |
+| `5` | **Falló y NO se pudo deshacer todo, o falló algo después de que la versión nueva ya atendiera (y entonces no se deshace). Hay que intervenir a mano.** El mensaje dice exactamente qué queda, qué orden lo retira y si hay que restaurar algo o no | Es el único código que exige a una persona delante. `doctor.sh` y `backup.sh`: **no lo usan** (`backup.sh` barre siempre lo que había empezado a escribir) | Haz lo que enumera el mensaje y vuelve a ejecutar. `update.sh`: [`actualizacion-cliente.md`](../runbooks/actualizacion-cliente.md) §5 |
+| `6` | **El trabajo se hizo pero la verificación posterior falló.** No se deshace nada | `install.sh`: los servicios están en pie y los datos a salvo. **No es el certificado ni el nombre del servidor**: la fase 5 sondea `https://127.0.0.1` sin comprobar el certificado. Sale por una de tres causas, y el mensaje dice cuál: `/api/v1/health` o `/api/v1/ready` no respondieron bien (casi siempre PostgreSQL o Redis caídos o sin arrancar: [`instalacion.md`](instalacion.md) §5, «…instalé bien pero `/api/v1/ready` devuelve 503»), `product:doctor` dio al menos un `[FALLO]` (impreso justo encima, cada uno con su «Que hacer»), o la imagen no trae `product:doctor`, que es un paquete roto. `backup.sh`: la copia existe pero **no verifica: trátala como inexistente**. `restore-drill.sh`: hoy no se podría recuperar el registro. `update.sh`: **casi nunca** (toda verificación de la versión nueva que falla deshace); la única excepción es que el asiento `system.updated` de `audit_log` no se pudiera escribir tras una actualización que sí terminó — el trabajo se hizo y no se deshace por eso. `restore.sh`: **la base está restaurada y en servicio, pero el asiento `system.restored_from_backup` de `audit_log` no se pudo escribir**. `restore.sh`, `restore-drill.sh` y `backup.sh verify`, **desde la 2.2.0, también por integridad**: falta el `.sha256`, el MAC no cuadra, el nombre del fichero no es el de su cabecera, falta o no cuadra el manifiesto autenticado (`.manifest.mac`), o la copia es de la 2.1.0 y no se ha pedido expresamente; en ese caso **no se ha tocado nada** ([`restaurar-backup.md`](../runbooks/restaurar-backup.md) §6.8). `doctor.sh`: **el diagnóstico ha encontrado al menos un fallo** — con la aplicación en marcha, en su propio informe (`product:doctor`) o porque `scheduler` u `horizon` están parados; con la aplicación parada, en una de las comprobaciones externas. El mensaje dice qué leer | `install.sh`: corrige la causa y comprueba con `sudo ./doctor.sh`. **No vuelvas a lanzar `install.sh`**: la instalación existe y saldría con `3`. Si falta `product:doctor` en la imagen, avisa al fabricante. `backup.sh`: prueba la anterior. `update.sh`: el informe dice qué orden escribe el asiento que falta. `restore.sh`: **no repitas la restauración**; escribe el asiento con la orden del mensaje ([`restaurar-backup.md`](../runbooks/restaurar-backup.md) §6.7) |
+| `7` | **Garantía de seguridad rota. NADA aplicado.** Un rol de la base de datos tiene más privilegios de los permitidos, o una copia ha intentado cambiarlos (AUD-1). No es una avería: es una garantía que el producto se niega a saltarse | `backup.sh`: el rol con el que se copia es superusuario, o puede crear roles o bases, o saltarse RLS; no se ha escrito ninguna copia y salta la alerta de copia fallida. `restore.sh` y `restore-drill.sh --mode database`: la copia ha cambiado roles del clúster al restaurarse; no se ha intercambiado ninguna base y se ha intentado devolver los roles a su estado. `install.sh` y `update.sh`: la firma de cosign de una imagen del producto **no es válida**. Solo se comprueba si tienes cosign 3.0.0 o posterior instalado y la imagen va fijada por digest (§7.1 de [`instalacion.md`](instalacion.md)); si cosign no pudo consultar Sigstore o el registro, **no** es esto: avisa y sigue. `update.sh` sale en el paso 1 sin tocar nada e `install.sh` deshace lo escrito, como en el `4` | Roles: sigue `rotacion-secretos.md` («El rol de las copias es privilegiado») o `restaurar-backup.md` §6.6. Firma: **primero `IMAGE_REGISTRY`**; si el mensaje dice que el registro **ha negado el acceso**, casi siempre está mal escrito o con el valor de la plantilla: compruébalo con el `docker pull` de §1.2 de [`instalacion.md`](instalacion.md) y repite. Si la imagen se descarga bien y sigue saliendo `7`, **no instales ni sigas con ese paquete**: avisa al fabricante con el detalle de cosign que imprime el script (y el informe de `update.sh`, línea `image-signature`). No uses `--skip-signature-check` con las imágenes del fabricante |
+| `8` | **Restauración completada pero interrumpida por una señal.** Solo `restore.sh`: la señal llegó durante o después del intercambio de bases. La base restaurada YA está en servicio y la anterior se conserva con su marca | `restore.sh`: si además el asiento de auditoría quedó pendiente, sale con `6` y la orden que lo escribe. `update.sh` lo trata como restaurado y sigue con su vuelta atrás | **No repitas la restauración.** Comprueba con `./doctor.sh` |
+| `129`, `130`, `143` | **Interrumpido antes de escribir nada**: `129` corte de la sesión SSH, `130` Ctrl+C, `143` `kill`. NADA escrito | `install.sh` y `update.sh`: solo en las fases que todavía no han tocado nada; desde que empiezan a escribir, una interrupción se trata como un fallo y sale con `4` o `5` tras deshacer. `restore.sh`: una señal ANTES del intercambio de bases elimina la base de trabajo y sale con ellas (la base de destino no se toca); DURANTE el intercambio la señal se difiere hasta dejar la instalación coherente y entonces sale con `8`. `backup.sh`: en **cualquier** fase; barre lo que había empezado a escribir y la copia anterior sigue intacta, como en el `4` | Vuelve a ejecutarlo dentro de `tmux` o `screen` (`instalacion.md` §1.4) |
 
 `install.sh` y `update.sh` invocan `product:doctor` en su fase de verificación
 (RF-PD-13): en `install.sh` un aviso (código `1` de `product:doctor`) se
@@ -475,25 +439,20 @@ reintentar sin mirar (`2`, `3`, `4`) o si tienes que mirar (`5`, `6`).
 ## 9. Custodia de secretos
 
 El instalador genera todos los secretos **en tu servidor** y no los transmite a
-nadie. **El fabricante no los conoce y no puede recuperarlos.** La lista
-completa, con la consecuencia de perder cada uno, está en
-[`instalacion.md`](instalacion.md), sección 3.
-
-**Si se pierde el servidor entero, hacen falta también otros secretos del `.env`**, guardados fuera de él con la
-misma custodia que la clave de copias: `APP_KEY`, `QR_SIGNING_KEY_CURRENT` y `QR_SIGNING_KEY_PREVIOUS` con sus
-`_ID`, e `IDENTITY_PIN_SEALING_SECRET_KEY`. Una instalación nueva los genera nuevos: sin los de antes, ninguna
-tarjeta impresa vale y hay que reimprimirlas todas, y sin `APP_KEY` ninguna cuenta de gestión pasa el segundo factor.
-No guardes el `.env` entero: lleva contraseñas de la base de datos que no se reponen. **Quien tenga la clave de
-firma de los QR puede fabricar tarjetas válidas**: trátala como la llave maestra del edificio. Renueva esta copia
-después de cada rotación de secretos. El procedimiento completo está en
-[`../runbooks/perdida-total-del-servidor.md`](../runbooks/perdida-total-del-servidor.md).
+nadie. **El fabricante no los conoce y no puede recuperarlos.** El inventario
+—para qué sirve cada uno, qué pasa si lo pierdes, cuáles se guardan fuera del
+servidor y cómo se rota— está en
+[`../runbooks/rotacion-secretos.md`](../runbooks/rotacion-secretos.md) §0.
 
 ### `BACKUP_ENCRYPTION_KEY`: esta sale del servidor
 
-Es la única que hay que custodiar **fuera** de la máquina, y el motivo es
-directo: si se pierde el servidor y la clave estaba solo ahí, las copias
+Es la imprescindible, y hay que custodiarla **fuera** de la máquina desde el
+primer día: si se pierde el servidor y la clave estaba solo ahí, las copias
 cifradas son bytes sin valor y el registro horario —que hay que conservar
-cuatro años— se ha perdido.
+cuatro años— se ha perdido. Para no tener que reimprimir las tarjetas tras una
+pérdida total, guarda igual, y en el mismo sitio, los demás que el inventario
+marca con copia fuera del servidor (la clave de firma de los QR, la de la
+aplicación y la de sellado del PIN).
 
 **Hazlo el día de la instalación, antes de cerrar la sesión:**
 
@@ -525,47 +484,14 @@ history -c
 ### Las copias tienen que salir del servidor
 
 La promesa de **perder como máximo 15 minutos** de registro ante un desastre
-vale **siempre que las copias y el registro continuo de cambios (el WAL) salgan
-del servidor**, a otro disco o a otra máquina. Si se quedan en el mismo disco
-que la base de datos y se pierde ese disco, se pierde todo junto: la base, las
-copias y el WAL. Las copias se harían, se verificarían y hasta se restaurarían
-cada noche... en el mismo disco que acaba de morir.
-
-El producto no puede sacar las copias por ti (no envía nada a ninguna parte:
-los datos de tu hotel no salen de tu infraestructura). Lo que sí hace es
-**avisarte** cuando `BACKUP_PATH` y su carpeta `wal/` comparten disco con los
-datos de Docker y de PostgreSQL:
-
-- `./doctor.sh` lo comprueba desde el servidor y es **la comprobación completa**:
-  resuelve el **disco físico** de cada ruta (a través de particiones, volúmenes
-  lógicos de LVM y RAID por software) y compara discos. Necesita `sudo` para ver
-  el disco de Docker; sin él, o con ZFS, dice que no ha podido comprobarlo;
-- la copia nocturna publica una medida más gruesa y `product:doctor` la lee en la
-  comprobación **`backup.offsite`**, que aparece en el apartado de copias. Desde
-  dentro del contenedor solo se ve el **sistema de ficheros**, no el disco: un
-  destino de red sale en verde; un destino en otro sistema de ficheros da un
-  aviso suave («no se puede saber si es otro disco físico») que remite a
-  `./doctor.sh`.
-
-Es **siempre un aviso, nunca un fallo**: no cambia el código de salida y no
-bloquea `install.sh` ni `update.sh`. Si ya sacas las copias por tu cuenta
-(sincronización a otra máquina, cinta, nube en la UE), no hay nada roto; el
-aviso seguirá saliendo porque el producto no puede verlo.
-
-Se considera que las copias **salen** si `BACKUP_PATH` es un recurso de red (NFS,
-SMB/CIFS) o está en **otro disco físico**; una partición o un volumen lógico del
-mismo disco no cuenta (si muere el disco, mueren las dos). Lo segundo protege de
-la avería del disco, **no del robo ni del incendio** del local: lo ideal es una
-máquina distinta y, si puede ser, otro edificio. Para quitar el aviso:
-
-1. Monta el destino antes de arrancar, en el mismo sitio que `BACKUP_PATH` del
-   `.env` (por ejemplo, un volumen NFS en `/var/backups/fichaje`).
-2. Reinicia con `docker compose up -d` y lanza una copia
-   (`docker compose exec scheduler php artisan backup:run`).
-3. Ejecuta `sudo ./doctor.sh`: debe decir que las copias no están en el mismo
-   disco físico que los datos (o que están en un recurso de red).
-
-Recuerda que **la clave de cifrado también tiene que estar fuera** (apartado
+vale **siempre que las copias y el WAL salgan del servidor**, a otro disco
+físico o a otra máquina: si se quedan en el mismo disco que la base de datos y
+se pierde ese disco, se pierde todo junto. El producto no puede sacarlas por ti,
+pero te avisa —`sudo ./doctor.sh` desde el servidor y la comprobación
+`backup.offsite` de `product:doctor`—, y es **siempre un aviso, nunca un
+fallo**. Qué cuenta como «fuera», cómo se monta el destino y cómo se quita el
+aviso está en [`instalacion.md`](instalacion.md) §6, «`BACKUP_PATH`». Y
+recuerda que **la clave de cifrado también tiene que estar fuera** (apartado
 anterior): una copia fuera del servidor sin su clave son bytes sin valor.
 
 ### `fichaje_maintenance`: el rol que nace sin contraseña
@@ -611,77 +537,17 @@ aplicación.
 ### Las cuentas del panel: alta, baja y contraseña
 
 **Desde la 2.2.0 las cuentas de gestión se llevan desde el panel**, con una
-cuenta de administración: Panel → **Cuentas**. Ahí está la lista —nombre,
-correo, rol, estado, segundo factor, si la contraseña es propia o temporal y
-último acceso— y las cuatro acciones: **alta**, **baja**, **restablecer
-contraseña** y **restablecer 2FA**. Las tres que crean o rehacen una credencial
-(alta y los dos restablecimientos) piden además, en el mismo diálogo, **tu**
-código del segundo factor —o tu contraseña, si tu cuenta no lo tiene—: una
-sesión abierta en un ordenador ajeno no basta. La baja y los dos
-restablecimientos piden un **motivo**, que queda en el registro de auditoría
-(sin datos de salud ni juicios de valor). El paso a paso y cómo comprobar
-después lo que se hizo están en
-[`../runbooks/cuentas-de-gestion.md`](../runbooks/cuentas-de-gestion.md).
-
-**La contraseña de una cuenta nueva o restablecida es temporal.** La genera el
-servidor, se muestra **una sola vez**, se entrega en mano y caduca a las
-`IDENTITY_TEMPORARY_PASSWORD_TTL_HOURS` (72 de serie,
-[`configuracion.md`](configuracion.md) §6.8). Con ella el panel solo deja
-fijar una contraseña propia o salir. Cada persona cambia la suya cuando quiera
-desde «Cambiar mi contraseña», bajo su nombre en el menú.
-
-Lo que el panel **no** deja hacer, a propósito, y responde con un aviso: darte
-de baja a ti, dar de baja la **última** cuenta de administración activa,
-restablecer tu propia contraseña o tu propio segundo factor (para eso está
-«Cambiar mi contraseña»), y restablecer el segundo factor de quien no lo tiene
-activo. **Ten siempre dos cuentas de administración**: si la única pierde el
-móvil, solo queda la consola.
-
-**La consola sigue existiendo como vía de recuperación**, para cuando el panel
-no está disponible o nadie con rol de administración puede entrar. Aplica las
-mismas reglas —tampoco da de baja la última administración— y deja los mismos
-asientos, con «consola» como origen:
-
-```bash
-# Lista de cuentas: UUID, correo, rol, estado, 2FA y tipo de contraseña. Lleva correos: no la guardes en un fichero
-docker compose exec app php artisan identity:list-users
-
-# Alta con su rol. Pregunta nombre y correo, y muestra UNA vez la contraseña temporal
-docker compose exec app php artisan identity:create-user --role=rrhh
-
-# Baja. Deja de poder entrar, y sus sesiones abiertas dejan de valer al instante
-docker compose exec app php artisan identity:deactivate-user persona@tuhotel.example --reason="Baja del hotel"
-
-# Contraseña temporal nueva, mostrada UNA sola vez
-docker compose exec app php artisan identity:reset-password persona@tuhotel.example --reason="Contraseña olvidada / Forgotten password"
-
-# Retirar el segundo factor a quien perdió el móvil, para que lo dé de alta otra vez (UUID de la lista)
-docker compose exec app php artisan identity:2fa-reset 0199f0c2-1f4a-7c3e-9b21-4d5e6f7a8b90 --reason="Móvil perdido / Lost phone"
-```
-
-**El responsable de un departamento tampoco se fija por SQL.** Se elige en
-Panel → **Departamentos**, con la cuenta de administración
-([`guia-rrhh.md`](guia-rrhh.md) §7 bis.2), y queda en el registro de auditoría.
-
-Cuatro cosas que conviene saber de la baja:
-
-- **No borra nada y no tiene vuelta atrás.** La cuenta se queda con todo su
-  historial, que es justo lo que permite responder meses después a «¿quién
-  corrigió esta jornada?». Lo único que pierde es la capacidad de entrar. No hay
-  reactivación: si la persona vuelve, se le crea una cuenta nueva, y con otro
-  correo, porque el de una cuenta dada de baja ya no se admite.
-- **Tiene efecto en la petición siguiente**, no cuando caduque la sesión: si esa
-  persona tenía el panel abierto en una tablet, deja de funcionar al instante.
-- **Retira los accesos de soporte que esa cuenta concedió** y seguían vigentes
-  (§12.4). Un acceso temporal del fabricante no sobrevive a quien respondía de él.
-- **No reabre la creación del primer administrador.** Esa puerta sigue cerrada
-  aunque haya cuentas dadas de baja — si se reabriera, dar de baja a alguien
-  sería una forma de crear un administrador sin credenciales.
-
-La contraseña temporal, la muestre el panel o `identity:reset-password`, **no
-se puede volver a consultar**: el producto guarda su huella, no la contraseña.
-Anótala en el momento y entrégala en mano, nunca por correo ni por mensajería.
-Si se pierde antes de entregarla, restablécela otra vez.
+cuenta de administración (Panel → **Cuentas**): alta, baja y restablecimiento
+de contraseña y de segundo factor, cada acción con su asiento en el registro de
+auditoría. La contraseña de una cuenta nueva o restablecida es **temporal**, se
+muestra una sola vez, se entrega en mano y caduca a las
+`IDENTITY_TEMPORARY_PASSWORD_TTL_HOURS` ([`configuracion.md`](configuracion.md)
+§6.8). **Ten siempre dos cuentas de administración**: si la única pierde el
+móvil, solo queda la consola. El paso a paso, lo que el panel no deja hacer,
+cómo comprobar en la auditoría lo que se hizo y la consola como vía de
+recuperación están en
+[`../runbooks/cuentas-de-gestion.md`](../runbooks/cuentas-de-gestion.md); la
+versión para RRHH, en [`guia-rrhh.md`](guia-rrhh.md) §7 bis.
 
 ---
 
@@ -3478,26 +3344,14 @@ docker compose up -d
 
 ### …una pantalla del panel dice que esa función no está incluida en la licencia (`402`)
 
-**No es una avería ni un permiso.** Es la respuesta `402` del producto: la
-funcionalidad **accesoria** que se ha pedido —informes por periodo, exportación
-para nómina, cuadro de adopción, exportaciones en segundo plano— no está en la
-licencia activa, o la licencia ha caducado. El propio mensaje dice qué sigue
-disponible.
-
-**Lo que nunca responde `402`:** el fichaje, la sincronización de las tablets, la
-consulta de jornadas, el portal del empleado, la exportación para la Inspección,
-las correcciones, la auditoría y las copias. Eso no se toca con ninguna licencia
-(§7).
-
-**Qué hacer:**
-
-```bash
-docker compose exec app php artisan license:show
-```
-
-Si dice que no hay licencia, que caducó o que esa funcionalidad no está en el
-plan, es una conversación con el fabricante, no una tarea de IT. Con la clave
-nueva, `license:activate` (§7). No reinicies nada: no sirve de nada.
+**No es una avería ni un permiso**: es la respuesta `402` de una funcionalidad
+**accesoria** que la licencia activa no incluye, o que ha caducado, y el propio
+mensaje dice qué sigue disponible. El registro legal —fichaje, consulta,
+portal, exportación para la Inspección, correcciones, auditoría y copias—
+nunca responde `402`. Compruébalo con `license:show` (§7): si no hay licencia,
+caducó o esa funcionalidad no está en el plan, es una conversación con el
+fabricante, no una tarea de IT, y reiniciar no sirve de nada. Qué se degrada y
+qué no, en [`configuracion.md`](configuracion.md) §3 bis.3.
 
 ### …los informes se quedan «En cola» y no terminan nunca
 
@@ -3518,144 +3372,40 @@ responde (`./doctor.sh`). El fichaje no depende de `horizon`.
 
 ### …la copia nocturna ha fallado
 
-**Síntoma.** Suena `CopiaDeSeguridadFallida`, `CopiaDeSeguridadSinVerificar` o
-`CopiaDeSeguridadAusente` (§10.4), o `./doctor.sh` avisa de que no puede escribir
-en el directorio de copias.
-
-**Impacto.** El fichaje no se entera. Pero **sin una copia verificada no hay
-actualización** (`update.sh` se niega en su paso 3) y, si hubiera que restaurar,
-volverías a la última copia buena. Resuélvelo el mismo día.
-
-Las órdenes de copia van por el contenedor **`scheduler`**, no por `app`: es el
-que tiene la clave de cifrado y el rol de copias.
-
-```bash
-docker compose ps scheduler
-docker compose logs --since 24h scheduler | grep -i backup
-docker compose exec scheduler php artisan backup:verify
-docker compose exec scheduler php artisan backup:run
-```
-
-La última termina con un código de la tabla común (§8), y el mensaje dice la
-causa:
-
-| Código | Causa más frecuente | Qué hacer |
-| --- | --- | --- |
-| `2` | `BACKUP_PATH` sin montar o sin espacio, o falta la clave de cifrado | Monta el destino o libera espacio y repite. La copia anterior sigue intacta |
-| `3` | El fichero de destino ya existe (dos copias en el mismo segundo), o `backup:verify` no encuentra ninguna copia | Repite pasado un minuto. Si es `verify`, lanza antes `backup:run` |
-| `4` | El volcado o el cifrado **han fallado a mitad**: casi siempre el disco se ha llenado durante la copia, o el rol de copias no puede leer algo | Libera espacio en `BACKUP_PATH` (el mensaje dice cuánto queda) y repite. Lo empezado se ha barrido y la copia anterior sigue intacta |
-| `6` | La copia se escribió pero **no verifica** | Trátala como inexistente y repite. Si se repite, [`../runbooks/restaurar-backup.md`](../runbooks/restaurar-backup.md) §2 |
-| `7` | El rol de las copias tiene más privilegios de los permitidos | No es una avería: [`../runbooks/rotacion-secretos.md`](../runbooks/rotacion-secretos.md), «El rol de las copias es privilegiado» |
-
-El diagnóstico completo, código a código, está en
+Suena `CopiaDeSeguridadFallida`, `CopiaDeSeguridadSinVerificar` o
+`CopiaDeSeguridadAusente` (§10.4). El fichaje no se entera, pero **sin una copia
+verificada no hay actualización**: resuélvelo el mismo día. Las órdenes de copia
+van por el contenedor **`scheduler`**, no por `app`. El diagnóstico, qué hay
+detrás de cada código de salida y qué hacer están en
 [`../runbooks/restaurar-backup.md`](../runbooks/restaurar-backup.md) §2.
 
 ### …la restauración se niega por integridad (salida `6`, «copia no autenticada»)
 
-**Qué pasa.** Desde la 2.2.0 cada copia lleva dentro una firma con clave (un
-MAC) sobre su contenido, su nombre y su fecha de creación. `restore.sh`,
-`restore-drill.sh` y `backup.sh verify` la comprueban **antes** de descifrar, y
-se niegan, **sin tocar la base**, si:
-
-- falta el `.sha256` de la copia (es obligatorio);
-- el MAC no cuadra: el fichero se ha alterado o está dañado;
-- el nombre del fichero no es el que dice su cabecera: la han renombrado o
-  puesto en lugar de otra;
-- falta o no cuadra el manifiesto autenticado (`.manifest.mac`) del volcado;
-- la copia es **de la 2.1.0**, que no lleva MAC: es una «copia no autenticada»,
-  y no se usa si no lo pides expresamente.
-
-**Antes de confirmar una restauración, lee la fecha que enseña `restore.sh`**
-(«copia creada el …»). Sale de la cabecera autenticada, no del nombre del
-fichero: si no es la que esperas, alguien ha puesto una copia anterior en su
-lugar. No sigas.
-
-**Qué hacer**, según el mensaje:
-
-| Mensaje | Qué hacer |
-| --- | --- |
-| `el MAC no cuadra` | No uses esa copia: prueba la anterior (`restore.sh --list`). Si no hay una avería de almacenamiento que lo explique, trátalo como incidente de seguridad ([`brecha-de-seguridad.md`](../runbooks/brecha-de-seguridad.md)) |
-| `clave distinta o cabecera alterada` | Casi siempre, una rotación de `BACKUP_ENCRYPTION_KEY`: pasa la anterior con `-e BACKUP_ENCRYPTION_KEY_PREVIOUS` a `docker compose run --rm restore` (solo para restaurar) y repite |
-| `sin .sha256`, o falta el manifiesto | La copia está incompleta o la han tocado. No la uses |
-| `copia heredada de la 2.1.0` | Ver abajo |
-
-**Restaurar una copia de la 2.1.0.** Está cifrada pero **no autenticada**: su
-`.sha256` no prueba nada frente a quien pueda escribir en el destino. Si es la
-que necesitas, pídelo **en la propia orden** con `--accept-unauthenticated`
-(primero con `--dry-run`):
-
-```bash
-docker compose run --rm --no-deps restore bash /opt/kronoqr/scripts/restore.sh --accept-unauthenticated --file <copia>.dump.enc --dry-run
-```
-
-- Solo sirve para copias de la 2.1.0, y el `.sha256` **sigue siendo
-  obligatorio** y tiene que coincidir.
-- Se pasa **en cada orden**. Nunca pongas `KRONOQR_ACCEPT_UNAUTHENTICATED` en el
-  `.env` ni en una tabla de cron: se ignora (solo vale la opción `--accept-unauthenticated`), y `./doctor.sh` lo señala como fallo.
-- **Queda constancia**: el informe de la restauración lo anota en su primera
-  línea y el asiento `system.restored_from_backup` del registro de auditoría
-  lleva `integrity=legacy_accepted`.
-- Desaparecerá cuando ya no se pueda actualizar desde ninguna versión anterior a
-  la 2.2.0. Las copias de la 2.1.0 caducan solas a los `BACKUP_RETENTION_DAYS`.
-
-El detalle está en
+Desde la 2.2.0 cada copia lleva una firma con clave (un MAC), y `restore.sh`,
+`restore-drill.sh` y `backup.sh verify` se niegan, **sin tocar la base**, si no
+cuadra, si falta el `.sha256` o el manifiesto, o si la copia es de la 2.1.0 y no
+se ha pedido expresamente. **Antes de confirmar una restauración, lee la fecha
+que enseña `restore.sh`**: si no es la que esperas, no sigas. Qué hacer con cada
+mensaje y cómo restaurar una copia de la 2.1.0 está en
 [`../runbooks/restaurar-backup.md`](../runbooks/restaurar-backup.md) §6.8.
 
 ### …la recuperación a un punto en el tiempo se detiene («restore_command failed», `exit 200`)
 
-**Qué pasa.** Al reproducir el WAL archivado sobre una copia física,
-`kronoqr-restore-wal` ha encontrado un segmento que **no es de fiar**: el MAC no
-cuadra, está cifrado con otra clave, falta un segmento intermedio o no se ha
-podido leer. Devuelve `200` y PostgreSQL **aborta la recuperación a propósito**:
-si siguiera, la base «recuperaría con éxito» hasta el segmento anterior y se
-perderían datos sin que nadie lo viera. El error nombra el segmento y el motivo.
-
-**Qué hacer:**
-
-1. **No uses ni promociones esa base.** Se queda en recuperación, y es lo
-   correcto.
-2. Resuelve el motivo con la tabla del runbook (§4.1): la clave anterior si se
-   rotó `BACKUP_ENCRYPTION_KEY`, o el segmento desde otro soporte que lo
-   conserve.
-3. Si no se puede, repite con un `recovery_target_time` **anterior** a ese
-   segmento, y anota en el parte hasta dónde llegaste.
-
-El procedimiento completo, con las órdenes, está en
-[`../runbooks/restaurar-backup.md`](../runbooks/restaurar-backup.md) §6.4.
-Ensáyalo antes con `restore-drill.sh --mode pitr`, que lo hace en un contenedor
-limpio sin tocar nada (runbook §7).
+Un segmento del WAL archivado **no es de fiar** y PostgreSQL aborta la
+recuperación a propósito, para no «recuperar con éxito» perdiendo datos sin que
+nadie lo vea. **No uses ni promociones esa base.** Qué hacer está en
+[`../runbooks/restaurar-backup.md`](../runbooks/restaurar-backup.md) §6.4 (y el
+motivo de cada error, en su §4.1); ensáyalo antes con
+`restore-drill.sh --mode pitr`.
 
 ### …después de restaurar una copia, una exportación o un informe sale «Caducada»
 
-**Qué pasa.** Lo has restaurado todo bien. La copia de seguridad lleva la base
-de datos, pero **no lleva los ficheros generados** (§13.6): la exportación
-íntegra y los informes en segundo plano caducan en 7 días y se pueden volver a
-generar desde la base, así que no se copian. Al restaurar pueden quedar
-desparejados en los dos sentidos:
-
-- **La base recuerda una exportación o un informe cuyo fichero ya no está**
-  —se purgó después de la copia, o has restaurado en un servidor nuevo, con el
-  volumen vacío—. En la primera pasada de purga (la de cada hora para las
-  exportaciones íntegras, la de las 04:25 UTC para los informes) pasa a
-  **«Caducada»** y deja el asiento `data_export.file_missing` o
-  `report_export.file_missing`; si no había caducado aún, puede sonar además
-  la alerta `FicheroGeneradoDesaparecidoAntesDeCaducar`. **Tras una
-  restauración es lo esperado**, y
-  el informe de `restore.sh` (en `BACKUP_PATH/reports/`) lo anuncia.
-- **El volumen tiene un fichero que la base restaurada no conoce** —se generó
-  después de la copia—. Nadie lo puede descargar desde el panel, y la purga lo
-  borra sola cuando cumple su plazo. No hay que hacer nada.
-
-**Qué hacer.** Pide de nuevo lo que necesites: la exportación íntegra desde
-Licencia → «Tus datos son tuyos» (§13.2), y cada informe desde el panel, quien
-lo necesite. Se generan de los datos restaurados, que es lo que quieres. Si
-`FicheroGeneradoDesaparecidoAntesDeCaducar` suena **sin** que haya habido restauración ni
-actualización desde la 2.1.0, no es esto: lee §13.3, «Si el fichero desaparece
-antes de caducar».
-
-**Lo que no se ha perdido.** Los informes de retención están en
-`BACKUP_PATH/reports/retention` y la restauración no los toca: un informe de
-purga describe algo que pasó, aunque la base vuelva a un momento anterior.
+Es lo esperado: la copia lleva la base de datos pero **no los ficheros
+generados** (§13.6), y lo que la base recuerda sin fichero pasa a «Caducada»
+en la primera purga. Pide de nuevo lo que necesites. El detalle, y cuándo **no**
+es esto, en
+[`../runbooks/restaurar-backup.md`](../runbooks/restaurar-backup.md) §6.2. Los
+informes de retención de `BACKUP_PATH/reports/retention` no se pierden.
 
 ### …necesitas acreditar una purga y su informe no está
 
@@ -3744,32 +3494,11 @@ hoy o de anoche ([`../runbooks/restaurar-backup.md`](../runbooks/restaurar-backu
 
 ### …`./doctor.sh` avisa de «bases de una restauración que no terminó»
 
-**Síntoma.** `[aviso] Hay bases de una restauracion que no termino:
-fichaje_restore_20261012T031500Z`, y en su «Que hacer» una orden con dos huecos,
-`<migrador>` y `<nombre>`.
-
-**Qué es.** Una restauración crea primero una base de trabajo con un nombre
-`<base>_restore_<fecha>`; si muere sin limpiar (`kill -9`, un corte de luz),
-esa base se queda. **No la usa nadie, pero lleva una copia entera de los datos
-personales**, y por eso `doctor.sh` la señala cuando tiene más de un día. Las
-que se llaman `<base>_pre_restore_<fecha>` son otra cosa —la base anterior a
-una restauración que sí terminó— y **no** salen en este aviso.
-
-**Qué hacer.** Primero, asegúrate de que no hay ninguna restauración en marcha
-(`pgrep -af restore.sh` no debe devolver nada). Después, rellena los dos
-huecos: `<migrador>` es el valor de `DB_MIGRATION_USERNAME` de tu `.env`
-(`fichaje_migrator` de serie), y `<nombre>`, cada uno de los nombres que da el
-aviso, de uno en uno. Desde el directorio vigente:
-
-```bash
-sudo grep '^DB_MIGRATION_USERNAME=' .env
-sudo docker compose exec postgres psql -U fichaje_migrator -d postgres -c 'DROP DATABASE "fichaje_restore_20261012T031500Z" WITH (FORCE)'
-./doctor.sh
-```
-
-La orden no pide contraseña: se ejecuta dentro del contenedor de PostgreSQL.
-Las comillas dobles alrededor del nombre son necesarias. Si `doctor.sh` ya no
-lo avisa, está resuelto.
+Es la base de trabajo de una restauración que murió sin limpiar (`kill -9`, un
+corte de luz). No la usa nadie, pero **lleva una copia entera de los datos
+personales**: elimínala. Cómo rellenar los dos huecos de la orden que trae el
+aviso, y qué comprobar antes, está en
+[`../runbooks/restaurar-backup.md`](../runbooks/restaurar-backup.md) §6.9.
 
 ### …la actualización se cortó a mitad (sesión SSH, Ctrl+C) y no sabes cómo acabó
 

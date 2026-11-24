@@ -1761,7 +1761,7 @@ What the panel does not let you do, on purpose: deactivate yourself, deactivate
 the last administration account, or reset your own password or your own second
 factor. That is why there should **always be two people with the
 administration role**; if the only one loses their phone, IT does the recovery
-from the server ([`operation.md`](operation.md) §9).
+from the server ([`cuentas-de-gestion.md`](../../runbooks/cuentas-de-gestion.md) §6, in Spanish).
 
 Every creation, deactivation and reset goes into the audit log, with who did
 it, when and the reason. **No health data and no value judgements in the
@@ -2249,7 +2249,7 @@ always one of these cases:
   right after an update: have them sign out and sign in again.
 
 If the only person with the administration role is the one who cannot sign in,
-IT does the recovery from the server ([`operation.md`](operation.md) §9). None
+IT does the recovery from the server ([`cuentas-de-gestion.md`](../../runbooks/cuentas-de-gestion.md) §6, in Spanish). None
 of this stops anybody clocking in.
 
 ### …the inbox fills up with identical incidents

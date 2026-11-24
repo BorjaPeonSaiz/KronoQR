@@ -139,7 +139,7 @@ paquete: es de la integración continua del fabricante.
 | [`cuentas-de-gestion.md`](cuentas-de-gestion.md) | Alta y baja de cuentas de gestión, contraseña temporal, restablecer contraseña y 2FA, responsable de departamento, vía de recuperación por consola (ADR-051) | Cliente |
 | [`portal-403.md`](portal-403.md) | El portal del empleado devuelve `403` (RF-ID-08): candado de `PORTAL_INTERNAL_CIDR`, qué IP ve el servidor y cómo abrirlo sabiendo lo que se asume | IT del cliente |
 | [`rotacion-clave-qr.md`](rotacion-clave-qr.md) | Reimpresión progresiva de tarjetas sin dejar a nadie sin fichar | RRHH e IT |
-| [`rotacion-secretos.md`](rotacion-secretos.md) | Rotación programada o compromiso: `APP_KEY`, base de datos, copias, WAL, Reverb, sellado de PIN | IT del cliente |
+| [`rotacion-secretos.md`](rotacion-secretos.md) | Cambio de quién tiene acceso, política del hotel o compromiso: `APP_KEY`, base de datos, copias, WAL, Reverb, sellado de PIN | IT del cliente |
 | [`requerimiento-inspeccion.md`](requerimiento-inspeccion.md) | **Cómo generar la exportación legal en menos de 1 hora** | RRHH e IT |
 | [`solicitud-derechos-rgpd.md`](solicitud-derechos-rgpd.md) | Acceso, rectificación, portabilidad; la supresión **no procede** mientras dure el deber de conservación | RRHH / DPO |
 | [`brecha-de-seguridad.md`](brecha-de-seguridad.md) | **Incidente de seguridad.** Procedimiento de 72 h del art. 33 RGPD, con el alcance acotado desde `audit_log` | Seguridad / DPO |

@@ -480,19 +480,14 @@ correcta.
 
 ## 4. Códigos de salida
 
-La tabla es **la misma de los cinco scripts**, publicada en
-[`operacion.md`](../cliente/operacion.md) §8. Lo que significan aquí:
-
-| Código | Significa aquí | Qué hacer |
-| --- | --- | --- |
-| `0` | Actualizado y verificado | Leer el informe. Nada más |
-| `1` | Uso incorrecto. Nada tocado | `./update.sh --help` |
-| `2` | **Una precondición no se cumple, o la copia previa ha fallado.** La instalación no se ha tocado y sigue en su versión; si ya estaba en mantenimiento, se ha retirado | La línea «Que hacer» de cada `[FALLA]`. Cuatro merecen párrafo: versión de origen fuera de la matriz (§1), cadena de auditoría rota (§4 bis), perfil de cumplimiento bajo el suelo legal (§4 ter) y copia fallida ([`restaurar-backup.md`](restaurar-backup.md) §2) |
-| `3` | **Ya está en la versión de destino**, o no hay instalación que actualizar. Nada tocado | Nada. Si de verdad no hay instalación, lo que quieres es `install.sh` |
-| `4` | **Falló y volvió a la versión anterior.** Copia restaurada, versión anterior en marcha y verificada | Enviar el informe al fabricante **antes** de reintentar: dice en qué paso y por qué |
-| `5` | **Falló y la vuelta atrás quedó incompleta**, o falló algo **después** de que la versión nueva atendiera y no se vuelve atrás. Nada más se toca | §5. Es el único código que exige a una persona delante |
-| `6` | **Casi nunca**: toda verificación fallida deshace (RF-PD-10). La única excepción es una actualización que SÍ terminó, con la versión nueva en marcha, pero cuyo asiento `system.updated` de la auditoría no se pudo escribir: el trabajo no se deshace por eso | Leer el informe: dice qué orden escribe el asiento que falta |
-| `7` | **La firma de cosign de una imagen del producto no es válida.** Sale en el paso 1: la instalación no se ha tocado y sigue en su versión. Solo ocurre si tienes cosign 3.0.0 o posterior instalado y la imagen va fijada por digest ([`instalacion.md`](../cliente/instalacion.md) §7.1). Si cosign no pudo consultar Sigstore o el registro, **no** es esto: avisa y sigue | **No sigas con ese paquete.** Envía al fabricante el detalle que imprime el script y el informe (línea `image-signature`). No uses `--skip-signature-check` con las imágenes del fabricante |
+La tabla es **la misma de los scripts de operación**, y su fuente única es
+[`operacion.md`](../cliente/operacion.md) §8: qué significa cada código y qué
+hacer con él, también en `update.sh`. Aquí solo lo propio de la actualización:
+con `2` la instalación no se ha tocado, y cuatro casos tienen párrafo propio
+—versión de origen fuera de la matriz (§1), cadena de auditoría rota (§4 bis),
+perfil de cumplimiento bajo el suelo legal (§4 ter) y copia previa fallida
+([`restaurar-backup.md`](restaurar-backup.md) §2)—; con `5`, la vuelta atrás a
+mano es la §5.
 
 ### 4 bis. «La cadena de auditoría NO está íntegra» (salida `2`)
 
